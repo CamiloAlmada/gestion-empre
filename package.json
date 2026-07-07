@@ -13,8 +13,9 @@
     "format": "prettier --write ."
   },
   "devDependencies": {
-    "turbo": "2.10.4",
+    "@gestion/config": "workspace:^",
     "prettier": "3.9.4",
+    "turbo": "2.10.4",
     "typescript": "6.0.3"
   }
 }

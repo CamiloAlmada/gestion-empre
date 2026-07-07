@@ -8,6 +8,9 @@ importers:
 
   .:
     devDependencies:
+      '@gestion/config':
+        specifier: workspace:^
+        version: link:packages/config
       prettier:
         specifier: 3.9.4
         version: 3.9.4
