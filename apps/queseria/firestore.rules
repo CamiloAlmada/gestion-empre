@@ -1,0 +1,59 @@
+rules_version = '2';
+
+// Reglas de Firestore — app quesería.
+//
+// Fase 0: postura deny-all. Lo único que se permite es que un usuario
+// autenticado lea SU propio documento en `usuarios/{uid}`. Todo lo demás
+// queda denegado (tanto por el catch-all explícito como por el deny por
+// defecto de Firestore).
+//
+// Las funciones helper `usuarioActivo()` y `esAdmin()` se definen ya, pero
+// en Fase 0 NO se invocan desde ninguna regla activa: son la base sobre la
+// que la Fase 1 construye las reglas por colección (productos, piezas,
+// ventas, compras, movimientos, configuracion). Mantenerlas acá evita
+// reescribir la lógica de autorización cuando lleguen esas colecciones.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // --- Helpers ---
+
+    // Hay un usuario autenticado en la request.
+    function estaAutenticado() {
+      return request.auth != null;
+    }
+
+    // El usuario autenticado tiene documento en `usuarios/{uid}` y está activo.
+    // Cuesta lecturas (exists + get): usar SOLO en reglas de colecciones que
+    // NO sean la propia lectura de `usuarios/{uid}` (ver nota abajo).
+    function usuarioActivo() {
+      return estaAutenticado()
+        && exists(/databases/$(database)/documents/usuarios/$(request.auth.uid))
+        && get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.activo == true;
+    }
+
+    // El usuario autenticado y activo tiene rol 'admin'.
+    function esAdmin() {
+      return usuarioActivo()
+        && get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.rol == 'admin';
+    }
+
+    // --- Colecciones ---
+
+    // Un usuario solo puede leer su propio documento. La lectura se autoriza
+    // únicamente con la comparación de uid: NO se llama a `usuarioActivo()`
+    // porque implicaría un get() del mismo documento que se está leyendo
+    // (lectura innecesaria y potencial auto-referencia). La creación y
+    // administración de usuarios se hace desde la consola por ahora: sin write.
+    match /usuarios/{uid} {
+      allow read: if estaAutenticado() && request.auth.uid == uid;
+    }
+
+    // Catch-all: deniega explícitamente cualquier otra ruta. Refuerza el deny
+    // por defecto de Firestore. A medida que avancen las fases, cada colección
+    // agrega su propio `match` con reglas basadas en los helpers de arriba.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

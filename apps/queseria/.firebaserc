@@ -1,0 +1,7 @@
+{
+  "projects": {
+    "default": "quesarte-uy-dev",
+    "dev": "quesarte-uy-dev",
+    "prod": "quesarte-uy"
+  }
+}
