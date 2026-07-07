@@ -1,0 +1,20 @@
+{
+  "name": "@gestion/core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@gestion/config": "workspace:*",
+    "eslint": "^10.0.0",
+    "typescript": "6.0.3",
+    "vitest": "^3.2.0"
+  }
+}
