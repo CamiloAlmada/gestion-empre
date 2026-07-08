@@ -1,6 +1,6 @@
-# Setup de CI/CD — queseria
+# Setup de CI/CD — quesarte
 
-El workflow `.github/workflows/queseria.yml` necesita que el dueño del repo
+El workflow `.github/workflows/quesarte.yml` necesita que el dueño del repo
 cargue manualmente 2 **secrets** y 12 **repository variables** en GitHub antes
 de que los jobs de deploy funcionen. El job `verificar` (lint/test/build) no
 necesita nada de esto y ya funciona sin configuración adicional.
@@ -13,7 +13,7 @@ Cuenta de servicio de Firebase con permiso de Firebase Hosting para cada
 proyecto. Dos formas de generarla:
 
 - **Opción rápida**: correr `firebase init hosting:github` desde
-  `apps/queseria/` (con el CLI de Firebase autenticado) y dejar que cree los
+  `apps/quesarte/` (con el CLI de Firebase autenticado) y dejar que cree los
   secrets automáticamente en el repo — pero como esta tarea usa nombres de
   secret específicos, si el CLI genera otros nombres hay que renombrarlos (o
   copiar el valor) para que coincidan con los de abajo.
@@ -54,13 +54,13 @@ Sin sufijo = proyecto `quesarte-uy` (producción, se usa en push a `main`).
 | `VITE_FIREBASE_MESSAGING_SENDER_ID` | quesarte-uy | `messagingSenderId` |
 | `VITE_FIREBASE_APP_ID` | quesarte-uy | `appId` |
 
-Estos son los mismos 6 campos que `apps/queseria/.env.example` pide para
+Estos son los mismos 6 campos que `apps/quesarte/.env.example` pide para
 desarrollo local, pero cargados dos veces (dev y prod) como variables de
 repo en vez de archivos `.env`.
 
 ## Qué dispara cada job
 
-- **Push a `main`** (que toca `apps/queseria/**`, `packages/**`,
+- **Push a `main`** (que toca `apps/quesarte/**`, `packages/**`,
   `pnpm-lock.yaml`, `turbo.json` o `package.json`): `verificar` →
   `deploy-prod` (deploy a `quesarte-uy`, canal `live`).
 - **Pull request** con los mismos paths: `verificar` → `deploy-preview`
