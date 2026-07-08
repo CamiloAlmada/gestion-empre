@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { money, peso, type Pieza, type Producto } from '@gestion/core';
-import { ajustarStock, type EntradaAjuste } from './stock';
-import { AjusteInvalidoError, StockInsuficienteError } from './errores';
+import {
+  ajustarStock,
+  ingresarPiezas,
+  type EntradaAjuste,
+  type EntradaIngresoPiezas,
+} from './stock';
+import { AjusteInvalidoError, IngresoInvalidoError, StockInsuficienteError } from './errores';
 
 // Mismo mock de `firebase/firestore` que en ventas.test.ts (batch capturado,
 // refs como `{ path, id }`, increments como `{ __increment: n }`).
@@ -228,5 +233,159 @@ describe('ajustarStock', () => {
       deltaUnidades: 5,
     };
     await expect(ajustarStock(db, entrada)).rejects.toThrow(AjusteInvalidoError);
+  });
+});
+
+// Separa los `batch.set` capturados en piezas vs movimientos según el path del
+// ref falso (`piezas/auto-N` | `movimientos/auto-N`).
+function setsDe(coleccion: 'piezas' | 'movimientos'): [RefFalsa, Record<string, unknown>][] {
+  return (mocks.batch.set.mock.calls as [RefFalsa, Record<string, unknown>][]).filter(
+    ([ref]) => ref.path.startsWith(`${coleccion}/`),
+  );
+}
+
+describe('ingresarPiezas', () => {
+  it('1 pieza: crea la pieza y su movimiento ajuste_positivo, devuelve su id', async () => {
+    const entrada: EntradaIngresoPiezas = {
+      usuarioId: 'admin-1',
+      producto: producto({ modoStock: 'fraccionado_por_pieza', costoPromedioCents: money(30000) }),
+      piezas: [{ pesoInicialGramos: peso(5000), fechaVencimiento: new Date('2027-01-01') }],
+    };
+
+    const { piezaIds } = await ingresarPiezas(db, entrada);
+
+    const piezasSet = setsDe('piezas');
+    const movsSet = setsDe('movimientos');
+    expect(piezasSet).toHaveLength(1);
+    expect(movsSet).toHaveLength(1);
+
+    const [piezaRef, piezaDoc] = piezasSet[0]!;
+    expect(piezaDoc).toMatchObject({
+      id: piezaRef.id,
+      productoId: 'prod1',
+      pesoInicialGramos: 5000,
+      pesoRestanteGramos: 5000,
+      costoKgCents: 30000,
+      estado: 'disponible',
+      fechaVencimiento: new Date('2027-01-01'),
+    });
+    expect(piezaDoc.fechaIngreso).toBeInstanceOf(Date);
+
+    const [movRef, movDoc] = movsSet[0]!;
+    expect(movDoc).toMatchObject({
+      tipo: 'ajuste_positivo',
+      productoId: 'prod1',
+      piezaId: piezaRef.id,
+      deltaGramos: 5000,
+      origenTipo: 'ajuste',
+      origenId: movRef.id,
+      usuarioId: 'admin-1',
+    });
+
+    expect(piezaIds).toEqual([piezaRef.id]);
+    expect(mocks.batch.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it('N piezas: crea una pieza y un movimiento por cada una, en un solo commit', async () => {
+    const entrada: EntradaIngresoPiezas = {
+      usuarioId: 'admin-1',
+      producto: producto({ modoStock: 'pieza_entera' }),
+      piezas: [
+        { pesoInicialGramos: peso(3000) },
+        { pesoInicialGramos: peso(3500) },
+        { pesoInicialGramos: peso(4000) },
+      ],
+    };
+
+    const { piezaIds } = await ingresarPiezas(db, entrada);
+
+    const piezasSet = setsDe('piezas');
+    const movsSet = setsDe('movimientos');
+    expect(piezasSet).toHaveLength(3);
+    expect(movsSet).toHaveLength(3);
+    expect(piezasSet.map(([, d]) => d.pesoInicialGramos)).toEqual([3000, 3500, 4000]);
+    expect(movsSet.map(([, d]) => d.deltaGramos)).toEqual([3000, 3500, 4000]);
+    // Cada movimiento referencia a su propia pieza (mismo orden de creación).
+    expect(movsSet.map(([, d]) => d.piezaId)).toEqual(piezasSet.map(([ref]) => ref.id));
+    expect(piezaIds).toEqual(piezasSet.map(([ref]) => ref.id));
+    expect(mocks.batch.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it('hereda costoKgCents del costoPromedioCents del producto (money(0) incluido)', async () => {
+    const entrada: EntradaIngresoPiezas = {
+      usuarioId: 'admin-1',
+      producto: producto({ modoStock: 'fraccionado_por_pieza', costoPromedioCents: money(0) }),
+      piezas: [{ pesoInicialGramos: peso(5000) }],
+    };
+
+    await ingresarPiezas(db, entrada);
+
+    const [, piezaDoc] = setsDe('piezas')[0]!;
+    expect(piezaDoc.costoKgCents).toBe(0);
+  });
+
+  it('sin fechaVencimiento: no la incluye en la pieza', async () => {
+    const entrada: EntradaIngresoPiezas = {
+      usuarioId: 'admin-1',
+      producto: producto({ modoStock: 'fraccionado_por_pieza' }),
+      piezas: [{ pesoInicialGramos: peso(5000) }],
+    };
+
+    await ingresarPiezas(db, entrada);
+
+    const [, piezaDoc] = setsDe('piezas')[0]!;
+    expect(piezaDoc.fechaVencimiento).toBeUndefined();
+  });
+
+  it('rechaza producto que no va por piezas (granel) y no commitea', async () => {
+    const entrada: EntradaIngresoPiezas = {
+      usuarioId: 'admin-1',
+      producto: producto({ modoStock: 'granel', stockGranelGramos: peso(1000) }),
+      piezas: [{ pesoInicialGramos: peso(5000) }],
+    };
+    await expect(ingresarPiezas(db, entrada)).rejects.toThrow(IngresoInvalidoError);
+    expect(mocks.batch.commit).not.toHaveBeenCalled();
+    expect(mocks.batch.set).not.toHaveBeenCalled();
+  });
+
+  it('rechaza lista de piezas vacía', async () => {
+    const entrada: EntradaIngresoPiezas = {
+      usuarioId: 'admin-1',
+      producto: producto({ modoStock: 'pieza_entera' }),
+      piezas: [],
+    };
+    await expect(ingresarPiezas(db, entrada)).rejects.toThrow(IngresoInvalidoError);
+    expect(mocks.batch.commit).not.toHaveBeenCalled();
+  });
+
+  it('rechaza pesoInicialGramos no positivo (cero)', async () => {
+    const entrada: EntradaIngresoPiezas = {
+      usuarioId: 'admin-1',
+      producto: producto({ modoStock: 'fraccionado_por_pieza' }),
+      piezas: [{ pesoInicialGramos: peso(0) }],
+    };
+    await expect(ingresarPiezas(db, entrada)).rejects.toThrow(IngresoInvalidoError);
+    expect(mocks.batch.commit).not.toHaveBeenCalled();
+  });
+
+  it('rechaza pesoInicialGramos negativo, aunque otra pieza sea válida (nada se commitea)', async () => {
+    const entrada: EntradaIngresoPiezas = {
+      usuarioId: 'admin-1',
+      producto: producto({ modoStock: 'fraccionado_por_pieza' }),
+      piezas: [{ pesoInicialGramos: peso(5000) }, { pesoInicialGramos: peso(-1) }],
+    };
+    await expect(ingresarPiezas(db, entrada)).rejects.toThrow(IngresoInvalidoError);
+    expect(mocks.batch.commit).not.toHaveBeenCalled();
+    expect(mocks.batch.set).not.toHaveBeenCalled();
+  });
+
+  it('rechaza fechaVencimiento anterior a hoy', async () => {
+    const entrada: EntradaIngresoPiezas = {
+      usuarioId: 'admin-1',
+      producto: producto({ modoStock: 'fraccionado_por_pieza' }),
+      piezas: [{ pesoInicialGramos: peso(5000), fechaVencimiento: new Date('2020-01-01') }],
+    };
+    await expect(ingresarPiezas(db, entrada)).rejects.toThrow(IngresoInvalidoError);
+    expect(mocks.batch.commit).not.toHaveBeenCalled();
   });
 });

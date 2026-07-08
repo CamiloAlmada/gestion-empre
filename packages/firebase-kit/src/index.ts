@@ -17,7 +17,14 @@ export {
   type EntradaVenta,
   type ItemEntradaVenta,
 } from './ventas';
-export { ajustarStock, type EntradaAjuste, type TipoAjuste } from './stock';
+export {
+  ajustarStock,
+  ingresarPiezas,
+  type EntradaAjuste,
+  type TipoAjuste,
+  type EntradaIngresoPiezas,
+  type PiezaIngreso,
+} from './stock';
 export { invitarUsuario, type EntradaInvitacion } from './invitaciones';
 export {
   ErrorEscrituraPOS,
@@ -27,6 +34,7 @@ export {
   ItemInvalidoError,
   AnulacionInvalidaError,
   AjusteInvalidoError,
+  IngresoInvalidoError,
   ErrorInvitacion,
   EmailInvalidoError,
   DatosInvitacionInvalidosError,
