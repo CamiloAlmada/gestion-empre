@@ -22,6 +22,7 @@ export type {
   Venta,
   MovimientoStock,
   Usuario,
+  Configuracion,
 } from './tipos.js';
 export { type ItemCobrable, calcularSubtotal } from './precio.js';
 export { type PiezaElegida, elegirPieza } from './fifo.js';
