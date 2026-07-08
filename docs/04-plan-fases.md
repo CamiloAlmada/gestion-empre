@@ -24,8 +24,8 @@ Criterios de aceptación:
 - [x] `pnpm turbo build --filter=quesarte` funciona en limpio.
 - [ ] La app deployada en Firebase Hosting es instalable como PWA. *(implementado;
       verificación pendiente del primer deploy — requiere secrets/vars en GitHub)*
-- [ ] Login funciona; usuario no autenticado no ve nada. *(implementado y testeado
-      unitariamente; verificación runtime pendiente de config Firebase real)*
+- [x] Login funciona; usuario no autenticado no ve nada. *(verificado en producción
+      con Google el 2026-07-08)*
 - [ ] Un push que no toca la app no dispara su deploy. *(garantizado por path
       filters; verificación pendiente de los primeros pushes)*
 - [x] Tests de `Money`/`Peso` en verde (creación, suma, formato, redondeos).
@@ -48,9 +48,12 @@ Notas arrastradas del cierre de Fase 0 (del code review):
 - **Actualización del service worker**: `registerType: 'autoUpdate'` recarga sola
   al publicar versión nueva — inaceptable en medio de una venta en el POS.
   Pasar a prompt de actualización (o diferir la recarga con venta activa).
-- **Alta de usuarios**: hoy manual desde consola Firebase y `usuarios/{uid}` sin
-  `write` en reglas. Decidir con el dueño el flujo de alta antes de escribir las
-  reglas por colección de Fase 1.
+- **Alta de usuarios (decidido con el dueño, 2026-07-08)**: club cerrado. (1) La
+  persona autorizada entra una vez con Google, (2) el admin crea su doc
+  `usuarios/{uid}` (`rol`, `activo: true`) desde consola, (3) sign-up deshabilitado
+  en Authentication → Settings → User actions ("Enable create" desmarcado) en dev
+  y prod. `usuarios` queda sin `write` en reglas. Fase 1 agrega en la app la
+  verificación de `activo` post-login (pantalla "cuenta no autorizada" + signOut).
 - Si algún día se mueve `authDomain` al dominio de Hosting: agregar
   `navigateFallbackDenylist: [/^\/__\/auth\//]` al `generateSW` o el SW rompe el
   popup de Google.
