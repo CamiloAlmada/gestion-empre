@@ -60,4 +60,8 @@ pnpm turbo lint                       # lint de todo
 
 ## Estado actual
 
-Proyecto nuevo. Empezar por Fase 0 de `docs/04-plan-fases.md`.
+Fase 0 implementada e integrada en `main` (monorepo, `@gestion/{config,core,ui,firebase-kit}`,
+app quesería con login PWA, reglas deny-all, CI/CD). Pendiente de cierre: secrets y
+variables en GitHub, `.env` locales y primer push/deploy — ver estado en
+`docs/04-plan-fases.md`. Siguiente: Fase 1 (leer las notas arrastradas del review
+de Fase 0 al inicio de esa sección).

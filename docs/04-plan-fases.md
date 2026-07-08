@@ -21,15 +21,39 @@ Tareas:
    preview channels en PRs.
 
 Criterios de aceptación:
-- [ ] `pnpm turbo build --filter=queseria` funciona en limpio.
-- [ ] La app deployada en Firebase Hosting es instalable como PWA.
-- [ ] Login funciona; usuario no autenticado no ve nada.
-- [ ] Un push que no toca la app no dispara su deploy.
-- [ ] Tests de `Money`/`Peso` en verde (creación, suma, formato, redondeos).
+- [x] `pnpm turbo build --filter=queseria` funciona en limpio.
+- [ ] La app deployada en Firebase Hosting es instalable como PWA. *(implementado;
+      verificación pendiente del primer deploy — requiere secrets/vars en GitHub)*
+- [ ] Login funciona; usuario no autenticado no ve nada. *(implementado y testeado
+      unitariamente; verificación runtime pendiente de config Firebase real)*
+- [ ] Un push que no toca la app no dispara su deploy. *(garantizado por path
+      filters; verificación pendiente de los primeros pushes)*
+- [x] Tests de `Money`/`Peso` en verde (creación, suma, formato, redondeos).
+
+Estado (2026-07-08): las 7 tareas implementadas, revisadas e integradas en `main`
+(sin push aún). Los 3 criterios abiertos dependen de pasos externos: cargar en
+GitHub los 2 secrets de service account y las 12 repository variables
+`VITE_FIREBASE_*` (checklist en `.github/SETUP-CI.md`), crear `.env.development`
+/`.env.production` locales a partir de `.env.example`, y hacer el primer push.
 
 ## Fase 1 — MVP quesería (catálogo, stock, POS)
 
 Objetivo: que el dueño pueda cargar productos, ingresar stock y vender en mostrador.
+
+Notas arrastradas del cierre de Fase 0 (del code review):
+- **AuthProvider único**: hoy cada pantalla llama `useAuth(auth)` (suscripción
+  propia a `onAuthStateChanged`); con varias rutas protegidas cada navegación
+  flashea "Cargando…". Primer ítem de Fase 1: contexto con UNA suscripción en
+  `firebase-kit` y `useAuth()` sin parámetro.
+- **Actualización del service worker**: `registerType: 'autoUpdate'` recarga sola
+  al publicar versión nueva — inaceptable en medio de una venta en el POS.
+  Pasar a prompt de actualización (o diferir la recarga con venta activa).
+- **Alta de usuarios**: hoy manual desde consola Firebase y `usuarios/{uid}` sin
+  `write` en reglas. Decidir con el dueño el flujo de alta antes de escribir las
+  reglas por colección de Fase 1.
+- Si algún día se mueve `authDomain` al dominio de Hosting: agregar
+  `navigateFallbackDenylist: [/^\/__\/auth\//]` al `generateSW` o el SW rompe el
+  popup de Google.
 
 Tareas:
 1. `core`: tipos `Producto`, `Pieza`, `Venta`, `MovimientoStock`; función
