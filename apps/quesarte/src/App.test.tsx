@@ -21,6 +21,12 @@ vi.mock('./componentes/AvisoPwa', () => ({
   AvisoPwa: () => null,
 }));
 
+// La pantalla Stock (ruteada acá) importa `db` de './firebase', que a su vez
+// llama a `initFirebase` de Firebase real al cargar el módulo. Se mockea para
+// no inicializar Firebase de verdad en este test de rutas — el valor no
+// importa porque Stock.test.tsx mockea todas las escrituras/lecturas.
+vi.mock('./firebase', () => ({ auth: {}, db: {} }));
+
 function configurarAuth(rol: 'admin' | 'vendedor') {
   mocks.useAuth.mockReturnValue({
     usuario: { uid: 'u1' },

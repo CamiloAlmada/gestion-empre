@@ -3,6 +3,8 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     environment: 'jsdom',
+    // test-setup.ts: polyfill de <dialog> para jsdom (ver ese archivo).
+    setupFiles: ['./src/test-setup.ts'],
     include: ['src/**/*.test.{ts,tsx}'],
     // Valores falsos: alcanzan para que `src/firebase.ts` no aborte por
     // validación de env vars. `@gestion/firebase-kit` se mockea en los tests
