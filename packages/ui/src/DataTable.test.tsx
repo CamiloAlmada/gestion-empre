@@ -61,4 +61,22 @@ describe('DataTable', () => {
     );
     expect(screen.getByText('Todavía no hay ventas.')).toBeInTheDocument();
   });
+
+  it('tiene un nombre accesible por default en español (aria-label)', () => {
+    render(<DataTable columnas={columnas} filas={filas} claveFila={(f) => f.id} />);
+    expect(screen.getByRole('table', { name: 'Tabla de datos' })).toBeInTheDocument();
+  });
+
+  it('la prop `etiqueta` reemplaza el aria-label por default', () => {
+    render(
+      <DataTable
+        columnas={columnas}
+        filas={filas}
+        claveFila={(f) => f.id}
+        etiqueta="Stock de quesos"
+      />,
+    );
+    expect(screen.getByRole('table', { name: 'Stock de quesos' })).toBeInTheDocument();
+    expect(screen.queryByRole('table', { name: 'Tabla de datos' })).not.toBeInTheDocument();
+  });
 });

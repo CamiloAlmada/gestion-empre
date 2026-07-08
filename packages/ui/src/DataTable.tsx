@@ -13,6 +13,8 @@ export interface DataTableProps<T> {
   claveFila: (fila: T) => string;
   /** Estado vacío. Default: mensaje genérico en español. */
   vacio?: ReactNode;
+  /** Nombre accesible de la tabla (`aria-label`). Default genérico en español. */
+  etiqueta?: string;
 }
 
 /**
@@ -20,7 +22,13 @@ export interface DataTableProps<T> {
  * scroll horizontal propio en pantallas chicas, números alineados a la
  * derecha con `tabular-nums`, y estado vacío siempre presente.
  */
-export function DataTable<T>({ columnas, filas, claveFila, vacio }: DataTableProps<T>) {
+export function DataTable<T>({
+  columnas,
+  filas,
+  claveFila,
+  vacio,
+  etiqueta = 'Tabla de datos',
+}: DataTableProps<T>) {
   if (filas.length === 0) {
     return (
       <div className="rounded-2xl border border-borde bg-superficie p-8 text-center text-texto-secundario">
@@ -31,7 +39,7 @@ export function DataTable<T>({ columnas, filas, claveFila, vacio }: DataTablePro
 
   return (
     <div className="overflow-x-auto rounded-2xl border border-borde">
-      <table className="w-full min-w-max border-collapse bg-superficie text-texto">
+      <table aria-label={etiqueta} className="w-full min-w-max border-collapse bg-superficie text-texto">
         <thead>
           <tr className="border-b border-borde">
             {columnas.map((columna) => (
