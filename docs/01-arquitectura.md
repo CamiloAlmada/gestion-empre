@@ -66,7 +66,7 @@
   en `.firebaserc` como aliases.
 - La config del cliente (apiKey, projectId, etc.) va por variables de entorno
   `VITE_FIREBASE_*`, con `.env.development` y `.env.production`.
-- Servicios usados: Firestore, Auth (email/password + Google), Hosting.
+- Servicios usados: Firestore, Auth (email/password; alta por invitación desde la app — ver docs/04), Hosting.
 - Reglas de Firestore: solo usuarios autenticados y autorizados. Mantener una
   colección `usuarios/{uid}` con campo `rol` (`admin` | `vendedor`); las reglas
   validan pertenencia y rol. Denegar todo por defecto.

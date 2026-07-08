@@ -46,19 +46,23 @@ Notas arrastradas del cierre de Fase 0 (del code review):
 - **Actualización del service worker**: `registerType: 'autoUpdate'` recarga sola
   al publicar versión nueva — inaceptable en medio de una venta en el POS.
   Pasar a prompt de actualización (o diferir la recarga con venta activa).
-- **Alta de usuarios (decidido con el dueño, 2026-07-08, refinado)**: club cerrado
-  con auto-registro inactivo. En el primer login, la app crea el propio
-  `usuarios/{uid}` con `{ nombre, email, rol: 'vendedor', activo: false }`; las
-  reglas permiten SOLO ese `create` (uid propio, shape exacto, `activo == false`
-  forzado — nadie puede auto-activarse ni auto-asignarse rol) y ningún update
-  desde el cliente. El admin activa/asigna rol desde consola (más adelante,
-  pantalla de administración). Post-login la app verifica `activo`: si es false,
-  pantalla "cuenta pendiente de aprobación" + signOut. Cuando el equipo esté
-  completo, deshabilitar sign-up en Authentication → Settings → User actions
-  (dev y prod) como candado adicional.
-- **Login con Google en iPhone instalado como PWA**: `signInWithPopup` suele
-  fallar en modo standalone de iOS (bloqueo de popups). Implementar fallback con
-  `signInWithRedirect` (detectar standalone/iOS) al construir el AuthProvider.
+- **Auth y alta de usuarios (decidido con el dueño, 2026-07-08, v2 — reemplaza
+  las notas anteriores)**: SOLO email/contraseña; se elimina Google del login
+  (evita además el problema de `signInWithPopup` en PWA standalone de iOS).
+  Alta por **invitación desde la app** (pantalla "Usuarios", solo admin, sin
+  Cloud Functions): el admin ingresa email/nombre/rol → la app crea la cuenta
+  de Auth vía instancia secundaria de Firebase (no desloguea al admin) con
+  contraseña aleatoria descartada → crea `usuarios/{uid}` (`activo: true`, rol)
+  → dispara `sendPasswordResetEmail` en español ("establecé tu contraseña";
+  personalizar plantilla en consola). Revocación = `activo: false` desde la
+  misma pantalla (las reglas verifican `activo` en cada operación); usuarios no
+  se borran, se desactivan (preservan auditoría). Reglas de `usuarios`: cada uno
+  lee su propio doc; admin lee/crea/actualiza todos; sin delete. Post-login, la
+  app verifica existencia + `activo` del doc propio: si falta o es false →
+  "cuenta no autorizada" + signOut. Nota asumida: el sign-up de Auth queda
+  habilitado (la invitación lo usa por debajo); riesgo aceptado porque sin doc
+  en `usuarios` las reglas niegan todo y la app no tiene pantalla de registro.
+  Deshabilitar el proveedor Google en consola (dev y prod).
 - Si algún día se mueve `authDomain` al dominio de Hosting: agregar
   `navigateFallbackDenylist: [/^\/__\/auth\//]` al `generateSW` o el SW rompe el
   popup de Google.
@@ -77,6 +81,9 @@ Tareas:
 7. Ajustes de stock y merma con motivo.
 8. Offline: venta funciona sin conexión y sincroniza al reconectar; indicador
    de estado.
+9. Gestión de usuarios: pantalla "Usuarios" (solo admin) con invitación por
+   email, listado y activar/desactivar + rol (ver nota de auth arriba). Incluye
+   quitar Google del login y el guard post-login por `activo`.
 
 Criterios de aceptación:
 - [ ] Vender 0,5 kg de un queso descuenta de la rueda más antigua y deja rastro
