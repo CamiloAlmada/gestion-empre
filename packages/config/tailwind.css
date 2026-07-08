@@ -6,33 +6,118 @@
  *   @import "tailwindcss";
  *   @import "@gestion/config/tailwind.css";
  *
- * Paleta y tipografía son placeholders neutros; se ajustan por app/marca
- * en una tarea posterior.
+ * Tema "Quesarte": primaria ámbar/miel (OKLCH, hue ~78) + neutros cálidos.
+ * Además de las escalas crudas (primary-*, neutral-*), define tokens
+ * semánticos con valores para light (:root) y dark ([data-theme="dark"] o
+ * prefers-color-scheme cuando no hay data-theme fijado). Los componentes
+ * SOLO deben usar los tokens semánticos y la escala primary — nunca
+ * neutral-* ni colores default de Tailwind (ver docs/06-ui-ux.md §4).
+ *
+ * Todos los pares de contraste usados por los componentes están
+ * verificados AA (≥4.5:1 texto normal, ≥3:1 componentes UI/foco) — ver
+ * docs/06-ui-ux.md §7.
  */
 @theme {
   --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
 
-  --color-primary-50: oklch(0.98 0.01 250);
-  --color-primary-100: oklch(0.94 0.03 250);
-  --color-primary-200: oklch(0.87 0.06 250);
-  --color-primary-300: oklch(0.78 0.09 250);
-  --color-primary-400: oklch(0.68 0.12 250);
-  --color-primary-500: oklch(0.58 0.15 250);
-  --color-primary-600: oklch(0.5 0.15 250);
-  --color-primary-700: oklch(0.42 0.13 250);
-  --color-primary-800: oklch(0.34 0.1 250);
-  --color-primary-900: oklch(0.27 0.07 250);
-  --color-primary-950: oklch(0.18 0.05 250);
+  /* Primaria ámbar/miel, hue constante ~78, chroma ajustada por escalón
+     para quedar dentro de gamut sRGB (ver contraste en docs/06 §7). */
+  --color-primary-50: oklch(0.98 0.015 78);
+  --color-primary-100: oklch(0.95 0.04 78);
+  --color-primary-200: oklch(0.89 0.09 78);
+  --color-primary-300: oklch(0.82 0.15 78);
+  --color-primary-400: oklch(0.745 0.14 78);
+  --color-primary-500: oklch(0.655 0.125 78);
+  --color-primary-600: oklch(0.56 0.108 78);
+  --color-primary-700: oklch(0.47 0.09 78);
+  --color-primary-800: oklch(0.385 0.074 78);
+  --color-primary-900: oklch(0.315 0.06 78);
+  --color-primary-950: oklch(0.215 0.041 78);
 
-  --color-neutral-50: oklch(0.985 0 0);
-  --color-neutral-100: oklch(0.96 0 0);
-  --color-neutral-200: oklch(0.91 0 0);
-  --color-neutral-300: oklch(0.83 0 0);
-  --color-neutral-400: oklch(0.65 0 0);
-  --color-neutral-500: oklch(0.53 0 0);
-  --color-neutral-600: oklch(0.43 0 0);
-  --color-neutral-700: oklch(0.35 0 0);
-  --color-neutral-800: oklch(0.25 0 0);
-  --color-neutral-900: oklch(0.16 0 0);
-  --color-neutral-950: oklch(0.1 0 0);
+  /* Neutros cálidos (hue ~75, chroma bajísima) en vez de grises puros. Solo
+     se usan para DEFINIR los tokens semánticos de abajo; los componentes no
+     deben referenciar neutral-* directamente. */
+  --color-neutral-50: oklch(0.985 0.004 75);
+  --color-neutral-100: oklch(0.965 0.006 75);
+  --color-neutral-200: oklch(0.91 0.008 75);
+  --color-neutral-300: oklch(0.83 0.01 75);
+  --color-neutral-400: oklch(0.65 0.012 75);
+  --color-neutral-500: oklch(0.53 0.012 75);
+  --color-neutral-600: oklch(0.43 0.012 75);
+  --color-neutral-700: oklch(0.35 0.012 75);
+  --color-neutral-800: oklch(0.25 0.01 75);
+  --color-neutral-900: oklch(0.16 0.008 75);
+  --color-neutral-950: oklch(0.1 0.006 75);
+}
+
+/* Tokens semánticos — valores light (default). */
+:root {
+  --fondo: var(--color-neutral-100);
+  --superficie: var(--color-neutral-50);
+  --superficie-translucida: oklch(from var(--color-neutral-50) l c h / 0.82);
+  --texto: var(--color-neutral-900);
+  --texto-secundario: var(--color-neutral-600);
+  --borde: var(--color-neutral-400);
+  --exito: oklch(0.48 0.14 145);
+  --peligro: oklch(0.55 0.2 25);
+  --advertencia: oklch(0.5 0.11 55);
+}
+
+/* Tokens semánticos — dark explícito, vía data-theme="dark" en <html>. */
+[data-theme='dark'] {
+  --fondo: var(--color-neutral-950);
+  --superficie: var(--color-neutral-900);
+  --superficie-translucida: oklch(from var(--color-neutral-900) l c h / 0.82);
+  --texto: var(--color-neutral-50);
+  --texto-secundario: var(--color-neutral-400);
+  --borde: var(--color-neutral-500);
+  --exito: oklch(0.7 0.18 145);
+  --peligro: oklch(0.68 0.19 25);
+  --advertencia: oklch(0.7 0.16 55);
+}
+
+/* Tokens semánticos — modo "system": solo rige cuando NO hay data-theme
+   fijado en <html> (ni "light" ni "dark"), siguiendo la preferencia del SO
+   en vivo. Mayor especificidad que :root a propósito, para ganarle cuando
+   ambos matchean. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --fondo: var(--color-neutral-950);
+    --superficie: var(--color-neutral-900);
+    --superficie-translucida: oklch(from var(--color-neutral-900) l c h / 0.82);
+    --texto: var(--color-neutral-50);
+    --texto-secundario: var(--color-neutral-400);
+    --borde: var(--color-neutral-500);
+    --exito: oklch(0.7 0.18 145);
+    --peligro: oklch(0.68 0.19 25);
+    --advertencia: oklch(0.7 0.16 55);
+  }
+}
+
+/* Mapea los tokens semánticos (variables crudas de arriba) a utilidades de
+   Tailwind: bg-fondo, text-texto, border-borde, bg-exito, etc. */
+@theme inline {
+  --color-fondo: var(--fondo);
+  --color-superficie: var(--superficie);
+  --color-superficie-translucida: var(--superficie-translucida);
+  --color-texto: var(--texto);
+  --color-texto-secundario: var(--texto-secundario);
+  --color-borde: var(--borde);
+  --color-exito: var(--exito);
+  --color-peligro: var(--peligro);
+  --color-advertencia: var(--advertencia);
+}
+
+/* Redefine el variant "dark:" para que responda a la misma mecánica que los
+   tokens semánticos: data-theme="dark" explícito, o prefers-color-scheme
+   cuando no hay data-theme fijado (modo system). */
+@custom-variant dark {
+  &:where([data-theme='dark'], [data-theme='dark'] *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    &:where(html:not([data-theme]), html:not([data-theme]) *) {
+      @slot;
+    }
+  }
 }

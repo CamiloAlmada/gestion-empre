@@ -11,10 +11,10 @@ export function Home() {
       titulo="Quesarte"
       headerDerecha={
         <div className="flex items-center gap-4">
-          <span className="flex items-center gap-2 text-sm text-gray-600">
+          <span className="flex items-center gap-2 text-sm text-texto-secundario">
             <span
               aria-hidden="true"
-              className={`h-2 w-2 rounded-full ${enLinea ? 'bg-green-500' : 'bg-gray-400'}`}
+              className={`h-2 w-2 rounded-full ${enLinea ? 'bg-exito' : 'bg-texto-secundario'}`}
             />
             {enLinea ? 'En línea' : 'Sin conexión'}
           </span>
@@ -24,7 +24,7 @@ export function Home() {
         </div>
       }
     >
-      <p className="text-gray-700">Bienvenido{usuario?.email ? `, ${usuario.email}` : ''}.</p>
+      <p className="text-texto">Bienvenido{usuario?.email ? `, ${usuario.email}` : ''}.</p>
     </Layout>
   );
 }

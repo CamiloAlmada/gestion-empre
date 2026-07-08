@@ -22,7 +22,7 @@ export function Input({
   const id = useId();
   return (
     <div className="flex flex-col gap-1">
-      <label htmlFor={id} className="text-sm font-medium text-gray-700">
+      <label htmlFor={id} className="text-sm font-medium text-texto">
         {label}
       </label>
       <input
@@ -32,11 +32,11 @@ export function Input({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         disabled={disabled}
-        className={`rounded-lg border px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 ${
-          error ? 'border-red-500' : 'border-gray-300'
+        className={`rounded-lg border bg-superficie px-3 py-2 text-texto outline-none focus-visible:ring-2 focus-visible:ring-primary-600 disabled:bg-fondo disabled:text-texto-secundario ${
+          error ? 'border-peligro' : 'border-borde'
         }`}
       />
-      {error !== undefined && <p className="text-sm text-red-600">{error}</p>}
+      {error !== undefined && <p className="text-sm text-peligro">{error}</p>}
     </div>
   );
 }

@@ -4,3 +4,25 @@
 /* @gestion/ui vive fuera de esta app: hay que registrarlo explícitamente
    para que Tailwind escanee sus clases (no lo detecta por default). */
 @source '../../../packages/ui/src';
+
+/* color-scheme habilita que los controles nativos (scrollbars, checkboxes,
+   overscroll) sigan el tema en vez de quedar siempre claros. Misma
+   mecánica que los tokens semánticos: dark explícito o system sin
+   data-theme fijado. */
+:root {
+  color-scheme: light;
+}
+
+[data-theme='dark'] {
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+  }
+}
+
+body {
+  @apply bg-fondo text-texto;
+}

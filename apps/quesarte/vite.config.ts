@@ -18,7 +18,8 @@ export default defineConfig({
         start_url: '/',
         display: 'standalone',
         background_color: '#ffffff',
-        theme_color: '#2563eb',
+        // Ámbar primario (primary-600 del tema Quesarte, packages/config/tailwind.css).
+        theme_color: '#976b19',
         icons: [
           {
             src: 'icons/pwa-192x192.png',

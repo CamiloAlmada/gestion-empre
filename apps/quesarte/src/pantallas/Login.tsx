@@ -80,9 +80,9 @@ export function Login() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
-      <div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-sm">
-        <h1 className="mb-6 text-center text-xl font-semibold text-gray-900">Quesarte</h1>
+    <div className="flex min-h-screen items-center justify-center bg-fondo p-4">
+      <div className="w-full max-w-sm rounded-xl bg-superficie p-6 shadow-sm">
+        <h1 className="mb-6 text-center text-xl font-semibold text-texto">Quesarte</h1>
         <div className="flex flex-col gap-4" onKeyDown={manejarTeclaEnCredenciales}>
           <Input
             label="Correo"
@@ -101,7 +101,7 @@ export function Login() {
           />
 
           {error !== undefined && (
-            <p role="alert" className="text-sm text-red-600">
+            <p role="alert" className="text-sm text-peligro">
               {error}
             </p>
           )}

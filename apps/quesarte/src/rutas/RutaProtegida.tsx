@@ -17,8 +17,8 @@ export function RutaProtegida({ children }: RutaProtegidaProps) {
 
   if (cargando) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50">
-        <p className="text-sm text-gray-500">Cargando…</p>
+      <div className="flex min-h-screen items-center justify-center bg-fondo">
+        <p className="text-sm text-texto-secundario">Cargando…</p>
       </div>
     );
   }
