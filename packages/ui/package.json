@@ -3,19 +3,27 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "exports": { ".": "./src/index.ts" },
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "scripts": {
     "build": "tsc --noEmit",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test": "NODE_OPTIONS=--no-experimental-webstorage vitest run"
   },
   "peerDependencies": {
     "react": "^18 || ^19"
   },
   "devDependencies": {
     "@gestion/config": "workspace:*",
+    "@testing-library/react": "16.3.2",
     "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
     "eslint": "10.0.0",
+    "jsdom": "29.1.1",
     "react": "19.2.7",
-    "typescript": "6.0.3"
+    "react-dom": "19.2.7",
+    "typescript": "6.0.3",
+    "vitest": "4.1.10"
   }
 }
