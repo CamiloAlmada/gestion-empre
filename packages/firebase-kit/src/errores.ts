@@ -74,3 +74,63 @@ export class AjusteInvalidoError extends ErrorEscrituraPOS {
     this.name = 'AjusteInvalidoError';
   }
 }
+
+/**
+ * Errores del alta de usuarios por invitación (`invitaciones.ts`).
+ *
+ * Mismo patrón que `ErrorEscrituraPOS`: una raíz abstracta para el `catch`
+ * genérico en la pantalla "Usuarios" y clases concretas para discriminar el
+ * mensaje. No comparten jerarquía con los del POS porque no son escrituras del
+ * mostrador y la UI que los consume es otra.
+ */
+export abstract class ErrorInvitacion extends Error {}
+
+/**
+ * El email tiene una forma inválida. Se dispara en la validación previa local
+ * (antes de tocar Firebase) o al mapear `auth/invalid-email` que devuelva Auth.
+ */
+export class EmailInvalidoError extends ErrorInvitacion {
+  constructor(message: string) {
+    super(message);
+    this.name = 'EmailInvalidoError';
+  }
+}
+
+/**
+ * Los datos de la invitación son inválidos por una razón distinta al email:
+ * nombre vacío o rol fuera de la unión `Rol`. Validación previa, fail fast.
+ */
+export class DatosInvitacionInvalidosError extends ErrorInvitacion {
+  constructor(message: string) {
+    super(message);
+    this.name = 'DatosInvitacionInvalidosError';
+  }
+}
+
+/**
+ * Ya existe una cuenta de Auth con ese email (`auth/email-already-in-use`). El
+ * usuario ya fue invitado (o se registró) antes.
+ */
+export class EmailYaRegistradoError extends ErrorInvitacion {
+  constructor(message: string) {
+    super(message);
+    this.name = 'EmailYaRegistradoError';
+  }
+}
+
+/**
+ * Fallo parcial crítico de la invitación: la cuenta de Auth se creó pero el
+ * `setDoc` de `usuarios/{uid}` falló. La cuenta queda HUÉRFANA (sin doc de
+ * perfil). No es un agujero de seguridad —el guard post-login y las reglas
+ * tratan a una cuenta sin doc como "no autorizada" y le niegan todo acceso—,
+ * pero hay que comunicarlo: reintentar la invitación con el MISMO email va a
+ * fallar con `EmailYaRegistradoError`, porque el cliente no puede borrar la
+ * cuenta ajena que quedó creada. La cuenta huérfana se limpia a mano desde la
+ * consola de Firebase Auth (o se le crea el doc de perfil directo en consola).
+ */
+export class PerfilNoCreadoError extends ErrorInvitacion {
+  constructor(message: string) {
+    super(message);
+    this.name = 'PerfilNoCreadoError';
+  }
+}
