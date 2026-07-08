@@ -7,7 +7,14 @@ export {
   moneyDesdePesos,
   formatearMoney,
 } from './money.js';
-export { type Peso, peso, sumarPeso, pesoDesdeKg, formatearPeso } from './peso.js';
+export {
+  type Peso,
+  peso,
+  sumarPeso,
+  pesoDesdeKg,
+  formatearPeso,
+  formatearPesoForzado,
+} from './peso.js';
 export type {
   ModoPrecio,
   ModoStock,

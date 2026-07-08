@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { peso, sumarPeso, pesoDesdeKg, formatearPeso } from './peso.js';
+import { peso, sumarPeso, pesoDesdeKg, formatearPeso, formatearPesoForzado } from './peso.js';
 
 describe('peso (constructor)', () => {
   it('acepta 0, positivos y negativos enteros', () => {
@@ -87,5 +87,63 @@ describe('formatearPeso', () => {
     expect(formatearPeso(peso(-350))).toBe('-350 g');
     expect(formatearPeso(peso(-1250))).toBe('-1,25 kg');
     expect(formatearPeso(peso(-2000))).toBe('-2 kg');
+  });
+});
+
+describe('formatearPesoForzado', () => {
+  describe("unidad 'g'", () => {
+    it('muestra gramos enteros sin sufijo ni separador de miles', () => {
+      expect(formatearPesoForzado(peso(500), 'g')).toBe('500');
+      expect(formatearPesoForzado(peso(1500), 'g')).toBe('1500');
+      expect(formatearPesoForzado(peso(12345), 'g')).toBe('12345');
+    });
+
+    it('formatea el cero', () => {
+      expect(formatearPesoForzado(peso(0), 'g')).toBe('0');
+    });
+
+    it('formatea negativos con signo al frente (deltas)', () => {
+      expect(formatearPesoForzado(peso(-350), 'g')).toBe('-350');
+      expect(formatearPesoForzado(peso(-1500), 'g')).toBe('-1500');
+    });
+  });
+
+  describe("unidad 'kg'", () => {
+    it('fuerza kg incluso por debajo de 1000 g, con coma decimal', () => {
+      expect(formatearPesoForzado(peso(500), 'kg')).toBe('0,5');
+      expect(formatearPesoForzado(peso(1250), 'kg')).toBe('1,25');
+      expect(formatearPesoForzado(peso(1005), 'kg')).toBe('1,005');
+    });
+
+    it('recorta ceros a la derecha', () => {
+      expect(formatearPesoForzado(peso(1200), 'kg')).toBe('1,2');
+      expect(formatearPesoForzado(peso(1020), 'kg')).toBe('1,02');
+    });
+
+    it('exacto en kilos: sin decimales', () => {
+      expect(formatearPesoForzado(peso(1000), 'kg')).toBe('1');
+      expect(formatearPesoForzado(peso(2000), 'kg')).toBe('2');
+    });
+
+    it('formatea el cero', () => {
+      expect(formatearPesoForzado(peso(0), 'kg')).toBe('0');
+    });
+
+    it('formatea negativos con signo al frente (deltas)', () => {
+      expect(formatearPesoForzado(peso(-1250), 'kg')).toBe('-1,25');
+      expect(formatearPesoForzado(peso(-500), 'kg')).toBe('-0,5');
+      expect(formatearPesoForzado(peso(-2000), 'kg')).toBe('-2');
+    });
+  });
+
+  it('re-presenta el mismo Peso al alternar de unidad, como espera el input (kg → g → kg)', () => {
+    const p = pesoDesdeKg(1.25); // peso(1250)
+    const enKg = formatearPesoForzado(p, 'kg');
+    const enG = formatearPesoForzado(p, 'g');
+    expect(enKg).toBe('1,25');
+    expect(enG).toBe('1250');
+    // El value re-presentado en kg se vuelve a parsear al mismo Peso.
+    expect(pesoDesdeKg(parseFloat(enKg.replace(',', '.')))).toBe(p);
+    expect(peso(parseInt(enG, 10))).toBe(p);
   });
 });

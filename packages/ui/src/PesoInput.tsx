@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type ChangeEvent } from 'react';
-import { peso, pesoDesdeKg, type Peso } from '@gestion/core';
+import { peso, pesoDesdeKg, formatearPesoForzado, type Peso } from '@gestion/core';
 
 export type UnidadPeso = 'g' | 'kg';
 
@@ -21,26 +21,6 @@ const PATRON_KG = /^-?\d+([.,]\d{1,3})?$/;
 
 const MENSAJE_INVALIDO_G = 'Peso inválido. Escribí un número entero de gramos, ej: 500.';
 const MENSAJE_INVALIDO_KG = 'Peso inválido. Escribí un número con hasta 3 decimales, ej: 1,25.';
-
-/**
- * Formatea un `Peso` (gramos) como texto forzado en la unidad pedida, para
- * repoblar el input al tipear o al cambiar de unidad. SOLO arma el string
- * mostrado — nunca reconstruye un `Peso`: eso siempre pasa por `peso()` /
- * `pesoDesdeKg()` en el parseo. `formatearPeso()` de core no sirve acá
- * porque elige la unidad automáticamente según la magnitud (g si <1000,
- * kg si no); este input necesita forzar la unidad activa del toggle. Nota
- * para el tech lead: si aparecen más casos así, valdría sumar un
- * `formatearPesoForzado(p, unidad)` a `packages/core`.
- */
-function textoEnUnidad(p: Peso, unidad: UnidadPeso): string {
-  if (unidad === 'g') return String(p);
-  const signo = p < 0 ? '-' : '';
-  const abs = Math.abs(p);
-  const kgEntero = Math.trunc(abs / 1000);
-  const resto = abs % 1000;
-  const decimales = resto.toString().padStart(3, '0').replace(/0+$/, '');
-  return decimales.length > 0 ? `${signo}${kgEntero},${decimales}` : `${signo}${kgEntero}`;
-}
 
 /**
  * Input de peso con toggle explícito de unidad g|kg. Siempre emite `Peso` en
@@ -66,12 +46,14 @@ export function PesoInput({
   const enfocadoRef = useRef(false);
 
   const [unidad, setUnidad] = useState<UnidadPeso>(unidadInicial);
-  const [texto, setTexto] = useState<string>(() => (value === null ? '' : textoEnUnidad(value, unidad)));
+  const [texto, setTexto] = useState<string>(() =>
+    value === null ? '' : formatearPesoForzado(value, unidad),
+  );
   const [invalido, setInvalido] = useState(false);
 
   useEffect(() => {
     if (enfocadoRef.current) return;
-    setTexto(value === null ? '' : textoEnUnidad(value, unidad));
+    setTexto(value === null ? '' : formatearPesoForzado(value, unidad));
     setInvalido(false);
     // Solo re-sincroniza por cambios externos de `value`; el toggle de
     // unidad se maneja aparte en cambiarUnidad() para no disparar dos veces.
@@ -116,7 +98,7 @@ export function PesoInput({
     }
     if (patron.test(texto)) {
       const valor = parsear(texto);
-      setTexto(textoEnUnidad(valor, unidad));
+      setTexto(formatearPesoForzado(valor, unidad));
       setInvalido(false);
     } else {
       setInvalido(true);
@@ -127,7 +109,7 @@ export function PesoInput({
     if (disabled || nueva === unidad) return;
     setUnidad(nueva);
     setInvalido(false);
-    setTexto(value === null ? '' : textoEnUnidad(value, nueva));
+    setTexto(value === null ? '' : formatearPesoForzado(value, nueva));
   }
 
   const mensajeError = error ?? (invalido ? mensajeInvalido : undefined);
