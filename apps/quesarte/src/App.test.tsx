@@ -1,16 +1,47 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
+import { ProveedorToasts } from '@gestion/ui';
 import { App } from './App';
 
 const mocks = vi.hoisted(() => ({
   useAuth: vi.fn(),
   useOnlineStatus: vi.fn(() => true),
+  useCollection: vi.fn(() => ({ datos: [], cargando: false, error: null })),
 }));
 
+// Venta (ruteada en "/", home de la app) trae productos/piezas con
+// useCollection: se mockea vacío (sin cargando/error) para no depender de un
+// `db` real. Este suite solo prueba ruteo (no el contenido de Venta, que
+// tiene su propio Venta.test.tsx), mismo criterio que Productos/AvisoPwa
+// abajo.
 vi.mock('@gestion/firebase-kit', () => ({
   useAuth: mocks.useAuth,
   useOnlineStatus: mocks.useOnlineStatus,
+  useCollection: mocks.useCollection,
+  productoConverter: {},
+  piezaConverter: {},
+}));
+
+// Mismo motivo que el mock de '@gestion/firebase-kit' de arriba: Venta arma
+// sus queries con `collection`/`query`/`where` reales de 'firebase/firestore'
+// sobre un `db` falso ({}); sin este mock, `collection({}, ...)` explota
+// porque no es una instancia real de Firestore (mismo patrón que
+// Stock.test.tsx).
+interface RefFalsa {
+  __path: string;
+  withConverter: () => RefFalsa;
+}
+
+function crearRefFalsa(path: string): RefFalsa {
+  const ref: RefFalsa = { __path: path, withConverter: () => ref };
+  return ref;
+}
+
+vi.mock('firebase/firestore', () => ({
+  collection: (_db: unknown, path: string) => crearRefFalsa(path),
+  query: (ref: RefFalsa, ...clausulas: unknown[]) => ({ ...ref, __clausulas: clausulas }),
+  where: (...args: unknown[]) => ({ __tipo: 'where', args }),
 }));
 
 // AvisoPwa (montado siempre por App) importa el módulo virtual que expone
@@ -48,10 +79,14 @@ function configurarAuth(rol: 'admin' | 'vendedor') {
   });
 }
 
+// Venta (ruteada en "/") usa useToasts(): se envuelve con ProveedorToasts
+// igual que la composición real de main.tsx (fuera de <App>).
 function renderizarEn(ruta: string) {
   return render(
     <MemoryRouter initialEntries={[ruta]}>
-      <App />
+      <ProveedorToasts>
+        <App />
+      </ProveedorToasts>
     </MemoryRouter>,
   );
 }
@@ -67,10 +102,12 @@ describe('App - rutas', () => {
 
     renderizarEn('/');
 
-    // El header (h1) y el placeholder de la sección (h2) muestran el mismo
-    // título; se distingue por nivel para no chocar con getByRole.
+    // El header de Shell (h1) confirma la ruta activa. Venta (pantalla real,
+    // ver Venta.test.tsx) no repite el título como h2 — a diferencia del
+    // placeholder que reemplazó, ya lo muestra el header. Con productos
+    // vacíos (useCollection mockeado arriba), Venta cae en su estado vacío.
     expect(screen.getByRole('heading', { name: 'Venta', level: 1 })).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Venta', level: 2 })).toBeTruthy();
+    expect(screen.getByText('Sin productos — creá el catálogo primero.')).toBeTruthy();
   });
 
   it('vendedor que navega a /reportes es redirigido a Venta', () => {

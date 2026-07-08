@@ -1,7 +1,268 @@
-import { Proximamente } from '../componentes/Proximamente';
-import { IconoVenta } from '../componentes/iconos';
+import { useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router';
+import { collection, query, where } from 'firebase/firestore';
+import type { MedioPago, Pieza, Producto } from '@gestion/core';
+import {
+  ItemInvalidoError,
+  StockInsuficienteError,
+  TotalIncoherenteError,
+  VentaVaciaError,
+  piezaConverter,
+  productoConverter,
+  registrarVenta,
+  useAuth,
+  useCollection,
+  useOnlineStatus,
+  type EntradaVenta,
+} from '@gestion/firebase-kit';
+import { Button, useToasts } from '@gestion/ui';
+import { db } from '../firebase';
+import { agruparPiezasPorProducto } from '../componentes/stock/resumen';
+import { Carrito } from '../componentes/venta/Carrito';
+import { GrillaProductos } from '../componentes/venta/GrillaProductos';
+import {
+  crearItemFraccionado,
+  crearItemGranel,
+  crearItemPiezaEntera,
+  crearItemUnidad,
+  piezaIdsEnCarrito,
+  piezasAjustadasPorCarrito,
+  totalCarrito,
+  type ItemCarrito,
+} from '../componentes/venta/itemsCarrito';
+import { ModalAgregarFraccionado } from '../componentes/venta/ModalAgregarFraccionado';
+import { ModalAgregarGranel } from '../componentes/venta/ModalAgregarGranel';
+import { ModalAgregarPiezaEntera } from '../componentes/venta/ModalAgregarPiezaEntera';
+import { ModalAgregarUnidad } from '../componentes/venta/ModalAgregarUnidad';
+import { ModalCobro } from '../componentes/venta/ModalCobro';
 
-/** Placeholder: la pantalla real de venta (POS) la construye otra tarea. */
+function mensajeErrorCobro(error: unknown): string {
+  if (error instanceof StockInsuficienteError) {
+    return 'No hay stock suficiente para completar la venta. Revisá los ítems del carrito.';
+  }
+  if (error instanceof TotalIncoherenteError) {
+    return 'El total no coincide con los ítems del carrito. Volvé a intentar.';
+  }
+  if (error instanceof VentaVaciaError) {
+    return 'El carrito está vacío.';
+  }
+  if (error instanceof ItemInvalidoError) {
+    return 'Uno de los ítems del carrito quedó inválido. Quitalo y agregalo de nuevo.';
+  }
+  return 'No se pudo registrar la venta. Intentá de nuevo.';
+}
+
+/**
+ * POS de venta (home de la app, docs/06-ui-ux.md §1-§2): buscador + grilla de
+ * productos, carrito, cobro. Trae productos activos y piezas disponibles con
+ * las MISMAS queries memoizadas que `Stock.tsx` (agrupadas client-side con
+ * `agruparPiezasPorProducto`), nunca una query por producto.
+ *
+ * Agregar al carrito arma el `ItemCarrito` correspondiente al `modoStock` del
+ * producto tocado (ver `componentes/venta/itemsCarrito.ts`); cobrar arma un
+ * `EntradaVenta` y llama a `registrarVenta` siguiendo el patrón §8 de
+ * escrituras offline-first (mismo criterio que `Productos.tsx`).
+ */
 export function Venta() {
-  return <Proximamente titulo="Venta" icono={<IconoVenta className="h-12 w-12" />} />;
+  const { perfil } = useAuth();
+  const enLinea = useOnlineStatus();
+  const { mostrarToast } = useToasts();
+
+  const [intento, setIntento] = useState(0);
+  const [carrito, setCarrito] = useState<ItemCarrito[]>([]);
+  const [productoParaAgregar, setProductoParaAgregar] = useState<Producto | null>(null);
+  const [modalCobroAbierto, setModalCobroAbierto] = useState(false);
+  const [cobrando, setCobrando] = useState(false);
+  const proximaClaveRef = useRef(0);
+
+  const productosQuery = useMemo(
+    () =>
+      query(
+        collection(db, 'productos').withConverter(productoConverter),
+        where('activo', '==', true),
+      ),
+    [intento],
+  );
+  const piezasQuery = useMemo(
+    () =>
+      query(collection(db, 'piezas').withConverter(piezaConverter), where('estado', '==', 'disponible')),
+    [intento],
+  );
+
+  const productos = useCollection<Producto>(productosQuery);
+  const piezas = useCollection<Pieza>(piezasQuery);
+
+  const piezasAgrupadas = useMemo(() => agruparPiezasPorProducto(piezas.datos), [piezas.datos]);
+
+  function reintentar() {
+    setIntento((n) => n + 1);
+  }
+
+  function proximaClave(): string {
+    const clave = `item-${proximaClaveRef.current}`;
+    proximaClaveRef.current += 1;
+    return clave;
+  }
+
+  function cerrarModalProducto() {
+    setProductoParaAgregar(null);
+  }
+
+  function agregarAlCarrito(item: ItemCarrito) {
+    setCarrito((actual) => [...actual, item]);
+    cerrarModalProducto();
+  }
+
+  function quitarDelCarrito(clave: string) {
+    setCarrito((actual) => actual.filter((item) => item.clave !== clave));
+  }
+
+  async function confirmarCobro(medioPago: MedioPago) {
+    if (perfil === null) return;
+
+    const entrada: EntradaVenta = {
+      usuarioId: perfil.uid,
+      medioPago,
+      // `ItemCarrito` es un `ItemEntradaVenta` + `clave` de lista de React;
+      // se arma explícito acá (en vez de desestructurar `clave` afuera) para
+      // no dejar una variable descartada sin uso.
+      items: carrito.map((item) => ({
+        producto: item.producto,
+        pieza: item.pieza,
+        gramos: item.gramos,
+        unidades: item.unidades,
+        precioUnitCents: item.precioUnitCents,
+        subtotalCents: item.subtotalCents,
+      })),
+      totalCents: totalCarrito(carrito),
+    };
+
+    const escritura = registrarVenta(db, entrada);
+
+    if (!enLinea) {
+      setModalCobroAbierto(false);
+      setCarrito([]);
+      mostrarToast('Venta guardada sin conexión. Se sincronizará al reconectar.', 'info');
+      escritura.catch(() => {
+        mostrarToast('No se pudo sincronizar la venta. Revisala en Historial.', 'error');
+      });
+      return;
+    }
+
+    setCobrando(true);
+    try {
+      await escritura;
+      mostrarToast('Venta registrada.', 'exito');
+      setCarrito([]);
+      setModalCobroAbierto(false);
+    } catch (error) {
+      mostrarToast(mensajeErrorCobro(error), 'error');
+    } finally {
+      setCobrando(false);
+    }
+  }
+
+  const cargando = productos.cargando || piezas.cargando;
+  const error = productos.error ?? piezas.error;
+
+  let contenido;
+  if (cargando) {
+    contenido = <p className="py-8 text-center text-texto-secundario">Cargando productos…</p>;
+  } else if (error !== null) {
+    contenido = (
+      <div className="flex flex-col items-center gap-3 rounded-2xl border border-borde bg-superficie p-8 text-center">
+        <p role="alert" className="text-peligro">
+          No se pudo cargar el catálogo. Revisá tu conexión e intentá de nuevo.
+        </p>
+        <Button onClick={reintentar}>Reintentar</Button>
+      </div>
+    );
+  } else if (productos.datos.length === 0) {
+    contenido = (
+      <div className="flex flex-col items-center gap-3 rounded-2xl border border-borde bg-superficie p-8 text-center">
+        <p className="text-texto-secundario">Sin productos — creá el catálogo primero.</p>
+        <Link
+          to="/stock/productos"
+          className="inline-flex min-h-[44px] items-center justify-center rounded-lg bg-primary-600 px-4 font-medium text-white hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2 focus-visible:ring-offset-superficie"
+        >
+          Ir a Productos
+        </Link>
+      </div>
+    );
+  } else {
+    contenido = (
+      <GrillaProductos
+        productos={productos.datos}
+        piezasAgrupadas={piezasAgrupadas}
+        onSeleccionar={setProductoParaAgregar}
+      />
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-4 pb-24 lg:grid lg:grid-cols-[2fr_1fr] lg:items-start lg:gap-6 lg:pb-0">
+      <div className="flex flex-col gap-4">
+        {!enLinea && (
+          <p
+            role="status"
+            className="rounded-xl border border-borde bg-superficie p-3 text-sm text-texto-secundario"
+          >
+            Sin conexión: la venta se guarda localmente y se sincroniza al reconectar.
+          </p>
+        )}
+        {contenido}
+      </div>
+
+      <Carrito items={carrito} onQuitar={quitarDelCarrito} onCobrar={() => setModalCobroAbierto(true)} procesando={cobrando} />
+
+      {productoParaAgregar !== null && (
+        <>
+          <ModalAgregarFraccionado
+            abierto={productoParaAgregar.modoStock === 'fraccionado_por_pieza'}
+            onCerrar={cerrarModalProducto}
+            producto={productoParaAgregar}
+            piezasDisponibles={piezasAjustadasPorCarrito(
+              piezasAgrupadas.get(productoParaAgregar.id) ?? [],
+              productoParaAgregar.id,
+              carrito,
+            )}
+            onAgregar={(pieza, gramos) =>
+              agregarAlCarrito(crearItemFraccionado(productoParaAgregar, pieza, gramos, proximaClave()))
+            }
+          />
+          <ModalAgregarPiezaEntera
+            abierto={productoParaAgregar.modoStock === 'pieza_entera'}
+            onCerrar={cerrarModalProducto}
+            producto={productoParaAgregar}
+            piezasDisponibles={(piezasAgrupadas.get(productoParaAgregar.id) ?? []).filter(
+              (pieza) => !piezaIdsEnCarrito(carrito).has(pieza.id),
+            )}
+            onAgregar={(pieza) => agregarAlCarrito(crearItemPiezaEntera(productoParaAgregar, pieza, proximaClave()))}
+          />
+          <ModalAgregarGranel
+            abierto={productoParaAgregar.modoStock === 'granel'}
+            onCerrar={cerrarModalProducto}
+            producto={productoParaAgregar}
+            onAgregar={(gramos) => agregarAlCarrito(crearItemGranel(productoParaAgregar, gramos, proximaClave()))}
+          />
+          <ModalAgregarUnidad
+            abierto={productoParaAgregar.modoStock === 'unidad_simple'}
+            onCerrar={cerrarModalProducto}
+            producto={productoParaAgregar}
+            onAgregar={(unidades) =>
+              agregarAlCarrito(crearItemUnidad(productoParaAgregar, unidades, proximaClave()))
+            }
+          />
+        </>
+      )}
+
+      <ModalCobro
+        abierto={modalCobroAbierto}
+        onCerrar={() => setModalCobroAbierto(false)}
+        total={totalCarrito(carrito)}
+        procesando={cobrando}
+        onConfirmar={(medioPago) => void confirmarCobro(medioPago)}
+      />
+    </div>
+  );
 }
