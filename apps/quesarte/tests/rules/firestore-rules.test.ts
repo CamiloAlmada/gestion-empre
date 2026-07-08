@@ -14,6 +14,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  increment,
   setDoc,
   updateDoc,
   type Firestore,
@@ -263,6 +264,22 @@ describe('productos', () => {
     );
   });
 
+  it('vendedor SÍ baja stock con increment (valor resultante >= 0)', async () => {
+    await assertSucceeds(
+      updateDoc(doc(db(VENDEDOR), 'productos', 'prod-nuez'), {
+        stockGranelGramos: increment(-100),
+      }),
+    );
+  });
+
+  it('vendedor NO deja el stock granel en negativo (piso cero sobre el resultante)', async () => {
+    await assertFails(
+      updateDoc(doc(db(VENDEDOR), 'productos', 'prod-nuez'), {
+        stockGranelGramos: increment(-99999),
+      }),
+    );
+  });
+
   it('vendedor NO crea productos', async () => {
     await assertFails(
       setDoc(doc(db(VENDEDOR), 'productos', 'prod-x'), {
@@ -296,6 +313,18 @@ describe('piezas', () => {
   it('vendedor NO sube pesoRestanteGramos', async () => {
     await assertFails(
       updateDoc(doc(db(VENDEDOR), 'piezas', 'pieza-1'), { pesoRestanteGramos: 4500 }),
+    );
+  });
+
+  it('vendedor baja pesoRestanteGramos con increment (resultante >= 0)', async () => {
+    await assertSucceeds(
+      updateDoc(doc(db(VENDEDOR), 'piezas', 'pieza-1'), { pesoRestanteGramos: increment(-500) }),
+    );
+  });
+
+  it('vendedor NO deja pesoRestanteGramos en negativo (piso cero sobre el resultante)', async () => {
+    await assertFails(
+      updateDoc(doc(db(VENDEDOR), 'piezas', 'pieza-1'), { pesoRestanteGramos: increment(-99999) }),
     );
   });
 

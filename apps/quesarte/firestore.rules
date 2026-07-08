@@ -56,6 +56,17 @@ service cloud.firestore {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(campos);
     }
 
+    // Piso cero para el stock agregado de productos tras un efecto de venta del
+    // vendedor. Con `increment()`, `request.resource.data` ya contiene el valor
+    // RESULTANTE del campo (verificado contra el emulador en la suite de reglas),
+    // así que un decremento que dejaría el stock negativo se rechaza acá.
+    // `get(campo, 0)` tolera que el producto no tenga ese campo (un granel no
+    // tiene `stockUnidades` y viceversa): ausente ⇒ 0, que satisface el piso.
+    function stockAgregadoNoNegativo() {
+      let d = request.resource.data;
+      return d.get('stockGranelGramos', 0) >= 0 && d.get('stockUnidades', 0) >= 0;
+    }
+
     // Shape estricto para invitar un usuario (create de admin): exactamente
     // { nombre, email, rol in ['admin','vendedor'], activo: bool }.
     function usuarioInvitacionValida() {
@@ -102,9 +113,11 @@ service cloud.firestore {
       allow create, delete: if esAdmin();
       // Admin edita cualquier campo del producto.
       allow update: if esAdmin();
-      // Vendedor solo ajusta stock agregado como efecto de una venta.
+      // Vendedor solo ajusta stock agregado como efecto de una venta, y nunca lo
+      // deja en negativo (piso cero sobre el valor resultante del increment).
       allow update: if esVendedor()
-        && soloCambian(['stockGranelGramos', 'stockUnidades', 'actualizadoEn']);
+        && soloCambian(['stockGranelGramos', 'stockUnidades', 'actualizadoEn'])
+        && stockAgregadoNoNegativo();
     }
 
     match /piezas/{id} {
@@ -115,10 +128,12 @@ service cloud.firestore {
       // Admin edita cualquier campo de la pieza.
       allow update: if esAdmin();
       // Vendedor solo descuenta peso / marca estado por venta; nunca AUMENTA
-      // el peso restante (una venta solo puede reducirlo).
+      // el peso restante (una venta solo puede reducirlo) ni lo deja en negativo
+      // (piso cero sobre el valor resultante del increment).
       allow update: if esVendedor()
         && soloCambian(['pesoRestanteGramos', 'estado'])
-        && request.resource.data.pesoRestanteGramos <= resource.data.pesoRestanteGramos;
+        && request.resource.data.pesoRestanteGramos <= resource.data.pesoRestanteGramos
+        && request.resource.data.pesoRestanteGramos >= 0;
     }
 
     match /ventas/{id} {
