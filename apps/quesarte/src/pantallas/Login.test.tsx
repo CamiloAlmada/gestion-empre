@@ -5,15 +5,24 @@ import { Login } from './Login';
 
 const mocks = vi.hoisted(() => ({
   useAuth: vi.fn(),
-  initFirebase: vi.fn(() => ({ app: {}, auth: {}, db: {} })),
   useOnlineStatus: vi.fn(() => true),
 }));
 
 vi.mock('@gestion/firebase-kit', () => ({
   useAuth: mocks.useAuth,
-  initFirebase: mocks.initFirebase,
   useOnlineStatus: mocks.useOnlineStatus,
 }));
+
+function authPorDefecto() {
+  return {
+    usuario: null as { uid: string } | null,
+    perfil: null as { activo: boolean } | null,
+    cargando: false,
+    ingresarConEmail: vi.fn().mockResolvedValue(undefined),
+    restablecerPassword: vi.fn().mockResolvedValue(undefined),
+    salir: vi.fn().mockResolvedValue(undefined),
+  };
+}
 
 function configurarAuth(overrides: Partial<ReturnType<typeof authPorDefecto>> = {}) {
   const valor = { ...authPorDefecto(), ...overrides };
@@ -21,20 +30,20 @@ function configurarAuth(overrides: Partial<ReturnType<typeof authPorDefecto>> = 
   return valor;
 }
 
-function authPorDefecto() {
-  return {
-    usuario: null as { uid: string } | null,
-    cargando: false,
-    ingresarConEmail: vi.fn().mockResolvedValue(undefined),
-    ingresarConGoogle: vi.fn().mockResolvedValue(undefined),
-    salir: vi.fn().mockResolvedValue(undefined),
-  };
-}
+const MENSAJE_RESET_NEUTRO =
+  'Si existe una cuenta con ese correo, te enviamos un email para restablecer la contraseña.';
 
 describe('Login', () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+  });
+
+  it('no ofrece el ingreso con Google', () => {
+    configurarAuth();
+    render(<Login />);
+
+    expect(screen.queryByText(/Google/i)).toBeNull();
   });
 
   it('con campos vacíos, "Ingresar" muestra un error de validación y no llama a ingresarConEmail', () => {
@@ -103,14 +112,43 @@ describe('Login', () => {
     expect(screen.getByText('Home protegida')).toBeTruthy();
   });
 
-  it('al hacer click en "Ingresar con Google", llama a ingresarConGoogle', async () => {
+  it('reset con el correo vacío pide el correo y no llama a restablecerPassword', () => {
     const auth = configurarAuth();
     render(<Login />);
 
-    fireEvent.click(screen.getByText('Ingresar con Google'));
+    fireEvent.click(screen.getByText('¿Olvidaste tu contraseña?'));
+
+    expect(screen.getByRole('alert').textContent).toBe(
+      'Ingresá tu correo para restablecer la contraseña.',
+    );
+    expect(auth.restablecerPassword).not.toHaveBeenCalled();
+  });
+
+  it('reset con correo llama a restablecerPassword y muestra el mensaje neutro', async () => {
+    const auth = configurarAuth();
+    render(<Login />);
+
+    fireEvent.change(screen.getByLabelText('Correo'), { target: { value: '  a@a.com  ' } });
+    fireEvent.click(screen.getByText('¿Olvidaste tu contraseña?'));
 
     await waitFor(() => {
-      expect(auth.ingresarConGoogle).toHaveBeenCalledTimes(1);
+      expect(auth.restablecerPassword).toHaveBeenCalledWith('a@a.com');
     });
+    const aviso = await screen.findByRole('status');
+    expect(aviso.textContent).toBe(MENSAJE_RESET_NEUTRO);
+  });
+
+  it('reset muestra el mismo mensaje neutro aunque restablecerPassword falle (no revela cuentas)', async () => {
+    configurarAuth({
+      restablecerPassword: vi.fn().mockRejectedValue({ code: 'auth/user-not-found' }),
+    });
+    render(<Login />);
+
+    fireEvent.change(screen.getByLabelText('Correo'), { target: { value: 'nadie@a.com' } });
+    fireEvent.click(screen.getByText('¿Olvidaste tu contraseña?'));
+
+    const aviso = await screen.findByRole('status');
+    expect(aviso.textContent).toBe(MENSAJE_RESET_NEUTRO);
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 });

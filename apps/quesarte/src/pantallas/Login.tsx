@@ -2,7 +2,6 @@ import { useState, type KeyboardEvent } from 'react';
 import { Navigate } from 'react-router';
 import { Button, Input } from '@gestion/ui';
 import { useAuth } from '@gestion/firebase-kit';
-import { auth } from '../firebase';
 
 const MENSAJES_ERROR_AUTH: Record<string, string> = {
   'auth/invalid-credential': 'El correo o la contraseña son incorrectos.',
@@ -12,11 +11,14 @@ const MENSAJES_ERROR_AUTH: Record<string, string> = {
   'auth/user-disabled': 'Esta cuenta está deshabilitada. Contactá al administrador.',
   'auth/too-many-requests': 'Demasiados intentos. Probá de nuevo en unos minutos.',
   'auth/network-request-failed': 'Sin conexión a internet. Revisá tu conexión e intentá de nuevo.',
-  'auth/popup-closed-by-user': 'Se cerró la ventana de Google antes de completar el ingreso.',
 };
 
 const MENSAJE_ERROR_GENERICO = 'No se pudo iniciar sesión. Intentá de nuevo.';
 const MENSAJE_ERROR_VALIDACION = 'Completá el correo y la contraseña.';
+const MENSAJE_RESET_FALTA_EMAIL = 'Ingresá tu correo para restablecer la contraseña.';
+// Mensaje neutro: no revela si existe (o no) una cuenta con ese correo.
+const MENSAJE_RESET_NEUTRO =
+  'Si existe una cuenta con ese correo, te enviamos un email para restablecer la contraseña.';
 
 function tieneCodigo(error: unknown): error is { code: string } {
   return typeof error === 'object' && error !== null && 'code' in error;
@@ -30,10 +32,11 @@ function obtenerMensajeError(error: unknown): string {
 }
 
 export function Login() {
-  const { usuario, ingresarConEmail, ingresarConGoogle } = useAuth(auth);
+  const { usuario, ingresarConEmail, restablecerPassword } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | undefined>(undefined);
+  const [aviso, setAviso] = useState<string | undefined>(undefined);
   const [enviando, setEnviando] = useState(false);
 
   if (usuario !== null) {
@@ -44,11 +47,13 @@ export function Login() {
     if (enviando) return;
 
     if (email.trim() === '' || password === '') {
+      setAviso(undefined);
       setError(MENSAJE_ERROR_VALIDACION);
       return;
     }
 
     setError(undefined);
+    setAviso(undefined);
     setEnviando(true);
     try {
       await ingresarConEmail(email.trim(), password);
@@ -59,17 +64,25 @@ export function Login() {
     }
   }
 
-  async function manejarIngresoConGoogle() {
+  async function manejarResetPassword() {
     if (enviando) return;
 
+    if (email.trim() === '') {
+      setAviso(undefined);
+      setError(MENSAJE_RESET_FALTA_EMAIL);
+      return;
+    }
+
     setError(undefined);
+    setAviso(undefined);
     setEnviando(true);
     try {
-      await ingresarConGoogle();
-    } catch (err) {
-      setError(obtenerMensajeError(err));
+      await restablecerPassword(email.trim());
+    } catch {
+      // No revelamos si la cuenta existe: mismo mensaje neutro pase lo que pase.
     } finally {
       setEnviando(false);
+      setAviso(MENSAJE_RESET_NEUTRO);
     }
   }
 
@@ -106,12 +119,24 @@ export function Login() {
             </p>
           )}
 
+          {aviso !== undefined && (
+            <p role="status" className="text-sm text-texto-secundario">
+              {aviso}
+            </p>
+          )}
+
           <Button onClick={() => void manejarIngresoConEmail()} disabled={enviando}>
             Ingresar
           </Button>
-          <Button variante="secundaria" onClick={() => void manejarIngresoConGoogle()} disabled={enviando}>
-            Ingresar con Google
-          </Button>
+
+          <button
+            type="button"
+            onClick={() => void manejarResetPassword()}
+            disabled={enviando}
+            className="self-center text-sm text-texto-secundario underline underline-offset-2 transition-colors hover:text-texto disabled:cursor-not-allowed disabled:text-texto-secundario focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2 focus-visible:ring-offset-superficie"
+          >
+            ¿Olvidaste tu contraseña?
+          </button>
         </div>
       </div>
     </div>

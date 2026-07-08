@@ -1,9 +1,8 @@
 import { Button, Layout } from '@gestion/ui';
 import { useAuth, useOnlineStatus } from '@gestion/firebase-kit';
-import { auth } from '../firebase';
 
 export function Home() {
-  const { usuario, salir } = useAuth(auth);
+  const { perfil, salir } = useAuth();
   const enLinea = useOnlineStatus();
 
   return (
@@ -24,7 +23,7 @@ export function Home() {
         </div>
       }
     >
-      <p className="text-texto">Bienvenido{usuario?.email ? `, ${usuario.email}` : ''}.</p>
+      <p className="text-texto">Bienvenido{perfil?.nombre ? `, ${perfil.nombre}` : ''}.</p>
     </Layout>
   );
 }

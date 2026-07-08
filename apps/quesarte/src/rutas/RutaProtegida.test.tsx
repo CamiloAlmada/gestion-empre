@@ -1,19 +1,36 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { RutaProtegida } from './RutaProtegida';
 
 const mocks = vi.hoisted(() => ({
   useAuth: vi.fn(),
-  initFirebase: vi.fn(() => ({ app: {}, auth: {}, db: {} })),
   useOnlineStatus: vi.fn(() => true),
 }));
 
 vi.mock('@gestion/firebase-kit', () => ({
   useAuth: mocks.useAuth,
-  initFirebase: mocks.initFirebase,
   useOnlineStatus: mocks.useOnlineStatus,
 }));
+
+interface EstadoAuthMock {
+  usuario: { uid: string } | null;
+  perfil: { activo: boolean } | null;
+  cargando: boolean;
+  salir: ReturnType<typeof vi.fn>;
+}
+
+function configurarAuth(overrides: Partial<EstadoAuthMock> = {}) {
+  const valor: EstadoAuthMock = {
+    usuario: null,
+    perfil: null,
+    cargando: false,
+    salir: vi.fn().mockResolvedValue(undefined),
+    ...overrides,
+  };
+  mocks.useAuth.mockReturnValue(valor);
+  return valor;
+}
 
 function renderizarConRutas() {
   return render(
@@ -39,14 +56,18 @@ describe('RutaProtegida', () => {
     vi.clearAllMocks();
   });
 
+  it('mientras carga, no muestra ni el contenido protegido ni la pantalla de login', () => {
+    configurarAuth({ cargando: true });
+
+    renderizarConRutas();
+
+    expect(screen.queryByText('Contenido protegido')).toBeNull();
+    expect(screen.queryByText('Pantalla de login')).toBeNull();
+    expect(screen.getByText('Cargando…')).toBeTruthy();
+  });
+
   it('sin usuario, redirige a /login', () => {
-    mocks.useAuth.mockReturnValue({
-      usuario: null,
-      cargando: false,
-      ingresarConEmail: vi.fn(),
-      ingresarConGoogle: vi.fn(),
-      salir: vi.fn(),
-    });
+    configurarAuth({ usuario: null });
 
     renderizarConRutas();
 
@@ -54,14 +75,8 @@ describe('RutaProtegida', () => {
     expect(screen.queryByText('Contenido protegido')).toBeNull();
   });
 
-  it('con usuario, renderiza el contenido protegido', () => {
-    mocks.useAuth.mockReturnValue({
-      usuario: { uid: 'u1' },
-      cargando: false,
-      ingresarConEmail: vi.fn(),
-      ingresarConGoogle: vi.fn(),
-      salir: vi.fn(),
-    });
+  it('con usuario y perfil activo, renderiza el contenido protegido', () => {
+    configurarAuth({ usuario: { uid: 'u1' }, perfil: { activo: true } });
 
     renderizarConRutas();
 
@@ -69,18 +84,31 @@ describe('RutaProtegida', () => {
     expect(screen.queryByText('Pantalla de login')).toBeNull();
   });
 
-  it('mientras carga, no muestra ni el contenido protegido ni la pantalla de login', () => {
-    mocks.useAuth.mockReturnValue({
-      usuario: null,
-      cargando: true,
-      ingresarConEmail: vi.fn(),
-      ingresarConGoogle: vi.fn(),
-      salir: vi.fn(),
-    });
+  it('con usuario pero perfil desactivado, muestra "Cuenta no autorizada" y no el contenido', () => {
+    configurarAuth({ usuario: { uid: 'u1' }, perfil: { activo: false } });
 
     renderizarConRutas();
 
+    expect(screen.getByText('Cuenta no autorizada')).toBeTruthy();
     expect(screen.queryByText('Contenido protegido')).toBeNull();
-    expect(screen.queryByText('Pantalla de login')).toBeNull();
+  });
+
+  it('con usuario pero sin perfil (doc inexistente), muestra "Cuenta no autorizada"', () => {
+    configurarAuth({ usuario: { uid: 'u1' }, perfil: null });
+
+    renderizarConRutas();
+
+    expect(screen.getByText('Cuenta no autorizada')).toBeTruthy();
+    expect(screen.queryByText('Contenido protegido')).toBeNull();
+  });
+
+  it('en "Cuenta no autorizada", el botón Salir llama a salir()', () => {
+    const auth = configurarAuth({ usuario: { uid: 'u1' }, perfil: { activo: false } });
+
+    renderizarConRutas();
+
+    fireEvent.click(screen.getByText('Salir'));
+
+    expect(auth.salir).toHaveBeenCalledTimes(1);
   });
 });
