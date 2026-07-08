@@ -53,6 +53,20 @@ function mensajeErrorCobro(error: unknown): string {
 }
 
 /**
+ * Detalle breve para el catch tardío del cobro offline (ver `confirmarCobro`):
+ * mismo catálogo de errores tipados que `mensajeErrorCobro`, pero recortado a
+ * la causa puntual, sin la frase de acción ("Revisá…") que ahí tiene sentido
+ * porque el usuario está viendo el carrito, y acá no.
+ */
+function detalleErrorTipado(error: unknown): string | null {
+  if (error instanceof StockInsuficienteError) return 'no hay stock suficiente';
+  if (error instanceof TotalIncoherenteError) return 'el total no coincide con los ítems';
+  if (error instanceof VentaVaciaError) return 'el carrito estaba vacío';
+  if (error instanceof ItemInvalidoError) return 'un ítem del carrito quedó inválido';
+  return null;
+}
+
+/**
  * POS de venta (home de la app, docs/06-ui-ux.md §1-§2): buscador + grilla de
  * productos, carrito, cobro. Trae productos activos y piezas disponibles con
  * las MISMAS queries memoizadas que `Stock.tsx` (agrupadas client-side con
@@ -143,8 +157,16 @@ export function Venta() {
       setModalCobroAbierto(false);
       setCarrito([]);
       mostrarToast('Venta guardada sin conexión. Se sincronizará al reconectar.', 'info');
-      escritura.catch(() => {
-        mostrarToast('No se pudo sincronizar la venta. Revisala en Historial.', 'error');
+      escritura.catch((error: unknown) => {
+        // Si `registrarVenta` rechaza (p. ej. por validación), la venta
+        // nunca llegó a escribirse: NO está en Historial, así que el toast
+        // no puede prometer eso — solo puede avisar que se perdió.
+        const detalle = detalleErrorTipado(error);
+        const mensaje =
+          detalle !== null
+            ? `No se pudo registrar la venta: ${detalle}. La venta no quedó guardada.`
+            : 'No se pudo registrar la venta. La venta no quedó guardada.';
+        mostrarToast(mensaje, 'error');
       });
       return;
     }

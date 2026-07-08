@@ -331,6 +331,21 @@ describe('Venta - cobro', () => {
     expect(await screen.findByText('Venta guardada sin conexión. Se sincronizará al reconectar.')).toBeTruthy();
   });
 
+  it('cobro offline: si la sincronización tardía falla, el toast es honesto (la venta no quedó guardada, no "Revisala en Historial")', async () => {
+    configurarAuth();
+    mocks.useOnlineStatus.mockReturnValue(false);
+    mocks.registrarVenta.mockRejectedValue(new StockInsuficienteError('sin stock'));
+    agregarUnidadAlCarrito();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Cobrar' })[0]!);
+    fireEvent.click(screen.getByRole('button', { name: 'Efectivo' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }));
+
+    expect(
+      await screen.findByText('No se pudo registrar la venta: no hay stock suficiente. La venta no quedó guardada.'),
+    ).toBeTruthy();
+  });
+
   it('StockInsuficienteError: mensaje específico y el carrito queda intacto', async () => {
     configurarAuth();
     mocks.registrarVenta.mockRejectedValue(new StockInsuficienteError('sin stock'));
