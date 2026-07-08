@@ -18,6 +18,7 @@ export {
   type ItemEntradaVenta,
 } from './ventas';
 export { ajustarStock, type EntradaAjuste, type TipoAjuste } from './stock';
+export { invitarUsuario, type EntradaInvitacion } from './invitaciones';
 export {
   ErrorEscrituraPOS,
   StockInsuficienteError,
@@ -26,4 +27,9 @@ export {
   ItemInvalidoError,
   AnulacionInvalidaError,
   AjusteInvalidoError,
+  ErrorInvitacion,
+  EmailInvalidoError,
+  DatosInvitacionInvalidosError,
+  EmailYaRegistradoError,
+  PerfilNoCreadoError,
 } from './errores';
