@@ -33,12 +33,7 @@ export type EstadoVenta = 'completada' | 'anulada';
 
 /** Tipo de un movimiento de stock (auditoría inmutable). */
 export type TipoMovimiento =
-  | 'ingreso_compra'
-  | 'venta'
-  | 'ajuste_positivo'
-  | 'ajuste_negativo'
-  | 'merma'
-  | 'devolucion';
+  'ingreso_compra' | 'venta' | 'ajuste_positivo' | 'ajuste_negativo' | 'merma' | 'devolucion';
 
 /** Rol del usuario. Gobierna permisos en las reglas de Firestore. */
 export type Rol = 'admin' | 'vendedor';
@@ -151,4 +146,15 @@ export interface Usuario {
   email: string;
   rol: Rol;
   activo: boolean;
+}
+
+/**
+ * Configuración general del negocio. Documento único (`configuracion/general`),
+ * sin `id` propio: no hay colección de configuraciones que trazar por id.
+ */
+export interface Configuracion {
+  nombreNegocio: string;
+  /** Umbral de peso restante (gramos) para ofrecer marcar una pieza como agotada. */
+  umbralPiezaAgotadaGramos: Peso;
+  metodoProrrateo: 'por_valor' | 'por_peso';
 }
