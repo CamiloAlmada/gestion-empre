@@ -118,3 +118,10 @@ esta tabla; un par nuevo se verifica y se agrega acá antes de usarse.
 Nota de diseño: `peligro` está optimizado como color de TEXTO. En botones con
 fondo `peligro`, el label usa `text-white dark:text-fondo` (no hay un valor
 único de `peligro` que cumpla AA en ambos roles en dark).
+
+**Usos decorativos aprobados** (sin requisito de par AA por no llevar texto ni
+comunicar información por sí solos — la información va por otra vía):
+- Pill `primary-100` / `dark:primary-900/40` detrás del ícono del tab activo en
+  `BarraPestanas` (el estado activo lo comunican `aria-current` y el color del
+  label, ya verificados).
+- Scrim `primary-950/60` como backdrop del `Modal`.
