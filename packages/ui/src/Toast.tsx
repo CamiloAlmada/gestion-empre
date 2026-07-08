@@ -3,9 +3,18 @@ import { useEffect, useState } from 'react';
 export type TipoToast = 'info' | 'exito' | 'error';
 
 export interface ToastProps {
+  id: number;
   mensaje: string;
   tipo: TipoToast;
-  onDescartar: () => void;
+  /**
+   * Recibe el `id` del toast a descartar. La identidad de esta función debe
+   * ser estable entre renders (p.ej. un `useCallback` con deps `[]` en
+   * `ProveedorToasts`) — el temporizador de auto-descarte depende de ella, y
+   * si cambiara en cada render (como pasaría con un `() => descartar(id)`
+   * inline por toast) el efecto se reiniciaría, reseteando los 5s de TODOS
+   * los toasts activos cada vez que se agrega uno nuevo.
+   */
+  onDescartar: (id: number) => void;
 }
 
 /** Cuánto tiempo queda un toast antes de auto-descartarse. */
@@ -29,7 +38,7 @@ const GLIFO_POR_TIPO: Record<TipoToast, string> = {
   error: '⚠',
 };
 
-export function Toast({ mensaje, tipo, onDescartar }: ToastProps) {
+export function Toast({ id, mensaje, tipo, onDescartar }: ToastProps) {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -40,9 +49,12 @@ export function Toast({ mensaje, tipo, onDescartar }: ToastProps) {
   }, []);
 
   useEffect(() => {
-    const temporizador = setTimeout(onDescartar, DURACION_TOAST_MS);
+    const temporizador = setTimeout(() => onDescartar(id), DURACION_TOAST_MS);
     return () => clearTimeout(temporizador);
-  }, [onDescartar]);
+    // `id` es fijo durante la vida de este toast y `onDescartar` es estable
+    // (ver ToastProps): el efecto arranca una sola vez al montar y no se
+    // reinicia cuando se agregan/quitan OTROS toasts.
+  }, [id, onDescartar]);
 
   return (
     <div
@@ -55,7 +67,7 @@ export function Toast({ mensaje, tipo, onDescartar }: ToastProps) {
       <p className="flex-1">{mensaje}</p>
       <button
         type="button"
-        onClick={onDescartar}
+        onClick={() => onDescartar(id)}
         aria-label="Cerrar aviso"
         className="rounded-full p-1 text-current focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
       >
