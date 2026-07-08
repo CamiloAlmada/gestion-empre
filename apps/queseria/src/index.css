@@ -1,0 +1,6 @@
+@import 'tailwindcss';
+@import '@gestion/config/tailwind.css';
+
+/* @gestion/ui vive fuera de esta app: hay que registrarlo explícitamente
+   para que Tailwind escanee sus clases (no lo detecta por default). */
+@source '../../../packages/ui/src';
