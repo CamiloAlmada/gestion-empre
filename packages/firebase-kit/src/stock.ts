@@ -15,7 +15,8 @@ import {
   type Producto,
 } from '@gestion/core';
 import { movimientoConverter } from './converters/movimiento';
-import { AjusteInvalidoError, StockInsuficienteError } from './errores';
+import { piezaConverter } from './converters/pieza';
+import { AjusteInvalidoError, IngresoInvalidoError, StockInsuficienteError } from './errores';
 
 /**
  * Ajustes manuales de stock y mermas (pantallas de Fase C).
@@ -214,4 +215,123 @@ function exigirPieza(pieza: Pieza | undefined, producto: Producto): Pieza {
     );
   }
   return pieza;
+}
+
+// ── Ingreso manual de piezas ──────────────────────────────────────────────────
+
+/** Una pieza física declarada en el alta manual (peso y vencimiento opcional). */
+export interface PiezaIngreso {
+  /** Peso de la pieza recién ingresada, en gramos. Debe ser > 0. */
+  pesoInicialGramos: Peso;
+  /** Vencimiento opcional. No puede ser anterior a hoy. */
+  fechaVencimiento?: Date;
+}
+
+/**
+ * Entrada de `ingresarPiezas`. Da de alta N piezas físicas del mismo `producto`
+ * (que debe controlarse por piezas). El costo de cada pieza se hereda del
+ * `costoPromedioCents` del producto (ver nota en `ingresarPiezas`).
+ */
+export interface EntradaIngresoPiezas {
+  /** Producto al que pertenecen las piezas. Debe ir por piezas. */
+  producto: Producto;
+  /** Uid de quien ingresa (en la práctica, admin). */
+  usuarioId: string;
+  /** Piezas físicas a crear. Al menos una. */
+  piezas: PiezaIngreso[];
+}
+
+/**
+ * Da de alta manual N piezas físicas (ruedas de queso, salames) en UN batch
+ * atómico. Es la hermana de `ajustarStock`: aquel incrementa el stock de piezas
+ * que YA existen; este CREA piezas nuevas cuando entra mercadería sin pasar por
+ * el módulo de compras (Fase 2).
+ *
+ * Por cada pieza declarada: crea `piezas/{id}` (`pesoInicialGramos` ==
+ * `pesoRestanteGramos`, `estado: 'disponible'`, `fechaIngreso` = ahora) y su
+ * `movimientos/{id}` de `tipo: 'ajuste_positivo'` con `deltaGramos` positivo. Como
+ * en `ajustarStock`, el propio movimiento ES el registro del ingreso:
+ * `origenTipo: 'ajuste'` y `origenId` apunta a su propio id.
+ *
+ * El costo de cada pieza se hereda de `producto.costoPromedioCents`, que en Fase 1
+ * puede ser `money(0)`. En Fase 2 el ingreso por compra (`docs/03`) fija el costo
+ * real por kg de la mercadería y reemplaza esta herencia.
+ *
+ * @throws {IngresoInvalidoError} si el producto no va por piezas, la lista está
+ *   vacía, algún `pesoInicialGramos` no es positivo, o una `fechaVencimiento` es
+ *   anterior a hoy.
+ */
+export async function ingresarPiezas(
+  db: Firestore,
+  entrada: EntradaIngresoPiezas,
+): Promise<{ piezaIds: string[] }> {
+  const { producto, usuarioId, piezas } = entrada;
+  validarIngreso(producto, piezas);
+
+  const ahora = new Date();
+  const batch = writeBatch(db);
+  const piezaIds: string[] = [];
+
+  for (const declarada of piezas) {
+    const piezaRef = doc(collection(db, 'piezas')).withConverter(piezaConverter);
+    const pieza: Pieza = {
+      id: piezaRef.id,
+      productoId: producto.id,
+      pesoInicialGramos: declarada.pesoInicialGramos,
+      pesoRestanteGramos: declarada.pesoInicialGramos,
+      // Fase 1: el ingreso manual hereda el costo promedio (puede ser money(0)).
+      // Fase 2: lo reemplaza el costo real por kg del módulo de compras (docs/03).
+      costoKgCents: producto.costoPromedioCents,
+      fechaIngreso: ahora,
+      fechaVencimiento: declarada.fechaVencimiento,
+      estado: 'disponible',
+    };
+    batch.set(piezaRef, pieza);
+
+    const movRef = doc(collection(db, 'movimientos')).withConverter(movimientoConverter);
+    const movimiento: MovimientoStock = {
+      id: movRef.id,
+      tipo: 'ajuste_positivo',
+      productoId: producto.id,
+      piezaId: piezaRef.id,
+      deltaGramos: declarada.pesoInicialGramos,
+      origenTipo: 'ajuste',
+      origenId: movRef.id,
+      usuarioId,
+      fecha: ahora,
+    };
+    batch.set(movRef, movimiento);
+
+    piezaIds.push(piezaRef.id);
+  }
+
+  await batch.commit();
+  return { piezaIds };
+}
+
+function validarIngreso(producto: Producto, piezas: PiezaIngreso[]): void {
+  if (producto.modoStock !== 'fraccionado_por_pieza' && producto.modoStock !== 'pieza_entera') {
+    throw new IngresoInvalidoError(
+      `El producto ${producto.id} (${producto.modoStock}) no se controla por piezas; ` +
+        'usá ajustarStock para granel o unidades.',
+    );
+  }
+  if (piezas.length === 0) {
+    throw new IngresoInvalidoError(`El ingreso de ${producto.id} no tiene piezas.`);
+  }
+  // Piso del día de hoy: una fecha anterior a la medianoche de hoy es "vencida".
+  const inicioDeHoy = new Date();
+  inicioDeHoy.setHours(0, 0, 0, 0);
+  for (const [i, pieza] of piezas.entries()) {
+    if (pieza.pesoInicialGramos <= 0) {
+      throw new IngresoInvalidoError(
+        `La pieza #${i + 1} de ${producto.id} tiene un peso no positivo (${pieza.pesoInicialGramos} g).`,
+      );
+    }
+    if (pieza.fechaVencimiento !== undefined && pieza.fechaVencimiento < inicioDeHoy) {
+      throw new IngresoInvalidoError(
+        `La pieza #${i + 1} de ${producto.id} vence antes de hoy (${pieza.fechaVencimiento.toISOString()}).`,
+      );
+    }
+  }
 }

@@ -76,6 +76,19 @@ export class AjusteInvalidoError extends ErrorEscrituraPOS {
 }
 
 /**
+ * El alta manual de piezas (`ingresarPiezas`) es incoherente: el producto no se
+ * controla por piezas (`modoStock` distinto de `fraccionado_por_pieza` /
+ * `pieza_entera`), la lista de piezas viene vacía, algún `pesoInicialGramos` no
+ * es positivo, o una `fechaVencimiento` es anterior a hoy.
+ */
+export class IngresoInvalidoError extends ErrorEscrituraPOS {
+  constructor(message: string) {
+    super(message);
+    this.name = 'IngresoInvalidoError';
+  }
+}
+
+/**
  * Errores del alta de usuarios por invitación (`invitaciones.ts`).
  *
  * Mismo patrón que `ErrorEscrituraPOS`: una raíz abstracta para el `catch`
