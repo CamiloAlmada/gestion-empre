@@ -2,7 +2,10 @@ import {
   calcularSubtotal,
   formatearPeso,
   peso,
+  pesoNoNegativo,
+  restarPeso,
   sumarMoney,
+  sumarPeso,
   type ItemCobrable,
   type Money,
   type Peso,
@@ -118,15 +121,16 @@ export function piezaIdsEnCarrito(items: ItemCarrito[]): Set<string> {
  * directamente de la lista (ver `piezaIdsEnCarrito`), no se resta un delta.
  *
  * No muta `piezas`; devuelve piezas nuevas (mismo patrón que el resto de
- * `@gestion/core`: nunca aritmética de peso fuera de sus helpers, acá se usa
- * `peso()` para construir el `Peso` ajustado).
+ * `@gestion/core`: nunca aritmética de peso fuera de sus helpers, acá se usan
+ * `sumarPeso` para acumular reservas y `pesoNoNegativo(restarPeso(...))` para el
+ * `Peso` ajustado, clampeado a 0).
  */
 export function piezasAjustadasPorCarrito(
   piezas: Pieza[],
   productoId: string,
   itemsCarrito: ItemCarrito[],
 ): Pieza[] {
-  const reservas = new Map<string, number>();
+  const reservas = new Map<string, Peso>();
   for (const item of itemsCarrito) {
     if (
       item.producto.id !== productoId ||
@@ -136,14 +140,17 @@ export function piezasAjustadasPorCarrito(
     ) {
       continue;
     }
-    reservas.set(item.pieza.id, (reservas.get(item.pieza.id) ?? 0) + item.gramos);
+    reservas.set(item.pieza.id, sumarPeso(reservas.get(item.pieza.id) ?? peso(0), item.gramos));
   }
   if (reservas.size === 0) return piezas;
 
   return piezas.map((pieza) => {
     const reservado = reservas.get(pieza.id);
     if (reservado === undefined) return pieza;
-    return { ...pieza, pesoRestanteGramos: peso(Math.max(0, pieza.pesoRestanteGramos - reservado)) };
+    return {
+      ...pieza,
+      pesoRestanteGramos: pesoNoNegativo(restarPeso(pieza.pesoRestanteGramos, reservado)),
+    };
   });
 }
 

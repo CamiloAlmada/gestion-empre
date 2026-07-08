@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { peso, sumarPeso, pesoDesdeKg, formatearPeso, formatearPesoForzado } from './peso.js';
+import {
+  peso,
+  sumarPeso,
+  restarPeso,
+  pesoNoNegativo,
+  pesoDesdeKg,
+  formatearPeso,
+  formatearPesoForzado,
+} from './peso.js';
 
 describe('peso (constructor)', () => {
   it('acepta 0, positivos y negativos enteros', () => {
@@ -38,6 +46,34 @@ describe('sumarPeso', () => {
     expect(sumarPeso(peso(500), peso(-200))).toBe(300);
     expect(sumarPeso(peso(-500), peso(500))).toBe(0);
     expect(sumarPeso(peso(-100), peso(-250))).toBe(-350);
+  });
+});
+
+describe('restarPeso', () => {
+  it('resta con resultado positivo', () => {
+    expect(restarPeso(peso(500), peso(200))).toBe(300);
+  });
+
+  it('resta con resultado negativo (delta)', () => {
+    expect(restarPeso(peso(200), peso(500))).toBe(-300);
+  });
+
+  it('resta con resultado cero', () => {
+    expect(restarPeso(peso(500), peso(500))).toBe(0);
+  });
+});
+
+describe('pesoNoNegativo', () => {
+  it('clampea negativos a 0', () => {
+    expect(pesoNoNegativo(peso(-350))).toBe(0);
+  });
+
+  it('deja el 0 intacto', () => {
+    expect(pesoNoNegativo(peso(0))).toBe(0);
+  });
+
+  it('deja los positivos intactos', () => {
+    expect(pesoNoNegativo(peso(350))).toBe(350);
   });
 });
 

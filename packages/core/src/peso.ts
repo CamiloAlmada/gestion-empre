@@ -30,6 +30,19 @@ export function sumarPeso(...pesos: Peso[]): Peso {
 }
 
 /**
+ * Resta `b` de `a`. Puede dar negativo, coherente con que `Peso` admite deltas
+ * negativos (movimientos de stock). Para clampear a 0 usar `pesoNoNegativo`.
+ */
+export function restarPeso(a: Peso, b: Peso): Peso {
+  return peso(a - b);
+}
+
+/** Clampea un `Peso` a 0: negativos → `peso(0)`, 0 y positivos intactos. */
+export function pesoNoNegativo(p: Peso): Peso {
+  return p < 0 ? peso(0) : p;
+}
+
+/**
  * Convierte kg (con decimales, como lo ingresa la UI) a `Peso` en gramos,
  * redondeando half-up. Frontera UI → dominio.
  *
