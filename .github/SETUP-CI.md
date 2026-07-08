@@ -9,8 +9,11 @@ Repo → **Settings → Secrets and variables → Actions**.
 
 ## 1. Secrets (pestaña "Secrets")
 
-Cuenta de servicio de Firebase con permiso de Firebase Hosting para cada
-proyecto. Dos formas de generarla:
+Cuenta de servicio de Firebase para cada proyecto. El workflow la usa para
+**dos cosas**: deploy a Firebase Hosting (`FirebaseExtended/action-hosting-deploy`)
+y deploy de `firestore.rules` / `firestore.indexes.json` (`firebase-tools deploy
+--only firestore`, autenticado vía `GOOGLE_APPLICATION_CREDENTIALS`) — el mismo
+secret cubre ambos. Dos formas de generarla:
 
 - **Opción rápida**: correr `firebase init hosting:github` desde
   `apps/quesarte/` (con el CLI de Firebase autenticado) y dejar que cree los
@@ -28,6 +31,18 @@ proyecto. Dos formas de generarla:
 
 No hace falta crear ni configurar `GITHUB_TOKEN`: lo provee GitHub
 automáticamente en cada run.
+
+**Permisos necesarios de la service account**: para deployar `firestore.rules`
+e índices además de Hosting, la cuenta necesita el rol **Firebase Rules
+Admin** (o **Editor** del proyecto, que ya lo incluye). El JSON que se genera
+desde Firebase Console → Service accounts (el mismo que se usa para Hosting)
+normalmente ya alcanza, porque esa cuenta suele tener rol Editor por defecto.
+Si el paso "Deploy Firestore (rules + indexes)" falla con un error **403 /
+PERMISSION_DENIED**, hay que ir a Google Cloud Console → IAM & Admin → IAM,
+buscar la cuenta de servicio (termina en
+`@<proyecto>.iam.gserviceaccount.com`) y otorgarle el rol **Firebase Rules
+Admin** (o **Editor**) en el proyecto correspondiente (`quesarte-uy-dev` o
+`quesarte-uy`).
 
 ## 2. Repository variables (pestaña "Variables")
 
@@ -62,9 +77,11 @@ repo en vez de archivos `.env`.
 
 - **Push a `main`** (que toca `apps/quesarte/**`, `packages/**`,
   `pnpm-lock.yaml`, `turbo.json` o `package.json`): `verificar` →
-  `deploy-prod` (deploy a `quesarte-uy`, canal `live`).
+  `deploy-prod` (deploy de `firestore.rules` + `firestore.indexes.json` y de
+  Hosting a `quesarte-uy`, canal `live`).
 - **Pull request** con los mismos paths: `verificar` → `deploy-preview`
-  (deploy a un canal de preview en `quesarte-uy-dev`, con comentario
+  (deploy de `firestore.rules` + `firestore.indexes.json` y de un canal de
+  preview de Hosting, ambos contra `quesarte-uy-dev`, con comentario
   automático del bot en el PR con la URL).
 - Un push/PR que no toca ninguno de esos paths no dispara el workflow.
 

@@ -32,13 +32,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: pnpm
@@ -60,13 +60,13 @@ jobs:
       checks: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: pnpm
@@ -84,6 +84,20 @@ jobs:
           VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.VITE_FIREBASE_MESSAGING_SENDER_ID_DEV }}
           VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID_DEV }}
 
+      - name: Escribir credenciales de Firebase (service account dev)
+        run: |
+          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT_QUESARTE_UY_DEV }}' > "$RUNNER_TEMP/firebase-sa.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/firebase-sa.json" >> "$GITHUB_ENV"
+
+      # Nota: las firestore.rules / firestore.indexes.json del branch de este
+      # PR se deployan al proyecto dev (quesarte-uy-dev), igual que el hosting
+      # preview. Es aceptable: valida las reglas contra el proyecto de dev
+      # antes del merge a main, que es cuando se deployan a producción
+      # (quesarte-uy) en el job deploy-prod.
+      - name: Deploy Firestore (rules + indexes) a dev
+        working-directory: apps/quesarte
+        run: npx --yes firebase-tools@15 deploy --only firestore --project quesarte-uy-dev --non-interactive
+
       - name: Deploy preview channel a Firebase Hosting
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
@@ -92,6 +106,10 @@ jobs:
           projectId: quesarte-uy-dev
           entryPoint: apps/quesarte
 
+      - name: Borrar credenciales temporales de Firebase
+        if: always()
+        run: rm -f "$RUNNER_TEMP/firebase-sa.json"
+
   deploy-prod:
     name: Deploy producción (main → quesarte-uy)
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -99,13 +117,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: pnpm
@@ -123,6 +141,15 @@ jobs:
           VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.VITE_FIREBASE_MESSAGING_SENDER_ID }}
           VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
 
+      - name: Escribir credenciales de Firebase (service account prod)
+        run: |
+          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT_QUESARTE_UY }}' > "$RUNNER_TEMP/firebase-sa.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/firebase-sa.json" >> "$GITHUB_ENV"
+
+      - name: Deploy Firestore (rules + indexes) a producción
+        working-directory: apps/quesarte
+        run: npx --yes firebase-tools@15 deploy --only firestore --project quesarte-uy --non-interactive
+
       - name: Deploy a producción en Firebase Hosting
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
@@ -131,3 +158,7 @@ jobs:
           projectId: quesarte-uy
           entryPoint: apps/quesarte
           channelId: live
+
+      - name: Borrar credenciales temporales de Firebase
+        if: always()
+        run: rm -f "$RUNNER_TEMP/firebase-sa.json"
