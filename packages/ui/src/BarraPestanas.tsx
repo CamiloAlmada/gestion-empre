@@ -70,7 +70,7 @@ function BotonPestana({ item, activo, onSeleccionar }: BotonItemProps) {
       aria-current={activo ? 'page' : undefined}
       onClick={() => onSeleccionar(item.id)}
       className={`flex min-h-[48px] flex-1 flex-col items-center justify-center gap-0.5 px-1 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-inset ${
-        activo ? 'text-primary-600' : 'text-texto-secundario'
+        activo ? 'text-primary-700 dark:text-primary-300' : 'text-texto-secundario'
       }`}
     >
       <span
@@ -106,7 +106,7 @@ function BotonCentral({ item, activo, onSeleccionar }: BotonItemProps) {
       <span
         aria-hidden="true"
         className={`absolute bottom-1.5 text-xs font-medium ${
-          activo ? 'text-primary-600' : 'text-texto-secundario'
+          activo ? 'text-primary-700 dark:text-primary-300' : 'text-texto-secundario'
         }`}
       >
         {item.etiqueta}

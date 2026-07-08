@@ -108,6 +108,44 @@ describe('Modal', () => {
     expect(document.activeElement).toBe(disparador);
   });
 
+  it('un botón de "acciones" que llama a onCerrar (y el padre hace setState) no duplica el aviso', () => {
+    const onCerrarSpy = vi.fn();
+
+    function ModalControladoPorEstado() {
+      const [abierto, setAbierto] = useState(true);
+      // Patrón típico de consumo: el botón de "Cancelar" llama directamente
+      // al mismo `onCerrar` que se le pasa al Modal, y ESE callback decide
+      // cerrar actualizando el estado (no llama a dialog.close() él mismo).
+      function onCerrar() {
+        onCerrarSpy();
+        setAbierto(false);
+      }
+
+      return (
+        <Modal
+          abierto={abierto}
+          onCerrar={onCerrar}
+          titulo="T"
+          acciones={
+            <button type="button" onClick={onCerrar}>
+              Cancelar
+            </button>
+          }
+        >
+          contenido
+        </Modal>
+      );
+    }
+
+    render(<ModalControladoPorEstado />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+
+    const dialog = document.querySelector('dialog') as HTMLDialogElement;
+    expect(dialog.open).toBe(false);
+    expect(onCerrarSpy).toHaveBeenCalledTimes(1);
+  });
+
   it('onCerrar se llama exactamente una vez al cerrar con Escape', () => {
     const onCerrar = vi.fn();
     function Envoltorio() {

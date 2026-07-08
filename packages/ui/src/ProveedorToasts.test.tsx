@@ -100,6 +100,40 @@ describe('ProveedorToasts / useToasts', () => {
     expect(screen.queryByText('Guardado con éxito')).not.toBeNull();
   });
 
+  it('cada toast tiene su propio temporizador: uno nuevo no reinicia el de los anteriores', () => {
+    renderizar();
+
+    // Toast A a t=0.
+    act(() => {
+      fireEvent.click(screen.getByText('exito'));
+    });
+
+    // A los 4s (todavía dentro de la ventana de A), se agrega el toast B.
+    act(() => {
+      vi.advanceTimersByTime(4000);
+    });
+    expect(screen.queryByText('Guardado con éxito')).not.toBeNull();
+    act(() => {
+      fireEvent.click(screen.getByText('error'));
+    });
+    expect(screen.queryByText('Algo salió mal')).not.toBeNull();
+
+    // 1s más: A llega a sus 5s exactos desde SU creación y debe descartarse;
+    // B lleva solo 1s y debe seguir. Si el timer de A se hubiera reiniciado
+    // al montar B (bug del Bloqueante 2), A seguiría visible acá.
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(screen.queryByText('Guardado con éxito')).toBeNull();
+    expect(screen.queryByText('Algo salió mal')).not.toBeNull();
+
+    // 4s más (5s desde la creación de B): B también se descarta.
+    act(() => {
+      vi.advanceTimersByTime(4000);
+    });
+    expect(screen.queryByText('Algo salió mal')).toBeNull();
+  });
+
   it('el botón cerrar descarta el toast inmediatamente', () => {
     renderizar();
 

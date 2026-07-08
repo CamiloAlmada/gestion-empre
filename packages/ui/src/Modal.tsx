@@ -25,6 +25,13 @@ export interface ModalProps {
 export function Modal({ abierto, onCerrar, titulo, children, acciones }: ModalProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const disparadorRef = useRef<Element | null>(null);
+  // true mientras el <dialog> se está cerrando porque LA PROP `abierto` pasó
+  // a false (el padre ya decidió cerrar, típicamente porque su propio botón
+  // de "acciones" llama a `onCerrar` directamente antes de que este efecto
+  // corra). En ese caso el evento "close" que dispara nuestro propio
+  // `dialog.close()` es un eco del cierre que el padre ya conoce: no hay que
+  // volver a llamar a `onCerrar` (evita el doble aviso).
+  const cerrandoPorPropRef = useRef(false);
   const tituloId = useId();
 
   // Abre/cierra el <dialog> nativo en respuesta a la prop `abierto`, y
@@ -40,15 +47,18 @@ export function Modal({ abierto, onCerrar, titulo, children, acciones }: ModalPr
       disparadorRef.current = document.activeElement;
       dialog.showModal();
     } else if (!abierto && dialog.open) {
+      cerrandoPorPropRef.current = true;
       dialog.close();
     }
   }, [abierto]);
 
   // "close" cubre TODOS los caminos de cierre nativo (Escape dispara
-  // "cancel" y luego "close"; nuestro click en backdrop y el botón de
-  // "acciones" llaman a dialog.close() directamente). Es la única fuente de
-  // verdad para avisarle al padre y devolver el foco: evita duplicar lógica
-  // por cada gesto de cierre.
+  // "cancel" y luego "close"; nuestro click en backdrop y el efecto de
+  // arriba llaman a dialog.close() directamente). Es la única fuente de
+  // verdad para devolver el foco: evita duplicar esa lógica por cada gesto
+  // de cierre. Avisar a `onCerrar`, en cambio, se salta cuando el cierre fue
+  // iniciado por la prop (ver `cerrandoPorPropRef`) para no avisar dos veces
+  // de un cierre que el padre ya originó.
   useEffect(() => {
     const dialog = dialogRef.current;
     if (dialog === null) {
@@ -56,7 +66,12 @@ export function Modal({ abierto, onCerrar, titulo, children, acciones }: ModalPr
     }
 
     function manejarClose() {
-      onCerrar();
+      const avisadoPorElPadre = cerrandoPorPropRef.current;
+      cerrandoPorPropRef.current = false;
+
+      if (!avisadoPorElPadre) {
+        onCerrar();
+      }
       const disparador = disparadorRef.current;
       if (disparador instanceof HTMLElement) {
         disparador.focus();

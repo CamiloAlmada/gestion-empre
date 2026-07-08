@@ -61,9 +61,10 @@ export function ProveedorToasts({ children }: ProveedorToastsProps) {
         {toasts.map((toast) => (
           <Toast
             key={toast.id}
+            id={toast.id}
             mensaje={toast.mensaje}
             tipo={toast.tipo}
-            onDescartar={() => descartarToast(toast.id)}
+            onDescartar={descartarToast}
           />
         ))}
       </div>
