@@ -81,9 +81,17 @@ Tareas:
 7. Ajustes de stock y merma con motivo.
 8. Offline: venta funciona sin conexión y sincroniza al reconectar; indicador
    de estado.
-9. Gestión de usuarios: pantalla "Usuarios" (solo admin) con invitación por
-   email, listado y activar/desactivar + rol (ver nota de auth arriba). Incluye
-   quitar Google del login y el guard post-login por `activo`.
+9. Gestión de usuarios: pantalla "Usuarios" (solo admin, dentro de Ajustes) con
+   invitación por email, listado y activar/desactivar + rol (ver nota de auth
+   arriba). Incluye quitar Google del login y el guard post-login por `activo`.
+10. Pantalla Ajustes: apariencia (light/dark/system), cuenta y cerrar sesión;
+    acceso a Usuarios (admin).
+
+Toda la UI de esta fase se rige por `docs/06-ui-ux.md` (tab bar
+`Stock | Historial | ●Venta | Reportes | Ajustes`, tema ámbar con
+light/dark/system, checklist a11y en la DoD). Las tareas de `packages/ui`
+incluyen `ProveedorTema`/`useTema` y `BarraPestanas` además de los componentes
+de datos.
 
 Criterios de aceptación:
 - [ ] Vender 0,5 kg de un queso descuenta de la rueda más antigua y deja rastro
