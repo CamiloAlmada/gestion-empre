@@ -96,10 +96,25 @@ tech lead; no se ignora en silencio.
 
 ## 7. Combinaciones de contraste aprobadas
 
-*(Se completa con los ratios verificados al implementar el tema — tarea "tema
-Quesarte". Solo se agregan pares que cumplan AA; los componentes usan
-únicamente pares de esta tabla.)*
+Ratios WCAG verificados (2026-07-08, script OKLCH→sRGB). Solo se usan pares de
+esta tabla; un par nuevo se verifica y se agrega acá antes de usarse.
 
 | Uso | Par (light) | Ratio | Par (dark) | Ratio |
 |---|---|---|---|---|
-| *pendiente* | | | | |
+| Texto principal / fondo | `texto`/`fondo` | 17.53:1 | `texto`/`fondo` | 19.72:1 |
+| Texto principal / superficie | `texto`/`superficie` | 18.59:1 | ídem | 18.59:1 |
+| Texto secundario / superficie | | 7.77:1 | | 6.00:1 |
+| Texto secundario / fondo | | 7.33:1 | | 6.36:1 |
+| Botón primario (blanco/primary-600) | | 4.73:1 | ídem (no redefine) | 4.73:1 |
+| Botón primario hover (blanco/primary-700) | | 6.92:1 | ídem | 6.92:1 |
+| Texto de error (`peligro`/superficie) | | 5.15:1 | | 6.18:1 |
+| Botón peligro (label) | blanco/`peligro` | 5.38:1 | `fondo`/`peligro` (`dark:text-fondo`) | 6.55:1 |
+| Borde de input / superficie (UI ≥3:1) | | 3.10:1 | | 3.67:1 |
+| Ring de foco primary-600 / superficie (UI ≥3:1) | | 4.53:1 | | 4.11:1 |
+| Ring de foco primary-600 / fondo (UI ≥3:1) | | 4.27:1 | | 4.36:1 |
+| `exito` / superficie | | 5.89:1 | | 7.78:1 |
+| `advertencia` / superficie | | 5.97:1 | | 6.92:1 |
+
+Nota de diseño: `peligro` está optimizado como color de TEXTO. En botones con
+fondo `peligro`, el label usa `text-white dark:text-fondo` (no hay un valor
+único de `peligro` que cumpla AA en ambos roles en dark).
