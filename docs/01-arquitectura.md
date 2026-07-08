@@ -10,7 +10,7 @@
 ├── turbo.json
 ├── docs/
 ├── apps/
-│   ├── queseria/               # React PWA — proyecto Firebase propio
+│   ├── quesarte/               # React PWA — proyecto Firebase propio
 │   │   ├── src/
 │   │   ├── firebase.json
 │   │   ├── .firebaserc
@@ -83,9 +83,9 @@
 
 ## CI/CD (GitHub Actions)
 
-- Workflow `queseria.yml` con trigger por push a `main` con paths:
-  `apps/queseria/**`, `packages/**`, `pnpm-lock.yaml`.
-- Pasos: install (pnpm con cache) → `turbo lint test build --filter=queseria...`
+- Workflow `quesarte.yml` con trigger por push a `main` con paths:
+  `apps/quesarte/**`, `packages/**`, `pnpm-lock.yaml`.
+- Pasos: install (pnpm con cache) → `turbo lint test build --filter=quesarte...`
   → deploy a Firebase Hosting con `FirebaseExtended/action-hosting-deploy` o
   `firebase-tools` + token/OIDC.
 - PRs generan preview channels de Firebase Hosting.
@@ -101,4 +101,4 @@
   en el ID.
 - Timestamps siempre `Timestamp` de Firestore en persistencia, `Date` en dominio.
 - Commits convencionales (`feat:`, `fix:`, `chore:`) con scope de app o package:
-  `feat(queseria): POS de venta rápida`.
+  `feat(quesarte): POS de venta rápida`.

@@ -14,14 +14,14 @@ Tareas:
 2. Crear `packages/core` con los tipos de valor `Money` y `Peso` + tests.
 3. Crear `packages/firebase-kit` con init de app y `useAuth`.
 4. Crear `packages/ui` con 2-3 componentes base (Button, Input, Layout).
-5. Crear `apps/queseria`: Vite + React + TS + Tailwind + vite-plugin-pwa,
+5. Crear `apps/quesarte`: Vite + React + TS + Tailwind + vite-plugin-pwa,
    login con Firebase Auth (email + Google), ruta protegida vacía.
 6. `firestore.rules` con deny-all + acceso solo a usuarios activos.
 7. GitHub Actions: lint + test + build + deploy a Hosting con path filters,
    preview channels en PRs.
 
 Criterios de aceptación:
-- [x] `pnpm turbo build --filter=queseria` funciona en limpio.
+- [x] `pnpm turbo build --filter=quesarte` funciona en limpio.
 - [ ] La app deployada en Firebase Hosting es instalable como PWA. *(implementado;
       verificación pendiente del primer deploy — requiere secrets/vars en GitHub)*
 - [ ] Login funciona; usuario no autenticado no ve nada. *(implementado y testeado

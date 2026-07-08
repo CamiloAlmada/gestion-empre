@@ -13,7 +13,7 @@ infraestructura.
 ## Documentación de referencia (leer antes de implementar)
 
 - `docs/01-arquitectura.md` — estructura del monorepo, stack, CI/CD, Firebase
-- `docs/02-dominio-queseria.md` — modelo de dominio y colecciones Firestore de la quesería
+- `docs/02-dominio-quesarte.md` — modelo de dominio y colecciones Firestore de la quesería
 - `docs/03-compras-costos-precios.md` — módulo de compras, prorrateo de gastos, márgenes
 - `docs/04-plan-fases.md` — plan de implementación por fases con criterios de aceptación
 - `docs/05-cerrajeria.md` — especificación preliminar de la segunda app (NO implementar aún)
@@ -32,8 +32,8 @@ infraestructura.
 ```bash
 pnpm install                          # instalar todo
 pnpm turbo build                      # buildear todo
-pnpm turbo build --filter=queseria    # buildear solo la quesería
-pnpm turbo dev --filter=queseria      # dev server de la quesería
+pnpm turbo build --filter=quesarte    # buildear solo la quesería
+pnpm turbo dev --filter=quesarte      # dev server de la quesería
 pnpm turbo test                       # correr todos los tests
 pnpm turbo lint                       # lint de todo
 ```
