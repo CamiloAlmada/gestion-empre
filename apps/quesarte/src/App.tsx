@@ -6,6 +6,7 @@ import { Productos } from './pantallas/Productos';
 import { Historial } from './pantallas/Historial';
 import { Reportes } from './pantallas/Reportes';
 import { Ajustes } from './pantallas/Ajustes';
+import { Usuarios } from './pantallas/Usuarios';
 import { RutaProtegida } from './rutas/RutaProtegida';
 import { RutaSoloAdmin } from './rutas/RutaSoloAdmin';
 import { Shell } from './Shell';
@@ -37,6 +38,14 @@ export function App() {
             }
           />
           <Route path="ajustes" element={<Ajustes />} />
+          <Route
+            path="ajustes/usuarios"
+            element={
+              <RutaSoloAdmin>
+                <Usuarios />
+              </RutaSoloAdmin>
+            }
+          />
         </Route>
       </Routes>
       <AvisoPwa />
