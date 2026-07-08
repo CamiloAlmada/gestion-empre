@@ -108,4 +108,83 @@ describe('SearchSelect', () => {
 
     expect(screen.getByText('Sin resultados.')).toBeInTheDocument();
   });
+
+  // --- Mejoras pedidas por el review ---
+
+  it('Escape con la lista abierta no burbujea al padre (para no cerrar también un Modal ancestro)', () => {
+    const onKeyDownPadre = vi.fn();
+    render(
+      <div onKeyDown={onKeyDownPadre}>
+        <SearchSelect label="Producto" opciones={opciones} value={null} onChange={vi.fn()} />
+      </div>,
+    );
+
+    const input = inputBuscador();
+    fireEvent.focus(input); // abre la lista
+    expect(screen.getByRole('listbox')).toBeInTheDocument();
+
+    fireEvent.keyDown(input, { key: 'Escape' });
+
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    expect(onKeyDownPadre).not.toHaveBeenCalled();
+  });
+
+  it('Escape con la lista YA cerrada sí burbujea (deja que un ancestro, ej. un Modal, la maneje)', () => {
+    const onKeyDownPadre = vi.fn();
+    render(
+      <div onKeyDown={onKeyDownPadre}>
+        <SearchSelect label="Producto" opciones={opciones} value={null} onChange={vi.fn()} />
+      </div>,
+    );
+
+    const input = inputBuscador();
+    // Sin foco: la lista nunca se abrió.
+    fireEvent.keyDown(input, { key: 'Escape' });
+
+    expect(onKeyDownPadre).toHaveBeenCalledTimes(1);
+  });
+
+  it('al navegar con flechas, la opción activa hace scrollIntoView({ block: "nearest" })', () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+
+    render(<SearchSelect label="Producto" opciones={opciones} value={null} onChange={vi.fn()} />);
+
+    const input = inputBuscador();
+    fireEvent.focus(input);
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' });
+  });
+
+  it('tipear un filtro, bajar con flecha y confirmar con Enter elige del set FILTRADO', () => {
+    const onChange = vi.fn();
+    render(<SearchSelect label="Producto" opciones={opciones} value={null} onChange={onChange} />);
+
+    const input = inputBuscador();
+    fireEvent.focus(input);
+    // Filtra a ["Arena", "Banana"] (ambas contienen "an"); Árbol queda afuera.
+    fireEvent.change(input, { target: { value: 'an' } });
+    expect(screen.queryByRole('option', { name: 'Árbol' })).not.toBeInTheDocument();
+
+    // El índice activo arranca en 0 (Arena); una flecha abajo lo mueve a 1 (Banana).
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(onChange).toHaveBeenLastCalledWith('3'); // Banana, no Árbol (id '1')
+    expect(input.value).toBe('Banana');
+  });
+
+  it('Enter sin ninguna opción activa es un no-op (no dispara onChange)', () => {
+    const onChange = vi.fn();
+    render(<SearchSelect label="Producto" opciones={opciones} value={null} onChange={onChange} />);
+
+    const input = inputBuscador();
+    fireEvent.focus(input); // abre la lista pero no mueve el índice activo (-1)
+
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(onChange).not.toHaveBeenCalled();
+    expect(input.value).toBe('');
+  });
 });

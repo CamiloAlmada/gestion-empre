@@ -104,4 +104,95 @@ describe('MoneyInput', () => {
     rerender(<MoneyInput label="Monto" value={money(500)} onChange={vi.fn()} />);
     expect((inputMonto() as HTMLInputElement).value).toBe('5,00');
   });
+
+  // --- Fix del bloqueante de code review: round-trip de miles ---
+
+  it('round-trip: value=money(123450) (>= $1.000) sobrevive focus/blur sin volverse inválido ni disparar onChange(null)', () => {
+    const onChange = vi.fn();
+    render(<MoneyInput label="Monto" value={money(123450)} onChange={onChange} />);
+
+    const input = inputMonto() as HTMLInputElement;
+    expect(input.value).toBe('1.234,50'); // display inicial ya trae miles
+
+    fireEvent.focus(input);
+    fireEvent.blur(input);
+
+    expect(input.value).toBe('1.234,50');
+    expect(input.getAttribute('aria-invalid')).toBeNull();
+    expect(onChange).not.toHaveBeenCalledWith(null);
+  });
+
+  it('editar el display con miles ("1.234,50" -> "11.234,50") no pierde el monto', () => {
+    const onChange = vi.fn();
+    render(<MoneyInput label="Monto" value={money(123450)} onChange={onChange} />);
+
+    const input = inputMonto() as HTMLInputElement;
+    expect(input.value).toBe('1.234,50');
+
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: '11.234,50' } });
+
+    expect(onChange).toHaveBeenLastCalledWith(money(1123450));
+    expect(input.getAttribute('aria-invalid')).toBeNull();
+  });
+
+  it('"1.234.567,89" (miles de varios grupos) es válido', () => {
+    const onChange = vi.fn();
+    render(<MoneyInput label="Monto" value={null} onChange={onChange} />);
+
+    fireEvent.change(inputMonto(), { target: { value: '1.234.567,89' } });
+
+    expect(onChange).toHaveBeenLastCalledWith(money(123456789));
+  });
+
+  it('" 1234,50 " con espacios (pegado) es válido', () => {
+    const onChange = vi.fn();
+    render(<MoneyInput label="Monto" value={null} onChange={onChange} />);
+
+    fireEvent.change(inputMonto(), { target: { value: ' 1234,50 ' } });
+
+    expect(onChange).toHaveBeenLastCalledWith(money(123450));
+  });
+
+  it('"1,2,3" (dos comas) es inválido', () => {
+    const onChange = vi.fn();
+    render(<MoneyInput label="Monto" value={null} onChange={onChange} />);
+
+    const input = inputMonto();
+    fireEvent.change(input, { target: { value: '1,2,3' } });
+
+    expect(onChange).toHaveBeenLastCalledWith(null);
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+  });
+
+  it('"-0,00" resuelve a money(0) (cero positivo, sin -0)', () => {
+    const onChange = vi.fn();
+    render(<MoneyInput label="Monto" value={null} onChange={onChange} />);
+
+    fireEvent.change(inputMonto(), { target: { value: '-0,00' } });
+
+    expect(onChange).toHaveBeenLastCalledWith(money(0));
+    const valorRecibido = onChange.mock.calls[onChange.mock.calls.length - 1]![0] as number;
+    expect(Object.is(valorRecibido, -0)).toBe(false);
+  });
+
+  it('"1.234.567" (miles sin decimales, sin coma) es válido y entero', () => {
+    const onChange = vi.fn();
+    render(<MoneyInput label="Monto" value={null} onChange={onChange} />);
+
+    fireEvent.change(inputMonto(), { target: { value: '1.234.567' } });
+
+    expect(onChange).toHaveBeenLastCalledWith(money(123456700));
+  });
+
+  it('"1.2345" (un punto ambiguo, ni miles ni decimal de 1-2 dígitos) es inválido', () => {
+    const onChange = vi.fn();
+    render(<MoneyInput label="Monto" value={null} onChange={onChange} />);
+
+    const input = inputMonto();
+    fireEvent.change(input, { target: { value: '1.2345' } });
+
+    expect(onChange).toHaveBeenLastCalledWith(null);
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+  });
 });

@@ -66,6 +66,7 @@ export function SearchSelect({
   const [texto, setTexto] = useState(opcionSeleccionada?.etiqueta ?? '');
   const [abierto, setAbierto] = useState(false);
   const [indiceActivo, setIndiceActivo] = useState(-1);
+  const opcionesRef = useRef(new Map<string, HTMLLIElement>());
 
   useEffect(() => {
     if (enfocadoRef.current) return;
@@ -87,6 +88,18 @@ export function SearchSelect({
     document.addEventListener('mousedown', alClickAfuera);
     return () => document.removeEventListener('mousedown', alClickAfuera);
   }, []);
+
+  // Mantiene visible la opción activa cuando se navega con flechas en listas
+  // largas (max-h-64 + overflow-y-auto): sin esto, bajar con ArrowDown puede
+  // dejar la opción resaltada fuera del área visible.
+  useEffect(() => {
+    if (!abierto || indiceActivo < 0) return;
+    const opcionActiva = opcionesFiltradas[indiceActivo];
+    if (!opcionActiva) return;
+    // Optional chaining también sobre la llamada: jsdom (entorno de test) no
+    // implementa `scrollIntoView` en todas sus versiones; no debe romper.
+    opcionesRef.current.get(opcionActiva.id)?.scrollIntoView?.({ block: 'nearest' });
+  }, [abierto, indiceActivo, opcionesFiltradas]);
 
   function seleccionar(opcion: OpcionSearchSelect) {
     onChange(opcion.id);
@@ -136,6 +149,19 @@ export function SearchSelect({
         seleccionar(opcionesFiltradas[indiceActivo]!);
       }
     } else if (e.key === 'Escape') {
+      if (abierto) {
+        // Escape con la lista abierta la cierra a ELLA, nada más: no debe
+        // burbujear ni disparar el cierre de un contenedor ancestro (ej. un
+        // <Modal> basado en <dialog>, que escucha Escape para cerrarse).
+        // stopPropagation frena listeners JS en ancestros (React o DOM);
+        // preventDefault frena además el "cancel" nativo del <dialog>, que
+        // el user agent asocia al keydown de Escape vía CloseWatcher (si el
+        // keydown que lo originó llega con defaultPrevented, no cancela).
+        // Si la lista YA está cerrada, Escape no hace nada acá y sigue su
+        // curso normal (ej. para que el Modal sí pueda cerrarse).
+        e.stopPropagation();
+        e.preventDefault();
+      }
       setAbierto(false);
       setIndiceActivo(-1);
       setTexto(opcionSeleccionada?.etiqueta ?? '');
@@ -183,6 +209,10 @@ export function SearchSelect({
             opcionesFiltradas.map((opcion, i) => (
               <li
                 key={opcion.id}
+                ref={(el) => {
+                  if (el) opcionesRef.current.set(opcion.id, el);
+                  else opcionesRef.current.delete(opcion.id);
+                }}
                 id={idOpcion(id, opcion.id)}
                 role="option"
                 aria-selected={opcion.id === value}
