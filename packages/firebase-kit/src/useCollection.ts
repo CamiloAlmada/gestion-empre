@@ -49,6 +49,10 @@ export function useCollection<T>(query: Query<T> | null): EstadoCollection<T> {
         });
       },
       (error) => {
+        // Siempre a consola: los errores de Firestore traen información
+        // accionable (p. ej. el link de creación de un índice faltante en
+        // failed-precondition) que la UI genérica de error no muestra.
+        console.error('[useCollection] Error de Firestore:', error);
         setEstado({ datos: [], cargando: false, error });
       },
     );

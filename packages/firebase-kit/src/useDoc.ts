@@ -49,6 +49,9 @@ export function useDoc<T>(ref: DocumentReference<T> | null): EstadoDoc<T> {
         });
       },
       (error) => {
+        // Siempre a consola: los errores de Firestore traen información
+        // accionable que la UI genérica de error no muestra.
+        console.error('[useDoc] Error de Firestore:', error);
         setEstado({ datos: null, cargando: false, error });
       },
     );
