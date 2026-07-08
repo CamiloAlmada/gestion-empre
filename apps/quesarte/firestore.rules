@@ -1,17 +1,23 @@
 rules_version = '2';
 
-// Reglas de Firestore — app quesería.
+// Reglas de Firestore — app quesería (Fase 1).
 //
-// Fase 0: postura deny-all. Lo único que se permite es que un usuario
-// autenticado lea SU propio documento en `usuarios/{uid}`. Todo lo demás
-// queda denegado (tanto por el catch-all explícito como por el deny por
-// defecto de Firestore).
+// Postura base: deny por defecto. Toda operación de dominio exige un usuario
+// autenticado CON documento en `usuarios/{uid}` y `activo == true`. Sobre esa
+// base se autoriza por colección y por rol ('admin' | 'vendedor') según
+// docs/02-dominio-quesarte.md ("Colecciones" y "Reglas de seguridad") y la nota
+// "Auth y alta de usuarios (v2)" de docs/04-plan-fases.md.
 //
-// Las funciones helper `usuarioActivo()` y `esAdmin()` se definen ya, pero
-// en Fase 0 NO se invocan desde ninguna regla activa: son la base sobre la
-// que la Fase 1 construye las reglas por colección (productos, piezas,
-// ventas, compras, movimientos, configuracion). Mantenerlas acá evita
-// reescribir la lógica de autorización cuando lleguen esas colecciones.
+// Modelo de roles:
+// - admin: puede todo.
+// - vendedor: lee catálogo/stock y crea ventas/movimientos; NO edita precios,
+//   compras, usuarios ni configuración. Los únicos writes de dominio que puede
+//   hacer son los EFECTOS de una venta (bajar stock de productos/piezas), y solo
+//   sobre los campos exactos que eso toca.
+//
+// Nota de costo: los get() al doc `usuarios/{uid}` se referencian siempre por la
+// misma ruta, de modo que Firestore reutiliza (cachea) la lectura dentro de una
+// misma evaluación de reglas. Mantener esa estructura evita multiplicar lecturas.
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -25,7 +31,7 @@ service cloud.firestore {
 
     // El usuario autenticado tiene documento en `usuarios/{uid}` y está activo.
     // Cuesta lecturas (exists + get): usar SOLO en reglas de colecciones que
-    // NO sean la propia lectura de `usuarios/{uid}` (ver nota abajo).
+    // NO sean la propia lectura de `usuarios/{uid}`.
     function usuarioActivo() {
       return estaAutenticado()
         && exists(/databases/$(database)/documents/usuarios/$(request.auth.uid))
@@ -38,20 +44,126 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.rol == 'admin';
     }
 
-    // --- Colecciones ---
-
-    // Un usuario solo puede leer su propio documento. La lectura se autoriza
-    // únicamente con la comparación de uid: NO se llama a `usuarioActivo()`
-    // porque implicaría un get() del mismo documento que se está leyendo
-    // (lectura innecesaria y potencial auto-referencia). La creación y
-    // administración de usuarios se hace desde la consola por ahora: sin write.
-    match /usuarios/{uid} {
-      allow read: if estaAutenticado() && request.auth.uid == uid;
+    // El usuario autenticado y activo tiene rol 'vendedor'.
+    function esVendedor() {
+      return usuarioActivo()
+        && get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.rol == 'vendedor';
     }
 
-    // Catch-all: deniega explícitamente cualquier otra ruta. Refuerza el deny
-    // por defecto de Firestore. A medida que avancen las fases, cada colección
-    // agrega su propio `match` con reglas basadas en los helpers de arriba.
+    // El write cambia únicamente los campos listados (defensa contra edición de
+    // campos no permitidos, ej. precios, en updates de vendedor).
+    function soloCambian(campos) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(campos);
+    }
+
+    // Shape estricto para invitar un usuario (create de admin): exactamente
+    // { nombre, email, rol in ['admin','vendedor'], activo: bool }.
+    function usuarioInvitacionValida() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['nombre', 'email', 'rol', 'activo'])
+        && d.keys().hasAll(['nombre', 'email', 'rol', 'activo'])
+        && d.nombre is string && d.nombre.size() > 0
+        && d.email is string && d.email.size() > 0
+        && d.rol in ['admin', 'vendedor']
+        && d.activo is bool;
+    }
+
+    // Update de usuario (admin): solo activo/rol/nombre; email inmutable
+    // (queda fuera de affectedKeys) y sin agregar campos nuevos.
+    function usuarioUpdateValido() {
+      let d = request.resource.data;
+      return d.diff(resource.data).affectedKeys().hasOnly(['activo', 'rol', 'nombre'])
+        && d.rol in ['admin', 'vendedor']
+        && d.activo is bool
+        && d.nombre is string && d.nombre.size() > 0;
+    }
+
+    // --- Colecciones ---
+
+    match /usuarios/{uid} {
+      // Cada usuario lee su propio doc: la comparación de uid ES la verificación
+      // de identidad, por eso NO se exige usuarioActivo() (evita un get() del
+      // mismo doc que se está leyendo y permite el guard post-login por `activo`).
+      allow read: if estaAutenticado() && request.auth.uid == uid;
+      // Admin lee cualquier doc de usuarios (pantalla "Usuarios").
+      allow read: if esAdmin();
+      // Admin crea la invitación con shape válido; un no-admin no escribe nada.
+      allow create: if esAdmin() && usuarioInvitacionValida();
+      // Admin actualiza solo activo/rol/nombre (email inmutable).
+      allow update: if esAdmin() && usuarioUpdateValido();
+      // Nadie borra: los usuarios se desactivan (preservan auditoría).
+      allow delete: if false;
+    }
+
+    match /productos/{id} {
+      // Catálogo visible para todo usuario activo.
+      allow read: if usuarioActivo();
+      // Alta/baja de productos solo admin.
+      allow create, delete: if esAdmin();
+      // Admin edita cualquier campo del producto.
+      allow update: if esAdmin();
+      // Vendedor solo ajusta stock agregado como efecto de una venta.
+      allow update: if esVendedor()
+        && soloCambian(['stockGranelGramos', 'stockUnidades', 'actualizadoEn']);
+    }
+
+    match /piezas/{id} {
+      // Stock por pieza visible para todo usuario activo.
+      allow read: if usuarioActivo();
+      // Crear/borrar piezas (ingreso de stock, merma total) solo admin.
+      allow create, delete: if esAdmin();
+      // Admin edita cualquier campo de la pieza.
+      allow update: if esAdmin();
+      // Vendedor solo descuenta peso / marca estado por venta; nunca AUMENTA
+      // el peso restante (una venta solo puede reducirlo).
+      allow update: if esVendedor()
+        && soloCambian(['pesoRestanteGramos', 'estado'])
+        && request.resource.data.pesoRestanteGramos <= resource.data.pesoRestanteGramos;
+    }
+
+    match /ventas/{id} {
+      // Historial visible para todo usuario activo.
+      allow read: if usuarioActivo();
+      // Cualquier usuario activo (vendedor o admin) registra su propia venta
+      // completada con total e items presentes.
+      allow create: if usuarioActivo()
+        && request.resource.data.usuarioId == request.auth.uid
+        && request.resource.data.estado == 'completada'
+        && request.resource.data.totalCents is int
+        && request.resource.data.items is list;
+      // Única mutación permitida: anulación por admin (completada -> anulada),
+      // sin tocar ningún otro campo (la reversa de stock va por movimientos).
+      allow update: if esAdmin()
+        && resource.data.estado == 'completada'
+        && request.resource.data.estado == 'anulada'
+        && soloCambian(['estado']);
+      // Las ventas no se borran (auditoría).
+      allow delete: if false;
+    }
+
+    match /movimientos/{id} {
+      // Auditoría de stock visible para todo usuario activo.
+      allow read: if usuarioActivo();
+      // Cualquier usuario activo crea movimientos a su nombre.
+      allow create: if usuarioActivo()
+        && request.resource.data.usuarioId == request.auth.uid;
+      // Inmutables: nunca se actualizan ni se borran.
+      allow update, delete: if false;
+    }
+
+    match /compras/{id} {
+      // Compras (Fase 2): solo admin, colección cerrada al resto ya desde ahora.
+      allow read, write: if esAdmin();
+    }
+
+    match /configuracion/{id} {
+      // Configuración legible por usuario activo; solo admin la modifica.
+      allow read: if usuarioActivo();
+      allow write: if esAdmin();
+    }
+
+    // Catch-all: deniega explícitamente cualquier otra ruta (refuerza el deny
+    // por defecto; no anula los allow específicos de arriba, que se OR-ean).
     match /{document=**} {
       allow read, write: if false;
     }
