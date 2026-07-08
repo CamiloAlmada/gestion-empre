@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router';
 import { ProveedorAuth } from '@gestion/firebase-kit';
+import { ProveedorTema, ProveedorToasts } from '@gestion/ui';
 import { App } from './App';
 import { auth, db } from './firebase';
 import './index.css';
@@ -13,10 +14,14 @@ if (contenedor === null) {
 
 createRoot(contenedor).render(
   <StrictMode>
-    <BrowserRouter>
-      <ProveedorAuth auth={auth} db={db}>
-        <App />
-      </ProveedorAuth>
-    </BrowserRouter>
+    <ProveedorTema>
+      <BrowserRouter>
+        <ProveedorAuth auth={auth} db={db}>
+          <ProveedorToasts>
+            <App />
+          </ProveedorToasts>
+        </ProveedorAuth>
+      </BrowserRouter>
+    </ProveedorTema>
   </StrictMode>,
 );

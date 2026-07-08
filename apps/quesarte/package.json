@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "lint": "eslint .",
-    "test": "vitest run",
+    "test": "NODE_OPTIONS=--no-experimental-webstorage vitest run",
     "test:rules": "firebase emulators:exec --only firestore --project demo-quesarte \"vitest run --config vitest.rules.config.ts\"",
     "preview": "vite preview"
   },
