@@ -123,6 +123,7 @@ export function TecladoPeso({
         role="textbox"
         aria-readonly="true"
         aria-labelledby={id}
+        aria-live="polite"
         className="rounded-xl border border-borde bg-superficie px-4 py-3 text-right text-3xl font-bold tabular-nums text-texto"
       >
         {textoMostrado}

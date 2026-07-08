@@ -117,4 +117,18 @@ describe('GrillaProductos', () => {
 
     expect(screen.queryByText('Sin stock')).toBeNull();
   });
+
+  it('la card de un producto sin stock queda deshabilitada y no llama a onSeleccionar al tocarla', () => {
+    const onSeleccionar = vi.fn();
+    render(
+      <GrillaProductos productos={[quesoColonia]} piezasAgrupadas={new Map()} onSeleccionar={onSeleccionar} />,
+    );
+
+    const card = screen.getByRole('button', { name: /Queso Colonia/ }) as HTMLButtonElement;
+    expect(card.disabled).toBe(true);
+
+    fireEvent.click(card);
+
+    expect(onSeleccionar).not.toHaveBeenCalled();
+  });
 });

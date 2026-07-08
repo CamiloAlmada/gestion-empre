@@ -19,6 +19,12 @@ describe('TecladoPeso', () => {
     expect(screen.getByRole('textbox').textContent).toBe('1,25kg');
   });
 
+  it('el readout anuncia cambios a lectores de pantalla (aria-live="polite")', () => {
+    render(<TecladoPeso label="Peso" abierto onChange={vi.fn()} />);
+
+    expect(screen.getByRole('textbox').getAttribute('aria-live')).toBe('polite');
+  });
+
   it('en modo g deshabilita la coma y arma gramos enteros', () => {
     const onChange = vi.fn();
     render(<TecladoPeso label="Peso" abierto onChange={onChange} unidadInicial="g" />);
