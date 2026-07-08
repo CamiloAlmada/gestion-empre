@@ -6,6 +6,25 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#976b19" />
     <title>Quesarte</title>
+    <script>
+      // Anti-FOUC (docs/06-ui-ux.md §4): aplica el tema guardado ANTES de que
+      // cargue el bundle, para no parpadear con el tema del SO cuando el
+      // usuario eligió explícitamente "light" u "oscuro". Duplica la lectura
+      // que hace ProveedorTema al montar (packages/ui/src/ProveedorTema.tsx),
+      // a propósito: ese componente no puede correr a tiempo para evitar el
+      // primer paint. En modo "system" (o sin nada guardado) no se fija nada
+      // acá: rige `prefers-color-scheme` vía CSS, sin necesidad de JS.
+      try {
+        var temaGuardado = window.localStorage.getItem('tema');
+        if (temaGuardado === 'light' || temaGuardado === 'dark') {
+          document.documentElement.setAttribute('data-theme', temaGuardado);
+        }
+      } catch (error) {
+        // localStorage no disponible (modo privado, contexto restringido):
+        // se pierde el anti-FOUC en este caso, pero ProveedorTema sigue
+        // aplicando el tema por defecto ("system") una vez que React monte.
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
