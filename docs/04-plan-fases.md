@@ -22,19 +22,17 @@ Tareas:
 
 Criterios de aceptación:
 - [x] `pnpm turbo build --filter=quesarte` funciona en limpio.
-- [ ] La app deployada en Firebase Hosting es instalable como PWA. *(implementado;
-      verificación pendiente del primer deploy — requiere secrets/vars en GitHub)*
+- [x] La app deployada en Firebase Hosting es instalable como PWA. *(verificado
+      2026-07-08: prompt de instalación y aviso "lista para usar offline")*
 - [x] Login funciona; usuario no autenticado no ve nada. *(verificado en producción
       con Google el 2026-07-08)*
-- [ ] Un push que no toca la app no dispara su deploy. *(garantizado por path
-      filters; verificación pendiente de los primeros pushes)*
+- [x] Un push que no toca la app no dispara su deploy. *(verificado 2026-07-08:
+      push solo-docs no disparó el workflow)*
 - [x] Tests de `Money`/`Peso` en verde (creación, suma, formato, redondeos).
 
-Estado (2026-07-08): las 7 tareas implementadas, revisadas e integradas en `main`
-(sin push aún). Los 3 criterios abiertos dependen de pasos externos: cargar en
-GitHub los 2 secrets de service account y las 12 repository variables
-`VITE_FIREBASE_*` (checklist en `.github/SETUP-CI.md`), crear `.env.development`
-/`.env.production` locales a partir de `.env.example`, y hacer el primer push.
+**FASE 0 CERRADA (2026-07-08)**: 5/5 criterios verificados en producción
+(https://quesarte-uy.web.app). El CI deploya hosting + reglas de Firestore en
+cada push a `main` que toque la app; previews de PR van contra `quesarte-uy-dev`.
 
 ## Fase 1 — MVP quesería (catálogo, stock, POS)
 
@@ -48,12 +46,19 @@ Notas arrastradas del cierre de Fase 0 (del code review):
 - **Actualización del service worker**: `registerType: 'autoUpdate'` recarga sola
   al publicar versión nueva — inaceptable en medio de una venta en el POS.
   Pasar a prompt de actualización (o diferir la recarga con venta activa).
-- **Alta de usuarios (decidido con el dueño, 2026-07-08)**: club cerrado. (1) La
-  persona autorizada entra una vez con Google, (2) el admin crea su doc
-  `usuarios/{uid}` (`rol`, `activo: true`) desde consola, (3) sign-up deshabilitado
-  en Authentication → Settings → User actions ("Enable create" desmarcado) en dev
-  y prod. `usuarios` queda sin `write` en reglas. Fase 1 agrega en la app la
-  verificación de `activo` post-login (pantalla "cuenta no autorizada" + signOut).
+- **Alta de usuarios (decidido con el dueño, 2026-07-08, refinado)**: club cerrado
+  con auto-registro inactivo. En el primer login, la app crea el propio
+  `usuarios/{uid}` con `{ nombre, email, rol: 'vendedor', activo: false }`; las
+  reglas permiten SOLO ese `create` (uid propio, shape exacto, `activo == false`
+  forzado — nadie puede auto-activarse ni auto-asignarse rol) y ningún update
+  desde el cliente. El admin activa/asigna rol desde consola (más adelante,
+  pantalla de administración). Post-login la app verifica `activo`: si es false,
+  pantalla "cuenta pendiente de aprobación" + signOut. Cuando el equipo esté
+  completo, deshabilitar sign-up en Authentication → Settings → User actions
+  (dev y prod) como candado adicional.
+- **Login con Google en iPhone instalado como PWA**: `signInWithPopup` suele
+  fallar en modo standalone de iOS (bloqueo de popups). Implementar fallback con
+  `signInWithRedirect` (detectar standalone/iOS) al construir el AuthProvider.
 - Si algún día se mueve `authDomain` al dominio de Hosting: agregar
   `navigateFallbackDenylist: [/^\/__\/auth\//]` al `generateSW` o el SW rompe el
   popup de Google.
