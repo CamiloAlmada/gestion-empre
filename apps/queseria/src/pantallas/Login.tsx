@@ -41,6 +41,8 @@ export function Login() {
   }
 
   async function manejarIngresoConEmail() {
+    if (enviando) return;
+
     if (email.trim() === '' || password === '') {
       setError(MENSAJE_ERROR_VALIDACION);
       return;
@@ -58,6 +60,8 @@ export function Login() {
   }
 
   async function manejarIngresoConGoogle() {
+    if (enviando) return;
+
     setError(undefined);
     setEnviando(true);
     try {
@@ -69,7 +73,7 @@ export function Login() {
     }
   }
 
-  function manejarTeclaEnPassword(evento: KeyboardEvent<HTMLDivElement>) {
+  function manejarTeclaEnCredenciales(evento: KeyboardEvent<HTMLDivElement>) {
     if (evento.key === 'Enter') {
       void manejarIngresoConEmail();
     }
@@ -79,7 +83,7 @@ export function Login() {
     <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
       <div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-sm">
         <h1 className="mb-6 text-center text-xl font-semibold text-gray-900">Quesarte</h1>
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-4" onKeyDown={manejarTeclaEnCredenciales}>
           <Input
             label="Correo"
             type="email"
@@ -88,15 +92,13 @@ export function Login() {
             disabled={enviando}
             placeholder="tu@correo.com"
           />
-          <div onKeyDown={manejarTeclaEnPassword}>
-            <Input
-              label="Contraseña"
-              type="password"
-              value={password}
-              onChange={setPassword}
-              disabled={enviando}
-            />
-          </div>
+          <Input
+            label="Contraseña"
+            type="password"
+            value={password}
+            onChange={setPassword}
+            disabled={enviando}
+          />
 
           {error !== undefined && (
             <p role="alert" className="text-sm text-red-600">
