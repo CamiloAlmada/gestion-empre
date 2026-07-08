@@ -9,8 +9,9 @@ const OPCIONES_TEMA: { valor: Tema; etiqueta: string }[] = [
 ];
 
 // Claves tipadas por `perfil.rol` (de @gestion/core vía @gestion/firebase-kit)
-// sin importar el tipo directamente: evita depender de @gestion/core desde
-// código de producción (acá solo está como devDependency, para tests).
+// sin importar el tipo directamente: no hace falta acá, aunque desde la
+// pantalla de Productos @gestion/core sí se usa en runtime (money/peso) y por
+// eso es dependency real del package (no solo devDependency).
 const NOMBRE_ROL = {
   admin: 'Administrador',
   vendedor: 'Vendedor',

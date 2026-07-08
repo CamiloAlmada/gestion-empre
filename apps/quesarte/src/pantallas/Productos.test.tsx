@@ -1,0 +1,436 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router';
+import { ProveedorTema, ProveedorToasts } from '@gestion/ui';
+import { money, peso, type Producto } from '@gestion/core';
+import { Productos } from './Productos';
+
+const mocks = vi.hoisted(() => ({
+  useAuth: vi.fn(),
+  useOnlineStatus: vi.fn(() => true),
+  useCollection: vi.fn(),
+  addDoc: vi.fn(),
+  updateDoc: vi.fn(),
+}));
+
+// `productoConverter` se deja pasar tal cual (identidad, no se ejercita
+// acá): lo que importa es qué objeto de dominio recibe `addDoc`/`updateDoc`.
+// `useCollection` se mockea entero: la pantalla arma la query con las
+// funciones REALES de 'firebase/firestore' (collection/query/orderBy, sin
+// I/O), pero los datos que "llegan" los controla el mock, no una suscripción
+// real. Solo `addDoc`/`updateDoc` (las únicas operaciones con I/O real) se
+// mockean, siguiendo el mismo patrón que packages/firebase-kit/src/ventas.test.ts.
+vi.mock('@gestion/firebase-kit', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@gestion/firebase-kit')>();
+  return {
+    ...actual,
+    useAuth: mocks.useAuth,
+    useOnlineStatus: mocks.useOnlineStatus,
+    useCollection: mocks.useCollection,
+  };
+});
+
+vi.mock('firebase/firestore', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('firebase/firestore')>();
+  return {
+    ...actual,
+    addDoc: mocks.addDoc,
+    updateDoc: mocks.updateDoc,
+  };
+});
+
+function authPorDefecto() {
+  return {
+    usuario: { uid: 'u1' },
+    perfil: {
+      uid: 'u1',
+      nombre: 'Ana Pérez',
+      email: 'ana@quesarte.com',
+      rol: 'admin' as 'admin' | 'vendedor',
+      activo: true,
+    },
+    cargando: false,
+    ingresarConEmail: vi.fn(),
+    restablecerPassword: vi.fn(),
+    salir: vi.fn(),
+  };
+}
+
+function configurarAuth(overrides: Partial<ReturnType<typeof authPorDefecto>> = {}) {
+  mocks.useAuth.mockReturnValue({ ...authPorDefecto(), ...overrides });
+}
+
+function configurarCollection(overrides: { datos?: Producto[]; cargando?: boolean; error?: unknown }) {
+  mocks.useCollection.mockReturnValue({
+    datos: overrides.datos ?? [],
+    cargando: overrides.cargando ?? false,
+    error: overrides.error ?? null,
+  });
+}
+
+function productoDe(over: Partial<Producto> & Pick<Producto, 'id' | 'modoStock'>): Producto {
+  return {
+    nombre: 'Producto',
+    categoria: 'Categoría',
+    modoPrecio: 'por_kg',
+    precioVentaCents: money(89900),
+    costoPromedioCents: money(50000),
+    activo: true,
+    actualizadoEn: new Date('2026-01-01'),
+    ...over,
+  };
+}
+
+const productosFalsos: Producto[] = [
+  productoDe({
+    id: 'p1',
+    nombre: 'Queso Añejo',
+    categoria: 'Quesos',
+    modoPrecio: 'por_kg',
+    modoStock: 'fraccionado_por_pieza',
+    precioVentaCents: money(89900),
+  }),
+  productoDe({
+    id: 'p2',
+    nombre: 'Miel 500g',
+    categoria: 'Miel',
+    modoPrecio: 'por_unidad',
+    modoStock: 'unidad_simple',
+    precioVentaCents: money(45000),
+    stockUnidades: 10,
+    activo: false,
+  }),
+];
+
+function renderizar() {
+  return render(
+    <MemoryRouter>
+      <ProveedorTema>
+        <ProveedorToasts>
+          <Productos />
+        </ProveedorToasts>
+      </ProveedorTema>
+    </MemoryRouter>,
+  );
+}
+
+describe('Productos', () => {
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+    // `clearAllMocks` limpia llamadas/resultados pero NO un `mockReturnValue`
+    // ya fijado: sin esto, un test que pone useOnlineStatus en `false`
+    // (offline) dejaría ese valor filtrado a los tests siguientes. Restaura
+    // el default (online) del `vi.hoisted` de arriba.
+    mocks.useOnlineStatus.mockReturnValue(true);
+  });
+
+  it('renderiza los productos del listado con modo, precio y estado', () => {
+    configurarAuth();
+    configurarCollection({ datos: productosFalsos });
+
+    renderizar();
+
+    expect(screen.getByText('Queso Añejo')).toBeTruthy();
+    expect(screen.getByText('Quesos')).toBeTruthy();
+    expect(screen.getByText('Por kg · Fraccionado por pieza')).toBeTruthy();
+    expect(screen.getByText('$ 899,00 /kg')).toBeTruthy();
+    expect(screen.getByText('Activo')).toBeTruthy();
+
+    expect(screen.getByText('Miel 500g')).toBeTruthy();
+    expect(screen.getByText('Por unidad · Unidad simple')).toBeTruthy();
+    expect(screen.getByText('$ 450,00 /u')).toBeTruthy();
+    expect(screen.getByText('Inactivo')).toBeTruthy();
+  });
+
+  it('la búsqueda filtra por nombre o categoría ignorando acentos', () => {
+    configurarAuth();
+    configurarCollection({ datos: productosFalsos });
+
+    renderizar();
+
+    fireEvent.change(screen.getByLabelText('Buscar'), { target: { value: 'anejo' } });
+
+    expect(screen.getByText('Queso Añejo')).toBeTruthy();
+    expect(screen.queryByText('Miel 500g')).toBeNull();
+  });
+
+  it('la búsqueda por categoría también filtra', () => {
+    configurarAuth();
+    configurarCollection({ datos: productosFalsos });
+
+    renderizar();
+
+    fireEvent.change(screen.getByLabelText('Buscar'), { target: { value: 'miel' } });
+
+    expect(screen.getByText('Miel 500g')).toBeTruthy();
+    expect(screen.queryByText('Queso Añejo')).toBeNull();
+  });
+
+  it('estado cargando', () => {
+    configurarAuth();
+    configurarCollection({ cargando: true });
+
+    renderizar();
+
+    expect(screen.getByText('Cargando productos…')).toBeTruthy();
+  });
+
+  it('estado error muestra mensaje y botón de reintento', () => {
+    configurarAuth();
+    configurarCollection({ error: new Error('boom') });
+
+    renderizar();
+
+    expect(screen.getByRole('alert').textContent).toContain('No se pudieron cargar los productos.');
+    expect(screen.getByRole('button', { name: 'Reintentar' })).toBeTruthy();
+  });
+
+  it('estado vacío ofrece alta a un admin', () => {
+    configurarAuth();
+    configurarCollection({ datos: [] });
+
+    renderizar();
+
+    expect(screen.getByText('No hay productos todavía.')).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: 'Agregar producto' }).length).toBeGreaterThan(0);
+  });
+
+  it('banner de offline cuando useOnlineStatus() es false', () => {
+    configurarAuth();
+    mocks.useOnlineStatus.mockReturnValue(false);
+    configurarCollection({ datos: productosFalsos });
+
+    renderizar();
+
+    expect(screen.getByRole('status').textContent).toContain('sin conexión');
+  });
+
+  it('vendedor no ve botones de alta ni edición', () => {
+    configurarAuth({ perfil: { ...authPorDefecto().perfil, rol: 'vendedor' } });
+    configurarCollection({ datos: productosFalsos });
+
+    renderizar();
+
+    expect(screen.queryByRole('button', { name: 'Agregar producto' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Editar' })).toBeNull();
+    // el catálogo sigue siendo visible
+    expect(screen.getByText('Queso Añejo')).toBeTruthy();
+  });
+
+  it('alta: valida requeridos y no llama a addDoc', () => {
+    configurarAuth();
+    configurarCollection({ datos: [] });
+
+    renderizar();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Agregar producto' })[0]!);
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+    expect(screen.getByText('Ingresá el nombre del producto.')).toBeTruthy();
+    expect(screen.getByText('Ingresá la categoría.')).toBeTruthy();
+    expect(screen.getByText('Ingresá el precio de venta.')).toBeTruthy();
+    expect(mocks.addDoc).not.toHaveBeenCalled();
+  });
+
+  it('alta de un producto granel crea con stockGranelGramos: 0 y sin stockUnidades', async () => {
+    configurarAuth();
+    configurarCollection({ datos: [] });
+    mocks.addDoc.mockResolvedValue({ id: 'nuevo' });
+
+    renderizar();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Agregar producto' })[0]!);
+    fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Nuez mariposa' } });
+    fireEvent.change(screen.getByLabelText('Categoría'), { target: { value: 'Frutos secos' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Granel' }));
+    fireEvent.change(screen.getByLabelText('Precio por kg'), { target: { value: '450,00' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+    await waitFor(() => expect(mocks.addDoc).toHaveBeenCalledTimes(1));
+    const [, documento] = mocks.addDoc.mock.calls[0] as [unknown, Producto];
+    expect(documento.nombre).toBe('Nuez mariposa');
+    expect(documento.modoStock).toBe('granel');
+    expect(documento.stockGranelGramos).toBe(peso(0));
+    expect(documento.stockUnidades).toBeUndefined();
+    expect(documento.costoPromedioCents).toBe(money(0));
+    expect(documento.activo).toBe(true);
+  });
+
+  it('alta de un producto unidad_simple crea con stockUnidades: 0 y sin stockGranelGramos', async () => {
+    configurarAuth();
+    configurarCollection({ datos: [] });
+    mocks.addDoc.mockResolvedValue({ id: 'nuevo' });
+
+    renderizar();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Agregar producto' })[0]!);
+    fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Miel 1kg' } });
+    fireEvent.change(screen.getByLabelText('Categoría'), { target: { value: 'Miel' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Por unidad' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Unidad simple' }));
+    fireEvent.change(screen.getByLabelText('Precio por unidad'), { target: { value: '600,00' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+    await waitFor(() => expect(mocks.addDoc).toHaveBeenCalledTimes(1));
+    const [, documento] = mocks.addDoc.mock.calls[0] as [unknown, Producto];
+    expect(documento.modoStock).toBe('unidad_simple');
+    expect(documento.stockUnidades).toBe(0);
+    expect(documento.stockGranelGramos).toBeUndefined();
+  });
+
+  it('alta de un producto pieza_entera no incluye stockGranelGramos ni stockUnidades', async () => {
+    configurarAuth();
+    configurarCollection({ datos: [] });
+    mocks.addDoc.mockResolvedValue({ id: 'nuevo' });
+
+    renderizar();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Agregar producto' })[0]!);
+    fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Salame tandilero' } });
+    fireEvent.change(screen.getByLabelText('Categoría'), { target: { value: 'Embutidos' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Pieza entera' }));
+    fireEvent.change(screen.getByLabelText('Precio por kg'), { target: { value: '1200,00' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+    await waitFor(() => expect(mocks.addDoc).toHaveBeenCalledTimes(1));
+    const [, documento] = mocks.addDoc.mock.calls[0] as [unknown, Producto];
+    expect(documento.modoStock).toBe('pieza_entera');
+    expect(documento.stockGranelGramos).toBeUndefined();
+    expect(documento.stockUnidades).toBeUndefined();
+  });
+
+  it('edición: modoPrecio/modoStock se muestran fijos (no hay grupo de opciones) con nota', () => {
+    configurarAuth();
+    configurarCollection({ datos: productosFalsos });
+
+    renderizar();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Editar' })[0]!);
+
+    expect(screen.getByText('No se puede cambiar después del alta.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Granel' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Fraccionado por pieza' })).toBeNull();
+  });
+
+  it('edición: guarda un update parcial sin modoPrecio/modoStock', async () => {
+    configurarAuth();
+    configurarCollection({ datos: productosFalsos });
+    mocks.updateDoc.mockResolvedValue(undefined);
+
+    renderizar();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Editar' })[0]!);
+    fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Queso Añejo Premium' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Inactivo' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+    await waitFor(() => expect(mocks.updateDoc).toHaveBeenCalledTimes(1));
+    const [, cambios] = mocks.updateDoc.mock.calls[0] as [unknown, Record<string, unknown>];
+    expect(cambios.nombre).toBe('Queso Añejo Premium');
+    expect(cambios.activo).toBe(false);
+    expect(cambios).not.toHaveProperty('modoPrecio');
+    expect(cambios).not.toHaveProperty('modoStock');
+  });
+
+  it('muestra un toast de éxito y cierra el modal al crear correctamente', async () => {
+    configurarAuth();
+    configurarCollection({ datos: [] });
+    mocks.addDoc.mockResolvedValue({ id: 'nuevo' });
+
+    renderizar();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Agregar producto' })[0]!);
+    fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Nuez mariposa' } });
+    fireEvent.change(screen.getByLabelText('Categoría'), { target: { value: 'Frutos secos' } });
+    fireEvent.change(screen.getByLabelText('Precio por kg'), { target: { value: '450,00' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+    await waitFor(() => {
+      const dialog = document.querySelector('dialog');
+      expect(dialog?.open).toBe(false);
+    });
+    expect(await screen.findByText('Producto creado.')).toBeTruthy();
+  });
+
+  it('muestra un toast de error si addDoc falla', async () => {
+    configurarAuth();
+    configurarCollection({ datos: [] });
+    mocks.addDoc.mockRejectedValue(new Error('offline'));
+
+    renderizar();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Agregar producto' })[0]!);
+    fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Nuez mariposa' } });
+    fireEvent.change(screen.getByLabelText('Categoría'), { target: { value: 'Frutos secos' } });
+    fireEvent.change(screen.getByLabelText('Precio por kg'), { target: { value: '450,00' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+    expect(await screen.findByText('No se pudo crear el producto. Intentá de nuevo.')).toBeTruthy();
+  });
+
+  it('sin conexión: guarda sin esperar el ack del servidor, cierra el modal al instante y avisa que falta sincronizar', async () => {
+    configurarAuth();
+    configurarCollection({ datos: [] });
+    mocks.useOnlineStatus.mockReturnValue(false);
+    mocks.addDoc.mockResolvedValue({ id: 'nuevo' });
+
+    renderizar();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Agregar producto' })[0]!);
+    fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Nuez mariposa' } });
+    fireEvent.change(screen.getByLabelText('Categoría'), { target: { value: 'Frutos secos' } });
+    fireEvent.change(screen.getByLabelText('Precio por kg'), { target: { value: '450,00' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+    // El cierre es sincrónico: no espera la resolución de `addDoc` (offline,
+    // esa promesa no resolvería hasta reconectar). Se verifica ANTES de
+    // cualquier `await` de este test, en el mismo tick del click — a
+    // diferencia del caso "con conexión" de abajo, donde el modal sigue
+    // abierto en este punto.
+    const dialog = document.querySelector('dialog') as HTMLDialogElement;
+    expect(dialog.open).toBe(false);
+    expect(mocks.addDoc).toHaveBeenCalledTimes(1);
+    expect(
+      await screen.findByText('Guardado sin conexión. Se sincronizará al reconectar.'),
+    ).toBeTruthy();
+  });
+
+  it('con conexión: sigue esperando el ack del servidor antes de cerrar y mostrar el toast de éxito (regresión)', async () => {
+    configurarAuth();
+    configurarCollection({ datos: [] });
+    mocks.useOnlineStatus.mockReturnValue(true);
+    mocks.addDoc.mockResolvedValue({ id: 'nuevo' });
+
+    renderizar();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Agregar producto' })[0]!);
+    fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Nuez mariposa' } });
+    fireEvent.change(screen.getByLabelText('Categoría'), { target: { value: 'Frutos secos' } });
+    fireEvent.change(screen.getByLabelText('Precio por kg'), { target: { value: '450,00' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+    // A diferencia del caso offline: justo después del click el modal
+    // TODAVÍA está abierto (esperando el `await` de `addDoc`).
+    const dialog = document.querySelector('dialog') as HTMLDialogElement;
+    expect(dialog.open).toBe(true);
+
+    await waitFor(() => expect(dialog.open).toBe(false));
+    expect(await screen.findByText('Producto creado.')).toBeTruthy();
+  });
+
+  it('reintentar en el estado de error cambia la identidad de la query (fuerza resuscripción)', () => {
+    configurarAuth();
+    configurarCollection({ error: new Error('boom') });
+
+    renderizar();
+    const llamadasAntes = mocks.useCollection.mock.calls.length;
+    const queryAntes = mocks.useCollection.mock.calls[llamadasAntes - 1]![0];
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }));
+
+    const llamadasDespues = mocks.useCollection.mock.calls.length;
+    const queryDespues = mocks.useCollection.mock.calls[llamadasDespues - 1]![0];
+    expect(queryDespues).not.toBe(queryAntes);
+  });
+});

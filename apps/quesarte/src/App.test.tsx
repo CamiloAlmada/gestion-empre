@@ -21,6 +21,16 @@ vi.mock('./componentes/AvisoPwa', () => ({
   AvisoPwa: () => null,
 }));
 
+// Productos (pantalla de /stock/productos) arma su query de Firestore al
+// importarse (`collection(db, 'productos')`, ver Productos.tsx), lo que
+// exige un `db` real: el mock de @gestion/firebase-kit de este archivo no
+// implementa `initFirebase`. Este suite solo prueba ruteo (no el contenido
+// de Productos, que tiene su propio Productos.test.tsx), así que se mockea
+// el componente entero — mismo criterio que AvisoPwa arriba.
+vi.mock('./pantallas/Productos', () => ({
+  Productos: () => null,
+}));
+
 function configurarAuth(rol: 'admin' | 'vendedor') {
   mocks.useAuth.mockReturnValue({
     usuario: { uid: 'u1' },
