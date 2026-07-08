@@ -114,6 +114,8 @@ esta tabla; un par nuevo se verifica y se agrega acá antes de usarse.
 | Ring de foco primary-600 / fondo (UI ≥3:1) | | 4.27:1 | | 4.36:1 |
 | `exito` / superficie | | 5.89:1 | | 7.78:1 |
 | `advertencia` / superficie | | 5.97:1 | | 6.92:1 |
+| Texto primario de marca (ej. tab activo): `primary-700` light / `primary-300` dark | /superficie | 6.62:1 | /superficie | 10.94:1 |
+| — ídem sobre fondo | /fondo | 6.25:1 | /fondo | 11.60:1 |
 
 Nota de diseño: `peligro` está optimizado como color de TEXTO. En botones con
 fondo `peligro`, el label usa `text-white dark:text-fondo` (no hay un valor
