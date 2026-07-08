@@ -11,6 +11,8 @@ export {
   type Peso,
   peso,
   sumarPeso,
+  restarPeso,
+  pesoNoNegativo,
   pesoDesdeKg,
   formatearPeso,
   formatearPesoForzado,
