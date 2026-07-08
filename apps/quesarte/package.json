@@ -12,6 +12,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@gestion/core": "workspace:*",
     "@gestion/firebase-kit": "workspace:*",
     "@gestion/ui": "workspace:*",
     "react": "^19.2.7",
@@ -21,7 +22,6 @@
   "devDependencies": {
     "@firebase/rules-unit-testing": "^5.0.0",
     "@gestion/config": "workspace:*",
-    "@gestion/core": "workspace:*",
     "@tailwindcss/vite": "^4.3.2",
     "@testing-library/react": "^16.3.2",
     "@types/react": "^19.2.17",
