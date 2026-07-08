@@ -1,3 +1,4 @@
 export { initFirebase, type FirebaseConfig, type FirebaseServices } from './init';
-export { useAuth, type UseAuthResult } from './useAuth';
+export { ProveedorAuth, useAuth, type EstadoAuth, type ProveedorAuthProps } from './ProveedorAuth';
+export { usuarioConverter } from './converters/usuario';
 export { useOnlineStatus } from './useOnlineStatus';

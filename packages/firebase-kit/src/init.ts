@@ -37,6 +37,8 @@ export function initFirebase(config: FirebaseConfig): FirebaseServices {
   const appExistente = getApps()[0];
   const app = appExistente ?? initializeApp(config);
   const auth = getAuth(app);
+  // Emails de Firebase Auth (reset de contraseña, verificación) en español.
+  auth.languageCode = 'es';
 
   // `initializeFirestore` solo puede llamarse una vez por app: si la app ya
   // existía, Firestore ya fue inicializado (con persistencia) en la primera

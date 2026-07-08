@@ -15,6 +15,7 @@
     "react": "^18 || ^19"
   },
   "dependencies": {
+    "@gestion/core": "workspace:*",
     "firebase": "^12.15.0"
   },
   "devDependencies": {

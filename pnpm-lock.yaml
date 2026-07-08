@@ -129,6 +129,9 @@ importers:
 
   packages/firebase-kit:
     dependencies:
+      '@gestion/core':
+        specifier: workspace:*
+        version: link:../core
       firebase:
         specifier: ^12.15.0
         version: 12.15.0
