@@ -10,3 +10,20 @@ export { piezaConverter } from './converters/pieza';
 export { ventaConverter } from './converters/venta';
 export { movimientoConverter } from './converters/movimiento';
 export { configuracionConverter } from './converters/configuracion';
+
+export {
+  registrarVenta,
+  anularVenta,
+  type EntradaVenta,
+  type ItemEntradaVenta,
+} from './ventas';
+export { ajustarStock, type EntradaAjuste, type TipoAjuste } from './stock';
+export {
+  ErrorEscrituraPOS,
+  StockInsuficienteError,
+  VentaVaciaError,
+  TotalIncoherenteError,
+  ItemInvalidoError,
+  AnulacionInvalidaError,
+  AjusteInvalidoError,
+} from './errores';
