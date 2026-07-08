@@ -127,3 +127,17 @@ comunicar información por sí solos — la información va por otra vía):
   `BarraPestanas` (el estado activo lo comunican `aria-current` y el color del
   label, ya verificados).
 - Scrim `primary-950/60` como backdrop del `Modal`.
+
+## 8. Patrón de escrituras offline (estándar de proyecto)
+
+Las promesas de escritura de Firestore no resuelven hasta el ack del servidor;
+la persistencia local aplica el cambio al instante. Por eso, toda pantalla que
+escribe sigue el patrón híbrido:
+
+- **Online** (`useOnlineStatus() === true`): `await` + toast de éxito/error.
+- **Offline**: disparar la escritura SIN `await`, cerrar el modal/flujo, toast
+  `info` "Guardado sin conexión. Se sincronizará al reconectar.", y un `.catch`
+  encadenado que muestre error si el servidor la rechaza al sincronizar.
+
+Nunca dejar un botón "Guardando…" esperando un ack que no va a llegar sin
+conexión. El POS usa este mismo patrón para el cobro.
