@@ -93,6 +93,12 @@ light/dark/system, checklist a11y en la DoD). Las tareas de `packages/ui`
 incluyen `ProveedorTema`/`useTema` y `BarraPestanas` además de los componentes
 de datos.
 
+Estado (2026-07-08): las 10 tareas implementadas, con review senior integral
+(C8) aprobado y sus hallazgos corregidos. 761 tests en verde (255+ de la app,
+53 de reglas contra emulador). Pendiente ÚNICAMENTE la verificación de los
+criterios de abajo con el dueño sobre la app en producción (el review los
+pre-evaluó todos como "SÍ"; el de offline requiere dispositivo real).
+
 Criterios de aceptación:
 - [ ] Vender 0,5 kg de un queso descuenta de la rueda más antigua y deja rastro
       en movimientos.
@@ -108,6 +114,19 @@ Criterios de aceptación:
 
 Objetivo: costo real con gastos de viaje prorrateados y gestión de márgenes
 (ver doc 03).
+
+Notas arrastradas del cierre de Fase 1 (reviews):
+- **Bundle**: 984 KB (288 KB gzip), Vite avisa — hacer code-splitting por ruta.
+- **Historial**: paginación por límite simple; migrar a cursor si el volumen molesta.
+- **Merma post-venta bajo umbral** (doc 02): cuando una pieza fraccionada queda
+  bajo `umbralPiezaAgotadaGramos` tras una venta, ofrecer marcarla agotada con
+  merma del resto. Hoy la merma es manual desde Stock.
+- **`ingresarPiezas`**: decidir si el alta de piezas por compra reusa este helper
+  o va por uno propio (nació para ingreso manual, sin `compraId`).
+- **Reglas**: el vendedor hoy puede técnicamente aumentar `stockGranelGramos`
+  (solo piezas tienen monotonía). Revisar al definir el flujo de compras.
+- **Emulador de Auth**: no está configurado; si se quiere test de integración
+  del flujo de invitación, agregarlo a `firebase.json` y al script de tests.
 
 Tareas:
 1. `core`: `prorratearGastos` (invariante de suma exacta), cálculo de costo real
