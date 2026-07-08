@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router';
 import { ProveedorTema } from '@gestion/ui';
 import { Ajustes } from './Ajustes';
 
@@ -36,9 +37,11 @@ function authPorDefecto() {
 
 function renderizar() {
   return render(
-    <ProveedorTema>
-      <Ajustes />
-    </ProveedorTema>,
+    <MemoryRouter>
+      <ProveedorTema>
+        <Ajustes />
+      </ProveedorTema>
+    </MemoryRouter>,
   );
 }
 
@@ -107,13 +110,12 @@ describe('Ajustes', () => {
     expect(screen.queryByText('Usuarios')).toBeNull();
   });
 
-  it('admin ve la sección Usuarios con el placeholder deshabilitado', () => {
+  it('admin ve la sección Usuarios con un link a /ajustes/usuarios', () => {
     configurarAuth({ perfil: { ...authPorDefecto().perfil, rol: 'admin' } });
 
     renderizar();
 
-    const boton = screen.getByRole('button', { name: /Gestión de usuarios/ });
-    expect(boton.hasAttribute('disabled')).toBe(true);
-    expect(screen.getByText('Próximamente')).toBeTruthy();
+    const link = screen.getByRole('link', { name: /Gestión de usuarios/ });
+    expect(link.getAttribute('href')).toBe('/ajustes/usuarios');
   });
 });

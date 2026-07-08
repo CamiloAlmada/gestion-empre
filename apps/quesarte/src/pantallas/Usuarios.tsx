@@ -1,0 +1,326 @@
+import { useMemo, useState } from 'react';
+import { Link } from 'react-router';
+import { collection, doc, orderBy, query, updateDoc } from 'firebase/firestore';
+import { Button, DataTable, Input, useToasts, type ColumnaDataTable } from '@gestion/ui';
+import {
+  DatosInvitacionInvalidosError,
+  EmailInvalidoError,
+  EmailYaRegistradoError,
+  PerfilNoCreadoError,
+  invitarUsuario,
+  usuarioConverter,
+  useAuth,
+  useCollection,
+  useOnlineStatus,
+  type EntradaInvitacion,
+} from '@gestion/firebase-kit';
+import type { Rol, Usuario } from '@gestion/core';
+import { db, obtenerConfigFirebase } from '../firebase';
+import { ModalInvitarUsuario, type ErroresInvitacion } from './ModalInvitarUsuario';
+
+const coleccionUsuarios = collection(db, 'usuarios').withConverter(usuarioConverter);
+
+// Mensaje fijo (no el `.message` del error, más técnico) para el fallo
+// parcial crítico de la invitación: instruye al admin qué hacer, ver JSDoc de
+// `PerfilNoCreadoError` en packages/firebase-kit/src/errores.ts.
+const MENSAJE_PERFIL_NO_CREADO =
+  'La cuenta se creó pero el perfil no. Contactá al desarrollador para completarla desde la ' +
+  'consola — reintentar con el mismo email va a fallar.';
+
+const OPCIONES_ROL_FILA: { valor: Rol; etiqueta: string }[] = [
+  { valor: 'admin', etiqueta: 'Administrador' },
+  { valor: 'vendedor', etiqueta: 'Vendedor' },
+];
+
+interface ControlFilaProps {
+  usuario: Usuario;
+  disabled: boolean;
+  onCambiarRol: (rol: Rol) => void;
+}
+
+/** Selector de rol por fila: mismo patrón visual que los grupos segmentados
+ * de Ajustes.tsx / ModalProducto.tsx (`role="group"` + `aria-pressed`). */
+function SelectorRolFila({ usuario, disabled, onCambiarRol }: ControlFilaProps) {
+  return (
+    <div
+      role="group"
+      aria-label={`Rol de ${usuario.nombre}`}
+      className="inline-flex gap-1 rounded-lg border border-borde p-1"
+    >
+      {OPCIONES_ROL_FILA.map((opcion) => {
+        const activa = opcion.valor === usuario.rol;
+        return (
+          <button
+            key={opcion.valor}
+            type="button"
+            aria-pressed={activa}
+            disabled={disabled}
+            onClick={() => {
+              if (!activa) onCambiarRol(opcion.valor);
+            }}
+            className={`min-h-[44px] rounded-md px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 disabled:cursor-not-allowed disabled:opacity-50 ${
+              activa ? 'bg-primary-600 text-white' : 'text-texto-secundario hover:text-texto'
+            }`}
+          >
+            {opcion.etiqueta}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+interface ToggleActivoFilaProps {
+  usuario: Usuario;
+  disabled: boolean;
+  onCambiar: (activo: boolean) => void;
+}
+
+/** Switch de "Activo" por fila. `role="switch"` + `aria-checked` (patrón
+ * accesible estándar); el texto ("Activo"/"Inactivo") acompaña siempre al
+ * color, nunca se comunica solo por color (checklist §5). */
+function ToggleActivoFila({ usuario, disabled, onCambiar }: ToggleActivoFilaProps) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={usuario.activo}
+      aria-label={`${usuario.activo ? 'Desactivar' : 'Activar'} a ${usuario.nombre}`}
+      disabled={disabled}
+      onClick={() => onCambiar(!usuario.activo)}
+      className="inline-flex min-h-[44px] items-center gap-2 rounded-lg border border-borde px-3 py-2 text-sm font-medium text-texto transition-colors hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 disabled:cursor-not-allowed disabled:opacity-50"
+    >
+      <span
+        aria-hidden="true"
+        className={`h-2 w-2 rounded-full ${usuario.activo ? 'bg-exito' : 'bg-texto-secundario'}`}
+      />
+      {usuario.activo ? 'Activo' : 'Inactivo'}
+    </button>
+  );
+}
+
+/**
+ * Pantalla "Usuarios" (Ajustes → Usuarios, solo admin — protegida además por
+ * `RutaSoloAdmin` en App.tsx). Listado en vivo de `usuarios/{uid}` con
+ * cambio de rol/estado in situ (update parcial directo, sin converter: las
+ * reglas de Firestore solo permiten tocar `activo`/`rol`/`nombre`) e
+ * invitación de cuentas nuevas por email (`invitarUsuario`, ver
+ * packages/firebase-kit/src/invitaciones.ts).
+ *
+ * Protección de UI contra auto-lockout: el propio admin no puede
+ * desactivarse ni quitarse el rol admin desde acá (las reglas SÍ lo
+ * permitirían — es un footgun, no un agujero de seguridad).
+ */
+export function Usuarios() {
+  const { perfil } = useAuth();
+  const enLinea = useOnlineStatus();
+  const { mostrarToast } = useToasts();
+
+  const [busqueda, setBusqueda] = useState('');
+  const [intentoId, setIntentoId] = useState(0);
+  const [actualizandoUid, setActualizandoUid] = useState<string | null>(null);
+
+  const [modalInvitarAbierto, setModalInvitarAbierto] = useState(false);
+  const [invitando, setInvitando] = useState(false);
+  const [erroresInvitacion, setErroresInvitacion] = useState<ErroresInvitacion>({});
+
+  const consultaUsuarios = useMemo(
+    () => query(coleccionUsuarios, orderBy('nombre')),
+    [intentoId],
+  );
+  const { datos: usuarios, cargando, error } = useCollection(consultaUsuarios);
+
+  const usuariosFiltrados = useMemo(() => {
+    const consulta = busqueda.trim().toLowerCase();
+    if (consulta === '') return usuarios;
+    return usuarios.filter(
+      (u) => u.nombre.toLowerCase().includes(consulta) || u.email.toLowerCase().includes(consulta),
+    );
+  }, [usuarios, busqueda]);
+
+  function reintentar() {
+    setIntentoId((n) => n + 1);
+  }
+
+  function abrirModalInvitar() {
+    setErroresInvitacion({});
+    setModalInvitarAbierto(true);
+  }
+
+  function cerrarModalInvitar() {
+    setModalInvitarAbierto(false);
+  }
+
+  /**
+   * Update parcial directo (sin converter): las reglas de `usuarios/{uid}`
+   * solo permiten tocar `activo`/`rol`/`nombre`, y acá solo escribimos UNO de
+   * esos campos por vez (patrón offline §8, igual que el resto de la app).
+   */
+  async function actualizarCampo(usuario: Usuario, cambios: Partial<Pick<Usuario, 'rol' | 'activo'>>) {
+    const ref = doc(db, 'usuarios', usuario.uid);
+    const escritura = updateDoc(ref, cambios);
+    setActualizandoUid(usuario.uid);
+
+    if (!enLinea) {
+      setActualizandoUid(null);
+      mostrarToast('Guardado sin conexión. Se sincronizará al reconectar.', 'info');
+      escritura.catch(() => {
+        mostrarToast('No se pudo sincronizar el cambio en el usuario.', 'error');
+      });
+      return;
+    }
+
+    try {
+      await escritura;
+      mostrarToast('Usuario actualizado.', 'exito');
+    } catch {
+      mostrarToast('No se pudo actualizar el usuario. Intentá de nuevo.', 'error');
+    } finally {
+      setActualizandoUid(null);
+    }
+  }
+
+  function handleCambiarRol(usuario: Usuario, nuevoRol: Rol) {
+    if (usuario.uid === perfil?.uid) return; // auto-lockout: ver ControlFilaProps.disabled
+    void actualizarCampo(usuario, { rol: nuevoRol });
+  }
+
+  function handleCambiarActivo(usuario: Usuario, nuevoActivo: boolean) {
+    if (usuario.uid === perfil?.uid) return;
+    void actualizarCampo(usuario, { activo: nuevoActivo });
+  }
+
+  async function handleInvitar(entrada: EntradaInvitacion) {
+    setErroresInvitacion({});
+    setInvitando(true);
+    try {
+      await invitarUsuario(db, obtenerConfigFirebase(), entrada);
+      mostrarToast(`Invitación enviada a ${entrada.email}`, 'exito');
+      cerrarModalInvitar();
+    } catch (err) {
+      if (err instanceof EmailYaRegistradoError) {
+        setErroresInvitacion({ email: 'Ya existe una cuenta con ese correo.' });
+      } else if (err instanceof EmailInvalidoError) {
+        setErroresInvitacion({ email: err.message });
+      } else if (err instanceof DatosInvitacionInvalidosError) {
+        setErroresInvitacion({ nombre: err.message });
+      } else if (err instanceof PerfilNoCreadoError) {
+        // Fallo parcial crítico: reintentar con el mismo email va a fallar
+        // igual (la cuenta de Auth ya existe). No tiene sentido dejar el
+        // modal abierto para un reintento condenado a fallar.
+        mostrarToast(MENSAJE_PERFIL_NO_CREADO, 'error');
+        cerrarModalInvitar();
+      } else {
+        mostrarToast('No se pudo enviar la invitación. Intentá de nuevo.', 'error');
+      }
+    } finally {
+      setInvitando(false);
+    }
+  }
+
+  const columnas: ColumnaDataTable<Usuario>[] = [
+    {
+      clave: 'nombre',
+      titulo: 'Nombre',
+      render: (u) => (
+        <div className="flex flex-col gap-0.5">
+          <span className="font-medium text-texto">{u.nombre}</span>
+          {u.uid === perfil?.uid && (
+            <span className="text-xs text-texto-secundario">No podés modificar tu propia cuenta.</span>
+          )}
+        </div>
+      ),
+    },
+    { clave: 'email', titulo: 'Correo', render: (u) => u.email },
+    {
+      clave: 'rol',
+      titulo: 'Rol',
+      render: (u) => (
+        <SelectorRolFila
+          usuario={u}
+          disabled={u.uid === perfil?.uid || actualizandoUid === u.uid}
+          onCambiarRol={(rol) => handleCambiarRol(u, rol)}
+        />
+      ),
+    },
+    {
+      clave: 'estado',
+      titulo: 'Estado',
+      render: (u) => (
+        <ToggleActivoFila
+          usuario={u}
+          disabled={u.uid === perfil?.uid || actualizandoUid === u.uid}
+          onCambiar={(activo) => handleCambiarActivo(u, activo)}
+        />
+      ),
+    },
+  ];
+
+  return (
+    <div className="flex flex-col gap-4">
+      <Link
+        to="/ajustes"
+        className="-mx-2 -my-2 flex min-h-[44px] w-fit items-center rounded px-2 py-2 text-sm text-texto-secundario hover:text-texto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
+      >
+        ‹ Ajustes
+      </Link>
+
+      {!enLinea && (
+        <div
+          role="status"
+          className="flex items-center gap-2 rounded-xl border border-borde bg-superficie px-4 py-3 text-sm text-advertencia"
+        >
+          <span aria-hidden="true">⚠</span>
+          <span>Estás sin conexión. Los cambios de rol/estado se sincronizan al reconectar.</span>
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="w-full max-w-xs">
+          <Input label="Buscar" value={busqueda} onChange={setBusqueda} placeholder="Nombre o correo" />
+        </div>
+        <Button onClick={abrirModalInvitar}>Invitar usuario</Button>
+      </div>
+
+      {cargando ? (
+        <div className="flex min-h-[40vh] items-center justify-center">
+          <p className="text-texto-secundario">Cargando usuarios…</p>
+        </div>
+      ) : error !== null ? (
+        <div
+          role="alert"
+          className="flex flex-col items-center gap-3 rounded-2xl border border-borde bg-superficie p-8 text-center"
+        >
+          <p className="text-peligro">No se pudieron cargar los usuarios.</p>
+          <p className="text-sm text-texto-secundario">Revisá tu conexión e intentá de nuevo.</p>
+          <Button variante="secundaria" onClick={reintentar}>
+            Reintentar
+          </Button>
+        </div>
+      ) : (
+        <DataTable
+          columnas={columnas}
+          filas={usuariosFiltrados}
+          claveFila={(u) => u.uid}
+          etiqueta="Usuarios"
+          vacio={
+            usuarios.length === 0 ? (
+              <p>No hay usuarios todavía.</p>
+            ) : (
+              `No se encontraron usuarios para "${busqueda.trim()}".`
+            )
+          }
+        />
+      )}
+
+      <ModalInvitarUsuario
+        abierto={modalInvitarAbierto}
+        invitando={invitando}
+        enLinea={enLinea}
+        erroresServidor={erroresInvitacion}
+        onInvitar={(entrada) => void handleInvitar(entrada)}
+        onCerrar={cerrarModalInvitar}
+      />
+    </div>
+  );
+}

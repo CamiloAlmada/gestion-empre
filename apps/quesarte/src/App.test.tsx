@@ -37,6 +37,14 @@ vi.mock('./pantallas/Productos', () => ({
 // importa porque Stock.test.tsx mockea todas las escrituras/lecturas.
 vi.mock('./firebase', () => ({ auth: {}, db: {} }));
 
+// Usuarios (pantalla de /ajustes/usuarios) arma su query de Firestore al
+// importarse (`collection(db, 'usuarios')`, ver Usuarios.tsx), igual que
+// Productos arriba: se mockea el componente entero, este suite solo prueba
+// ruteo (Usuarios.test.tsx cubre su contenido).
+vi.mock('./pantallas/Usuarios', () => ({
+  Usuarios: () => <div>Contenido de Usuarios</div>,
+}));
+
 function configurarAuth(rol: 'admin' | 'vendedor') {
   mocks.useAuth.mockReturnValue({
     usuario: { uid: 'u1' },
@@ -89,5 +97,22 @@ describe('App - rutas', () => {
 
     expect(screen.getByRole('heading', { name: 'Reportes', level: 1 })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Reportes', level: 2 })).toBeTruthy();
+  });
+
+  it('vendedor que navega a /ajustes/usuarios es redirigido a Venta', () => {
+    configurarAuth('vendedor');
+
+    renderizarEn('/ajustes/usuarios');
+
+    expect(screen.getByRole('heading', { name: 'Venta', level: 1 })).toBeTruthy();
+    expect(screen.queryByText('Contenido de Usuarios')).toBeNull();
+  });
+
+  it('admin que navega a /ajustes/usuarios ve la pantalla de Usuarios', () => {
+    configurarAuth('admin');
+
+    renderizarEn('/ajustes/usuarios');
+
+    expect(screen.getByText('Contenido de Usuarios')).toBeTruthy();
   });
 });

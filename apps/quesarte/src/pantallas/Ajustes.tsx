@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Link } from 'react-router';
 import { Button, useTema, type Tema } from '@gestion/ui';
 import { useAuth } from '@gestion/firebase-kit';
 
@@ -64,8 +65,8 @@ function SelectorTema() {
 
 /**
  * Pantalla de Ajustes: Apariencia (tema), Cuenta (datos del perfil + Salir,
- * mudado acá desde el header) y, solo para admin, el placeholder de gestión
- * de Usuarios que construye otra tarea.
+ * mudado acá desde el header) y, solo para admin, el acceso a la gestión de
+ * Usuarios (`/ajustes/usuarios`, ver Usuarios.tsx).
  */
 export function Ajustes() {
   const { perfil, salir } = useAuth();
@@ -94,14 +95,15 @@ export function Ajustes() {
 
       {perfil?.rol === 'admin' && (
         <Seccion titulo="Usuarios">
-          <button
-            type="button"
-            disabled
-            className="flex min-h-[44px] w-full items-center justify-between rounded-lg border border-borde px-4 py-3 text-left text-texto-secundario disabled:cursor-not-allowed"
+          <Link
+            to="/ajustes/usuarios"
+            className="flex min-h-[44px] w-full items-center justify-between rounded-lg border border-borde px-4 py-3 text-left text-texto hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
           >
             <span>Gestión de usuarios</span>
-            <span className="text-xs">Próximamente</span>
-          </button>
+            <span aria-hidden="true" className="text-texto-secundario">
+              ›
+            </span>
+          </Link>
         </Seccion>
       )}
     </div>
