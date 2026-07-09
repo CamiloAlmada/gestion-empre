@@ -133,6 +133,15 @@ Notas arrastradas del cierre de Fase 1 (reviews):
   (solo piezas tienen monotonía). Revisar al definir el flujo de compras.
 - **Emulador de Auth**: no está configurado; si se quiere test de integración
   del flujo de invitación, agregarlo a `firebase.json` y al script de tests.
+- **Categorías (review post-Fase 1, deuda consciente)**: (1) el seed de
+  categorías trimea nombres pero la agrupación/renombre comparan sin trim — un
+  producto legacy con espacios en `categoria` cae en "Sin categoría" hasta
+  re-guardarlo (auto-cura por el select); (2) el offset del sticky de los
+  encabezados de Stock (`3.5rem`) está acoplado a la altura del header de
+  `Shell.tsx` — extraer a una CSS var `--altura-header` si el header cambia;
+  (3) crear/renombrar categoría hace `await` incondicional (deshabilitado
+  offline, mismo criterio que invitaciones) — si la conexión cae mid-await
+  queda "Guardando…" hasta reconectar.
 
 Tareas:
 1. `core`: `prorratearGastos` (invariante de suma exacta), cálculo de costo real
