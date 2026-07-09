@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+  type TransitionEvent as ReactTransitionEvent,
+} from 'react';
 import { formatearMoney } from '@gestion/core';
 import { Button } from '@gestion/ui';
 import { detalleItem, puedeSumarUnidad, totalCarrito, type ItemCarrito } from './itemsCarrito';
@@ -19,6 +26,18 @@ const CLASE_BOTON_REDONDO =
  * (~80-100px).
  */
 const UMBRAL_CIERRE_ARRASTRE_PX = 90;
+
+/**
+ * Fase del arrastre que colapsa la LISTA de ítems (docs/06-ui-ux.md §6, "el
+ * arrastre colapsa la lista, no mueve la hoja"): `siguiendo` = el dedo está
+ * abajo y la altura del `<ul>` lo sigue sin transición; `volviendo` = se
+ * soltó bajo el umbral y la altura anima de vuelta a su valor original;
+ * `ninguna` = reposo (rige el `max-h-[40vh]`/`overflow-y-auto` de la clase,
+ * sin estilo inline). El resumen (contador, total, Cobrar) vive DEBAJO de la
+ * lista en el DOM y nunca se toca: al achicarse la lista, el borde superior
+ * de la hoja baja hacia el resumen solo, sin desplazarlo.
+ */
+type FaseArrastreLista = 'ninguna' | 'siguiendo' | 'volviendo';
 
 /**
  * `matchMedia` no existe en jsdom (ni la propiedad está definida en
@@ -154,11 +173,18 @@ export function Carrito({
 }: CarritoProps) {
   const [expandidoMobile, setExpandidoMobile] = useState(false);
   // Desplazamiento vertical (px, siempre ≥0) que sigue al dedo mientras se
-  // arrastra el agarre hacia abajo; `arrastrando` distingue "siguiendo el
-  // dedo" (sin transición) de "volviendo a su lugar" (con transición).
+  // arrastra el agarre hacia abajo; se traduce en cuánto se achica la altura
+  // del `<ul>` (ver `estiloLista`), no en un `transform` de la hoja.
   const [arrastreY, setArrastreY] = useState(0);
-  const [arrastrando, setArrastrando] = useState(false);
+  const [faseArrastreLista, setFaseArrastreLista] = useState<FaseArrastreLista>('ninguna');
   const inicioArrastreRef = useRef<number | null>(null);
+  // Altura real del `<ul>` al iniciar el arrastre (medida con
+  // `getBoundingClientRect`, no un valor fijo): la lista tiene distinta
+  // cantidad de ítems cada vez. En jsdom (tests) el layout no existe y
+  // `getBoundingClientRect().height` da 0 — no rompe nada, la lógica de
+  // umbral/cierre no depende de esta medida (usa `evento.clientY` directo).
+  const listaRef = useRef<HTMLUListElement | null>(null);
+  const alturaListaInicialRef = useRef(0);
   const total = totalCarrito(items);
   const cantidad = items.length;
   const carritoVacio = cantidad === 0;
@@ -174,13 +200,15 @@ export function Carrito({
   }, [expandidoMobile]);
 
   // Arrastre para cerrar desde la franja superior (agarre) de la hoja
-  // expandida (docs/06-ui-ux.md §6). Pointer Events cubre touch y mouse con
-  // una sola API; `setPointerCapture` asegura que move/up sigan llegando acá
-  // aunque el dedo salga de la franja. jsdom (tests) no implementa
+  // expandida (docs/06-ui-ux.md §6): colapsa la altura de la LISTA, no mueve
+  // la hoja. Pointer Events cubre touch y mouse con una sola API;
+  // `setPointerCapture` asegura que move/up sigan llegando acá aunque el
+  // dedo salga de la franja. jsdom (tests) no implementa
   // `setPointerCapture`, de ahí el chequeo de tipo antes de llamarlo.
   function alBajarPuntero(evento: ReactPointerEvent<HTMLDivElement>) {
     inicioArrastreRef.current = evento.clientY;
-    setArrastrando(true);
+    alturaListaInicialRef.current = listaRef.current?.getBoundingClientRect().height ?? 0;
+    setFaseArrastreLista('siguiendo');
     if (typeof evento.currentTarget.setPointerCapture === 'function') {
       evento.currentTarget.setPointerCapture(evento.pointerId);
     }
@@ -188,11 +216,13 @@ export function Carrito({
 
   function alMoverPuntero(evento: ReactPointerEvent<HTMLDivElement>) {
     if (inicioArrastreRef.current === null) return;
-    // Arrastres hacia arriba se ignoran (clamp a 0): la hoja expandida no
-    // se "estira" más allá de su posición de reposo.
+    // Arrastres hacia arriba se ignoran (clamp a 0): la lista no se "estira"
+    // más allá de su altura de reposo.
     const delta = Math.max(0, evento.clientY - inicioArrastreRef.current);
     // prefers-reduced-motion: nunca se actualiza `arrastreY`, así que la
-    // hoja no sigue visualmente al dedo (sin animación de seguimiento).
+    // lista no sigue visualmente al dedo (sin animación de seguimiento). El
+    // cierre por umbral igual funciona porque `soltarArrastre` recalcula el
+    // delta directo del evento, no de este estado.
     if (!prefiereMovimientoReducido()) {
       setArrastreY(delta);
     }
@@ -202,15 +232,35 @@ export function Carrito({
     if (inicioArrastreRef.current === null) return;
     const delta = Math.max(0, evento.clientY - inicioArrastreRef.current);
     inicioArrastreRef.current = null;
-    setArrastrando(false);
     setArrastreY(0);
-    if (delta > UMBRAL_CIERRE_ARRASTRE_PX) setExpandidoMobile(false);
+    if (delta > UMBRAL_CIERRE_ARRASTRE_PX) {
+      // Se cierra la hoja entera: el `<ul>` se desmonta con ella, no hace
+      // falta animar la lista de vuelta.
+      setExpandidoMobile(false);
+      setFaseArrastreLista('ninguna');
+    } else {
+      // Bajo el umbral: la lista vuelve a su altura con transición corta
+      // (docs/06-ui-ux.md §6). El estilo inline recién se limpia cuando esa
+      // transición termina, ver `alTerminarTransicionLista`.
+      setFaseArrastreLista('volviendo');
+    }
   }
 
   function cancelarArrastre() {
     inicioArrastreRef.current = null;
-    setArrastrando(false);
     setArrastreY(0);
+    setFaseArrastreLista('volviendo');
+  }
+
+  // Limpia el estilo inline de altura al terminar la transición de "vuelta"
+  // para que vuelva a regir el `max-h-[40vh]` + `overflow-y-auto` de reposo
+  // (docs/06-ui-ux.md §6) — así la lista responde a cambios posteriores de
+  // contenido (agregar/quitar ítems) en vez de quedar clavada en la altura
+  // medida al iniciar el arrastre. Se filtra por `propertyName` porque
+  // `onTransitionEnd` burbujea cualquier transición del elemento.
+  function alTerminarTransicionLista(evento: ReactTransitionEvent<HTMLUListElement>) {
+    if (evento.propertyName !== 'height') return;
+    setFaseArrastreLista('ninguna');
   }
 
   // Misma `FilaItem` para el panel desktop y la hoja mobile (docs/06-ui-ux.md
@@ -232,10 +282,31 @@ export function Carrito({
     );
   }
 
-  const estiloArrastre: CSSProperties | undefined =
-    expandidoMobile && arrastreY > 0
-      ? { transform: `translateY(${arrastreY}px)`, transition: arrastrando ? 'none' : 'transform 180ms ease-out' }
-      : undefined;
+  // Estilo inline del `<ul>` de la hoja mobile (docs/06-ui-ux.md §6, "el
+  // arrastre colapsa la lista, no mueve la hoja"). La hoja en sí NUNCA
+  // recibe transform: el resumen (contador, total, Cobrar) queda quieto
+  // porque solo se achica la altura de la lista que tiene arriba, no porque
+  // se lo fije con ningún estilo propio.
+  // - `siguiendo`: sigue al dedo 1:1, sin transición, recortando con
+  //   `overflow: hidden` para que no aparezca scrollbar durante el gesto.
+  // - `volviendo`: soltado bajo el umbral, anima de vuelta a la altura
+  //   medida al empezar, con transición corta. `overflow: hidden` se
+  //   mantiene también acá (no solo "mientras se arrastra") para que el
+  //   contenido no muestre un scrollbar fantasma mientras la altura todavía
+  //   está animando de vuelta — no está en la letra de la spec pero se
+  //   desprende de su intención ("recortarse limpio").
+  // - `ninguna`: sin estilo inline, vuelve a regir `max-h-[40vh]` +
+  //   `overflow-y-auto` de reposo.
+  // Gate por `prefiereMovimientoReducido()`: bajo esa preferencia no hay
+  // NINGÚN estilo inline (ni durante el arrastre ni al volver) — el cierre
+  // por umbral sigue funcionando porque no depende de este estilo.
+  const estiloLista: CSSProperties | undefined = prefiereMovimientoReducido()
+    ? undefined
+    : faseArrastreLista === 'siguiendo'
+      ? { height: `${Math.max(0, alturaListaInicialRef.current - arrastreY)}px`, overflow: 'hidden', transition: 'none' }
+      : faseArrastreLista === 'volviendo'
+        ? { height: `${alturaListaInicialRef.current}px`, overflow: 'hidden', transition: 'height 180ms ease-out' }
+        : undefined;
 
   return (
     <>
@@ -307,14 +378,15 @@ export function Carrito({
             ? 'rounded-t-card shadow-hoja-expandida'
             : 'shadow-hoja'
         }`}
-        style={estiloArrastre}
       >
         {expandidoMobile && (
           <>
             {/* Franja de arrastre: agarre visual + padding generoso, target
                 táctil ≥44px de alto (docs/06-ui-ux.md §5 y §6). Solo esta
-                franja escucha pointer events — la lista de abajo conserva su
-                `overflow-y-auto` sin que el drag le robe el scroll. El
+                franja escucha pointer events. El arrastre NO mueve esta
+                hoja ni ningún contenedor propio: achica la altura del `<ul>`
+                de abajo (`estiloLista`), así el resumen (contador, total,
+                Cobrar) queda quieto sin necesidad de fijarlo aparte. El
                 agarre es puramente decorativo (`aria-hidden`): el cierre
                 accesible ya existe vía el botón de abajo y Escape. */}
             <div
@@ -328,7 +400,12 @@ export function Carrito({
             >
               <span className="h-[5px] w-10 rounded-full bg-borde" />
             </div>
-            <ul className="flex max-h-[40vh] flex-col gap-2 overflow-y-auto p-3">
+            <ul
+              ref={listaRef}
+              onTransitionEnd={alTerminarTransicionLista}
+              style={estiloLista}
+              className="flex max-h-[40vh] flex-col gap-2 overflow-y-auto p-3"
+            >
               {carritoVacio ? (
                 <p className="text-sm text-texto-secundario">Todavía no agregaste productos.</p>
               ) : (

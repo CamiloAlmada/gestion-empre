@@ -341,6 +341,60 @@ describe('Carrito', () => {
       expect(resumen.getAttribute('aria-expanded')).toBe('true');
     });
 
+    it('la hoja NUNCA recibe transform durante el gesto: lo que cambia es la lista, no la hoja (docs/06-ui-ux.md §6)', () => {
+      instalarMatchMediaFalso(false);
+      renderCarrito({ items: [itemUnico()] });
+      fireEvent.click(screen.getByRole('button', { name: /1 ítem/ }));
+
+      const hoja = screen.getByTestId('hoja-carrito-mobil');
+      const agarre = screen.getByTestId('agarre-carrito');
+
+      expect(hoja.style.transform).toBe('');
+
+      fireEvent.pointerDown(agarre, { pointerId: 1, clientY: 0 });
+      expect(hoja.style.transform).toBe('');
+
+      // Arrastre corto, bajo el umbral: tampoco hay transform al soltar.
+      fireEvent.pointerMove(agarre, { pointerId: 1, clientY: 40 });
+      expect(hoja.style.transform).toBe('');
+      fireEvent.pointerUp(agarre, { pointerId: 1, clientY: 40 });
+      expect(hoja.style.transform).toBe('');
+
+      // Arrastre largo, supera el umbral y cierra: tampoco hubo transform en
+      // ningún momento del gesto (el cierre lo maneja `aria-expanded`, no
+      // CSS). La hoja sigue expandida (el arrastre corto anterior no la
+      // cerró), así que no hace falta reabrirla.
+      fireEvent.pointerDown(agarre, { pointerId: 1, clientY: 0 });
+      fireEvent.pointerMove(agarre, { pointerId: 1, clientY: 120 });
+      expect(hoja.style.transform).toBe('');
+      fireEvent.pointerUp(agarre, { pointerId: 1, clientY: 120 });
+      expect(hoja.style.transform).toBe('');
+    });
+
+    it('durante el arrastre el <ul> de ítems recibe estilo inline de altura, recortado y sin transición', () => {
+      instalarMatchMediaFalso(false);
+      renderCarrito({ items: [itemUnico()] });
+      fireEvent.click(screen.getByRole('button', { name: /1 ítem/ }));
+
+      const hoja = screen.getByTestId('hoja-carrito-mobil');
+      const agarre = screen.getByTestId('agarre-carrito');
+      const lista = hoja.querySelector('ul');
+      if (!lista) throw new Error('no se encontró el <ul> de ítems dentro de la hoja mobile');
+
+      // En reposo, sin estilo inline: rige la clase `max-h-[40vh] overflow-y-auto`.
+      expect(lista.style.height).toBe('');
+
+      fireEvent.pointerDown(agarre, { pointerId: 1, clientY: 0 });
+      fireEvent.pointerMove(agarre, { pointerId: 1, clientY: 40 });
+
+      // jsdom no hace layout real: `getBoundingClientRect().height` mide 0,
+      // así que la altura resultante es `max(0, 0 - 40) = 0`; lo relevante
+      // acá es que el estilo inline lo recibe el `<ul>`, no la hoja.
+      expect(lista.style.height).toBe('0px');
+      expect(lista.style.overflow).toBe('hidden');
+      expect(lista.style.transition).toBe('none');
+    });
+
     it('arrastre hacia arriba se ignora (clamp a 0): no colapsa', () => {
       instalarMatchMediaFalso(false);
       renderCarrito({ items: [itemUnico()] });
@@ -355,14 +409,23 @@ describe('Carrito', () => {
       expect(resumen.getAttribute('aria-expanded')).toBe('true');
     });
 
-    it('prefers-reduced-motion: el arrastre que supera el umbral igual cierra al soltar', () => {
+    it('prefers-reduced-motion: sin estilo inline en la lista durante el arrastre, pero el cierre por umbral igual funciona', () => {
       instalarMatchMediaFalso(true);
       renderCarrito({ items: [itemUnico()] });
       fireEvent.click(screen.getByRole('button', { name: /1 ítem/ }));
 
+      const hoja = screen.getByTestId('hoja-carrito-mobil');
       const agarre = screen.getByTestId('agarre-carrito');
+      const lista = hoja.querySelector('ul');
+      if (!lista) throw new Error('no se encontró el <ul> de ítems dentro de la hoja mobile');
+
       fireEvent.pointerDown(agarre, { pointerId: 1, clientY: 0 });
       fireEvent.pointerMove(agarre, { pointerId: 1, clientY: 60 });
+
+      // No hay seguimiento visual: ni la lista ni la hoja reciben estilo inline.
+      expect(lista.style.height).toBe('');
+      expect(hoja.style.transform).toBe('');
+
       fireEvent.pointerUp(agarre, { pointerId: 1, clientY: 120 });
 
       const resumen = screen.getByRole('button', { name: /1 ítem/ });
