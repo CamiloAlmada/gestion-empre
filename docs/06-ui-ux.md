@@ -128,6 +128,17 @@ tech lead; no se ignora en silencio.
   las demás nunca.
 - Optimista donde sea seguro: la UI no espera a Firestore para responder
   (offline-first ya lo exige).
+- **La venta en curso sobrevive a la navegación** (2026-07-09): cambiar de
+  pestaña (a propósito o por toque accidental) NO vacía el carrito; el estado
+  vive por encima de la pantalla Venta y se limpia solo al cobrar o al
+  quitarlo explícitamente. No persiste entre recargas (las piezas elegidas
+  pueden quedar viejas).
+- **El carrito es editable en el lugar** (2026-07-09): ítems por unidad llevan
+  − / + inline (respetando stock); ítems al peso reabren su modal con el valor
+  actual al tocarlos; pieza entera abre el modal para sumar otra pieza. La
+  hoja expandida lleva barra de agarre visual y se cierra arrastrando hacia
+  abajo desde su parte superior (con `prefers-reduced-motion`, sin animación
+  de seguimiento).
 
 ## 7. Combinaciones de contraste aprobadas
 
