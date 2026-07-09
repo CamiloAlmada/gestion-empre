@@ -143,7 +143,14 @@ Notas arrastradas del cierre de Fase 1 (reviews):
   offline, mismo criterio que invitaciones) — si la conexión cae mid-await
   queda "Guardando…" hasta reconectar.
 
+Decisiones tomadas con el dueño (2026-07-09): el ingreso manual de stock convive
+con Compras (queda para casos sin costo: regalos, muestras, correcciones — no
+afecta costo promedio); redondeo comercial default a múltiplos de $5;
+code-splitting por ruta se hace al INICIO de la fase, antes de las pantallas nuevas.
+
 Tareas:
+0. Code-splitting por ruta (`React.lazy` + `Suspense` por pantalla) — cierra la
+   nota de bundle de Fase 1.
 1. `core`: `prorratearGastos` (invariante de suma exacta), cálculo de costo real
    por kg, `precioDesdeMargen`, `margenDesdePrecio`, redondeo comercial.
 2. Pantalla de compra: borrador → ítems (con detalle de piezas) → gastos del

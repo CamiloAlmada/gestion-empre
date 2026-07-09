@@ -1,4 +1,4 @@
-# 03 — Compras, costos reales y precios
+        # 03 — Compras, costos reales y precios
 
 Este módulo es el diferencial del sistema: el dueño viaja a Colonia a buscar quesos
 y a un mayorista por especias/frutos secos. Esos viajes tienen costos (combustible,
@@ -41,6 +41,12 @@ El prorrateo es función pura en `packages/core`:
 Los redondeos deben cerrar: la suma de lo prorrateado == total de gastos
 (asignar el residuo de redondeo al ítem de mayor valor). Testear este invariante.
 
+## Compras e ingreso manual (decidido con el dueño, 2026-07-09)
+
+Conviven: la compra es el camino normal de ingreso de mercadería (con costos y
+prorrateo). El ingreso manual de Stock queda para casos sin compra (regalos,
+muestras, correcciones); no lleva costo real y **no afecta** el costo promedio.
+
 ## Efectos de confirmar una compra
 
 En una transacción/batch:
@@ -70,7 +76,8 @@ margen actual, margen objetivo (si está definido). Interacciones:
 
 - Editar precio → recalcula margen en vivo.
 - Editar margen objetivo → sugiere precio: `precio = costo / (1 − margen)`, con
-  **redondeo comercial** configurable (ej. a múltiplos de $5 o $10 por kg).
+  **redondeo comercial** configurable (`configuracion.multiploRedondeoCents`,
+  default **$5** — decidido con el dueño 2026-07-09).
 - Al confirmarse una compra que cambia el costo promedio, generar una **alerta de
   margen**: lista de productos cuyo margen quedó por debajo del objetivo, con el
   precio sugerido para restaurarlo, y acción "aplicar" individual o masiva.
