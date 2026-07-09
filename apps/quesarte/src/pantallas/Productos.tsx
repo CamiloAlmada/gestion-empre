@@ -11,7 +11,13 @@ import {
   type UpdateData,
 } from 'firebase/firestore';
 import { Button, DataTable, Input, useToasts, type ColumnaDataTable } from '@gestion/ui';
-import { productoConverter, useAuth, useCollection, useOnlineStatus } from '@gestion/firebase-kit';
+import {
+  categoriaConverter,
+  productoConverter,
+  useAuth,
+  useCollection,
+  useOnlineStatus,
+} from '@gestion/firebase-kit';
 import { formatearMoney, money, peso, type Producto } from '@gestion/core';
 import { db } from '../firebase';
 import {
@@ -20,10 +26,12 @@ import {
   ETIQUETAS_MODO_STOCK,
   type DatosProductoFormulario,
 } from './ModalProducto';
+import { ModalCategorias } from './ModalCategorias';
 
 type EstadoModal = { tipo: 'cerrado' } | { tipo: 'alta' } | { tipo: 'edicion'; producto: Producto };
 
 const coleccionProductos = collection(db, 'productos').withConverter(productoConverter);
+const coleccionCategorias = collection(db, 'categorias').withConverter(categoriaConverter);
 
 /** Minúsculas y sin diacríticos, para que la búsqueda ignore acentos. */
 function normalizarTexto(texto: string): string {
@@ -107,16 +115,31 @@ export function Productos() {
   const [busqueda, setBusqueda] = useState('');
   const [estadoModal, setEstadoModal] = useState<EstadoModal>({ tipo: 'cerrado' });
   const [guardando, setGuardando] = useState(false);
+  const [modalCategoriasAbierto, setModalCategoriasAbierto] = useState(false);
   // Se incrementa en "Reintentar": cambia la identidad de `consultaProductos`
   // y fuerza a `useCollection` a resuscribirse (ver su doc: resuscribe por
   // identidad de `query`, no por contenido).
   const [intentoId, setIntentoId] = useState(0);
+  const [intentoIdCategorias, setIntentoIdCategorias] = useState(0);
 
   const consultaProductos = useMemo(
     () => query(coleccionProductos, orderBy('nombre')),
     [intentoId],
   );
   const { datos: productos, cargando, error } = useCollection(consultaProductos);
+
+  // Una sola suscripción a `categorias` (colección chica) compartida por el
+  // select de `ModalProducto` y el listado de `ModalCategorias`: evita dos
+  // listeners en vivo para el mismo puñado de documentos.
+  const consultaCategorias = useMemo(
+    () => query(coleccionCategorias, orderBy('orden')),
+    [intentoIdCategorias],
+  );
+  const {
+    datos: categorias,
+    cargando: categoriasCargando,
+    error: categoriasError,
+  } = useCollection(consultaCategorias);
 
   const productosFiltrados = useMemo(() => {
     const consulta = normalizarTexto(busqueda.trim());
@@ -141,6 +164,10 @@ export function Productos() {
 
   function reintentar() {
     setIntentoId((n) => n + 1);
+  }
+
+  function reintentarCategorias() {
+    setIntentoIdCategorias((n) => n + 1);
   }
 
   /**
@@ -253,7 +280,14 @@ export function Productos() {
         <div className="w-full max-w-xs">
           <Input label="Buscar" value={busqueda} onChange={setBusqueda} placeholder="Nombre o categoría" />
         </div>
-        {esAdmin && <Button onClick={abrirAlta}>Agregar producto</Button>}
+        {esAdmin && (
+          <div className="flex gap-2">
+            <Button variante="secundaria" onClick={() => setModalCategoriasAbierto(true)}>
+              Categorías
+            </Button>
+            <Button onClick={abrirAlta}>Agregar producto</Button>
+          </div>
+        )}
       </div>
 
       {cargando ? (
@@ -291,13 +325,25 @@ export function Productos() {
       )}
 
       {esAdmin && (
-        <ModalProducto
-          abierto={estadoModal.tipo !== 'cerrado'}
-          producto={estadoModal.tipo === 'edicion' ? estadoModal.producto : null}
-          guardando={guardando}
-          onGuardar={handleGuardar}
-          onCerrar={cerrarModal}
-        />
+        <>
+          <ModalProducto
+            abierto={estadoModal.tipo !== 'cerrado'}
+            producto={estadoModal.tipo === 'edicion' ? estadoModal.producto : null}
+            guardando={guardando}
+            categorias={categorias}
+            onGuardar={handleGuardar}
+            onCerrar={cerrarModal}
+          />
+          <ModalCategorias
+            abierto={modalCategoriasAbierto}
+            categorias={categorias}
+            cargando={categoriasCargando}
+            error={categoriasError}
+            productos={productos}
+            onReintentar={reintentarCategorias}
+            onCerrar={() => setModalCategoriasAbierto(false)}
+          />
+        </>
       )}
     </div>
   );

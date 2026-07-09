@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { ProveedorTema, ProveedorToasts } from '@gestion/ui';
-import { money, peso, type Producto } from '@gestion/core';
+import { money, peso, type Categoria, type Producto } from '@gestion/core';
 import { Productos } from './Productos';
 
 const mocks = vi.hoisted(() => ({
@@ -13,13 +13,14 @@ const mocks = vi.hoisted(() => ({
   updateDoc: vi.fn(),
 }));
 
-// `productoConverter` se deja pasar tal cual (identidad, no se ejercita
-// acá): lo que importa es qué objeto de dominio recibe `addDoc`/`updateDoc`.
-// `useCollection` se mockea entero: la pantalla arma la query con las
-// funciones REALES de 'firebase/firestore' (collection/query/orderBy, sin
-// I/O), pero los datos que "llegan" los controla el mock, no una suscripción
-// real. Solo `addDoc`/`updateDoc` (las únicas operaciones con I/O real) se
-// mockean, siguiendo el mismo patrón que packages/firebase-kit/src/ventas.test.ts.
+// `productoConverter`/`categoriaConverter` se dejan pasar tal cual (identidad,
+// no se ejercitan acá): lo que importa es qué objeto de dominio recibe
+// `addDoc`/`updateDoc`. `useCollection` se mockea entero: la pantalla arma
+// las queries con las funciones REALES de 'firebase/firestore'
+// (collection/query/orderBy, sin I/O), pero los datos que "llegan" los
+// controla el mock, no una suscripción real. Solo `addDoc`/`updateDoc` (las
+// únicas operaciones con I/O real) se mockean, siguiendo el mismo patrón que
+// packages/firebase-kit/src/ventas.test.ts.
 vi.mock('@gestion/firebase-kit', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@gestion/firebase-kit')>();
   return {
@@ -38,6 +39,36 @@ vi.mock('firebase/firestore', async (importOriginal) => {
     updateDoc: mocks.updateDoc,
   };
 });
+
+interface EstadoColeccionFalso<T> {
+  datos: T[];
+  cargando: boolean;
+  error: unknown;
+}
+
+let estadoProductos: EstadoColeccionFalso<Producto> = { datos: [], cargando: false, error: null };
+let estadoCategorias: EstadoColeccionFalso<Categoria> = { datos: [], cargando: false, error: null };
+
+/**
+ * `Productos.tsx` ahora suscribe DOS colecciones (`productos` y
+ * `categorias`, ver ModalCategorias) con el mismo `useCollection` mockeado
+ * entero: hace falta enrutar cada llamada al estado falso que corresponda.
+ * Se distingue mirando `_query.path` — un campo del SDK modular de Firestore
+ * sin tipo público, pero la query SÍ se arma con `collection`/`query`/
+ * `orderBy` reales (ver comentario de arriba), así que es la única señal
+ * disponible sin fingir todo el módulo `firebase/firestore` (como hace
+ * packages/firebase-kit/src/categorias.test.ts). Si una versión futura del
+ * SDK cambia esta forma interna, este test falla con un mensaje claro en vez
+ * de un falso verde.
+ */
+function nombreColeccion(query: unknown): string | undefined {
+  const interna = (query as { _query?: { path?: { segments?: string[] } } })._query;
+  return interna?.path?.segments?.[0];
+}
+
+mocks.useCollection.mockImplementation((query: unknown) =>
+  nombreColeccion(query) === 'categorias' ? estadoCategorias : estadoProductos,
+);
 
 function authPorDefecto() {
   return {
@@ -61,11 +92,21 @@ function configurarAuth(overrides: Partial<ReturnType<typeof authPorDefecto>> = 
 }
 
 function configurarCollection(overrides: { datos?: Producto[]; cargando?: boolean; error?: unknown }) {
-  mocks.useCollection.mockReturnValue({
+  estadoProductos = {
     datos: overrides.datos ?? [],
     cargando: overrides.cargando ?? false,
     error: overrides.error ?? null,
-  });
+  };
+}
+
+/** Default: sin categorías definidas (la mayoría de los tests de esta suite
+ * no ejercitan el select de categoría ni `ModalCategorias`). */
+function configurarCategorias(overrides: { datos?: Categoria[]; cargando?: boolean; error?: unknown } = {}) {
+  estadoCategorias = {
+    datos: overrides.datos ?? [],
+    cargando: overrides.cargando ?? false,
+    error: overrides.error ?? null,
+  };
 }
 
 function productoDe(over: Partial<Producto> & Pick<Producto, 'id' | 'modoStock'>): Producto {
@@ -80,6 +121,17 @@ function productoDe(over: Partial<Producto> & Pick<Producto, 'id' | 'modoStock'>
     ...over,
   };
 }
+
+function categoriaDe(over: Partial<Categoria> & Pick<Categoria, 'id'>): Categoria {
+  return { nombre: 'Categoría', orden: 0, ...over };
+}
+
+const categoriasFalsas: Categoria[] = [
+  categoriaDe({ id: 'c1', nombre: 'Quesos', orden: 0 }),
+  categoriaDe({ id: 'c2', nombre: 'Miel', orden: 1 }),
+  categoriaDe({ id: 'c3', nombre: 'Frutos secos', orden: 2 }),
+  categoriaDe({ id: 'c4', nombre: 'Embutidos', orden: 3 }),
+];
 
 const productosFalsos: Producto[] = [
   productoDe({
@@ -123,6 +175,12 @@ describe('Productos', () => {
     // (offline) dejaría ese valor filtrado a los tests siguientes. Restaura
     // el default (online) del `vi.hoisted` de arriba.
     mocks.useOnlineStatus.mockReturnValue(true);
+    // `estadoProductos`/`estadoCategorias` son variables planas, no estado
+    // de un mock: `clearAllMocks` no las toca. Sin este reset, la última
+    // configuración de un test (p. ej. categorías cargadas) se filtraría al
+    // siguiente que no llama a `configurarCategorias`.
+    estadoProductos = { datos: [], cargando: false, error: null };
+    estadoCategorias = { datos: [], cargando: false, error: null };
   });
 
   it('renderiza los productos del listado con modo, precio y estado', () => {
@@ -233,9 +291,73 @@ describe('Productos', () => {
     expect(mocks.addDoc).not.toHaveBeenCalled();
   });
 
+  describe('select de categoría (ModalProducto)', () => {
+    it('muestra las opciones ordenadas (orden de `categorias`, que ya llega ordenada por `orden`)', () => {
+      configurarAuth();
+      configurarCollection({ datos: [] });
+      configurarCategorias({ datos: categoriasFalsas });
+
+      renderizar();
+      fireEvent.click(screen.getAllByRole('button', { name: 'Agregar producto' })[0]!);
+
+      const select = screen.getByLabelText('Categoría') as HTMLSelectElement;
+      // La primera opción es el placeholder deshabilitado ("Elegí una
+      // categoría"): las siguientes reflejan el orden de `categoriasFalsas`.
+      const etiquetas = Array.from(select.options).map((o) => o.text);
+      expect(etiquetas.slice(1)).toEqual(['Quesos', 'Miel', 'Frutos secos', 'Embutidos']);
+    });
+
+    it('una categoría no definida en el vocabulario se agrega como opción extra "(sin definir)"', () => {
+      configurarAuth();
+      const productoHuerfano = productoDe({
+        id: 'p9',
+        nombre: 'Producto viejo',
+        categoria: 'Legumbres',
+        modoStock: 'granel',
+        stockGranelGramos: peso(1000),
+      });
+      configurarCollection({ datos: [productoHuerfano] });
+      configurarCategorias({ datos: categoriasFalsas });
+
+      renderizar();
+      fireEvent.click(screen.getByRole('button', { name: 'Editar' }));
+
+      const select = screen.getByLabelText('Categoría') as HTMLSelectElement;
+      expect(select.value).toBe('Legumbres');
+      expect(screen.getByRole('option', { name: 'Legumbres (sin definir)' })).toBeTruthy();
+    });
+
+    it('sin categorías definidas: el select se deshabilita y muestra el hint para ir a definirlas', () => {
+      configurarAuth();
+      configurarCollection({ datos: [] });
+      configurarCategorias({ datos: [] });
+
+      renderizar();
+      fireEvent.click(screen.getAllByRole('button', { name: 'Agregar producto' })[0]!);
+
+      const select = screen.getByLabelText('Categoría') as HTMLSelectElement;
+      expect(select.disabled).toBe(true);
+      expect(screen.getByText('Definí categorías desde Productos → Categorías.')).toBeTruthy();
+    });
+
+    it('la validación "categoría obligatoria" se mantiene con el select', () => {
+      configurarAuth();
+      configurarCollection({ datos: [] });
+      configurarCategorias({ datos: categoriasFalsas });
+
+      renderizar();
+      fireEvent.click(screen.getAllByRole('button', { name: 'Agregar producto' })[0]!);
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+      expect(screen.getByText('Ingresá la categoría.')).toBeTruthy();
+      expect(mocks.addDoc).not.toHaveBeenCalled();
+    });
+  });
+
   it('alta de un producto granel crea con stockGranelGramos: 0 y sin stockUnidades', async () => {
     configurarAuth();
     configurarCollection({ datos: [] });
+    configurarCategorias({ datos: categoriasFalsas });
     mocks.addDoc.mockResolvedValue({ id: 'nuevo' });
 
     renderizar();
@@ -260,6 +382,7 @@ describe('Productos', () => {
   it('alta de un producto unidad_simple crea con stockUnidades: 0 y sin stockGranelGramos', async () => {
     configurarAuth();
     configurarCollection({ datos: [] });
+    configurarCategorias({ datos: categoriasFalsas });
     mocks.addDoc.mockResolvedValue({ id: 'nuevo' });
 
     renderizar();
@@ -282,6 +405,7 @@ describe('Productos', () => {
   it('alta de un producto pieza_entera no incluye stockGranelGramos ni stockUnidades', async () => {
     configurarAuth();
     configurarCollection({ datos: [] });
+    configurarCategorias({ datos: categoriasFalsas });
     mocks.addDoc.mockResolvedValue({ id: 'nuevo' });
 
     renderizar();
@@ -336,6 +460,7 @@ describe('Productos', () => {
   it('muestra un toast de éxito y cierra el modal al crear correctamente', async () => {
     configurarAuth();
     configurarCollection({ datos: [] });
+    configurarCategorias({ datos: categoriasFalsas });
     mocks.addDoc.mockResolvedValue({ id: 'nuevo' });
 
     renderizar();
@@ -356,6 +481,7 @@ describe('Productos', () => {
   it('muestra un toast de error si addDoc falla', async () => {
     configurarAuth();
     configurarCollection({ datos: [] });
+    configurarCategorias({ datos: categoriasFalsas });
     mocks.addDoc.mockRejectedValue(new Error('offline'));
 
     renderizar();
@@ -372,6 +498,7 @@ describe('Productos', () => {
   it('sin conexión: guarda sin esperar el ack del servidor, cierra el modal al instante y avisa que falta sincronizar', async () => {
     configurarAuth();
     configurarCollection({ datos: [] });
+    configurarCategorias({ datos: categoriasFalsas });
     mocks.useOnlineStatus.mockReturnValue(false);
     mocks.addDoc.mockResolvedValue({ id: 'nuevo' });
 
@@ -399,6 +526,7 @@ describe('Productos', () => {
   it('con conexión: sigue esperando el ack del servidor antes de cerrar y mostrar el toast de éxito (regresión)', async () => {
     configurarAuth();
     configurarCollection({ datos: [] });
+    configurarCategorias({ datos: categoriasFalsas });
     mocks.useOnlineStatus.mockReturnValue(true);
     mocks.addDoc.mockResolvedValue({ id: 'nuevo' });
 
@@ -424,13 +552,21 @@ describe('Productos', () => {
     configurarCollection({ error: new Error('boom') });
 
     renderizar();
-    const llamadasAntes = mocks.useCollection.mock.calls.length;
-    const queryAntes = mocks.useCollection.mock.calls[llamadasAntes - 1]![0];
+    // `useCollection` ahora se llama dos veces por render (productos y
+    // categorías, ver ModalCategorias): se filtra por la de 'productos' —
+    // "Reintentar" en este error solo cambia `intentoId`, no
+    // `intentoIdCategorias`.
+    const llamadasProductosAntes = mocks.useCollection.mock.calls.filter(
+      (llamada) => nombreColeccion(llamada[0]) !== 'categorias',
+    );
+    const queryAntes = llamadasProductosAntes[llamadasProductosAntes.length - 1]![0];
 
     fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }));
 
-    const llamadasDespues = mocks.useCollection.mock.calls.length;
-    const queryDespues = mocks.useCollection.mock.calls[llamadasDespues - 1]![0];
+    const llamadasProductosDespues = mocks.useCollection.mock.calls.filter(
+      (llamada) => nombreColeccion(llamada[0]) !== 'categorias',
+    );
+    const queryDespues = llamadasProductosDespues[llamadasProductosDespues.length - 1]![0];
     expect(queryDespues).not.toBe(queryAntes);
   });
 });
