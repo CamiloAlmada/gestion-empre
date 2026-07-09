@@ -1,7 +1,31 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { formatearMoney } from '@gestion/core';
 import { Button } from '@gestion/ui';
 import { detalleItem, totalCarrito, type ItemCarrito } from './itemsCarrito';
+
+/**
+ * Umbral de arrastre para cerrar la hoja expandida arrastrando desde el
+ * agarre (docs/06-ui-ux.md §6). Fijo en px (no % de la altura de la hoja):
+ * la altura varía con la cantidad de ítems y en jsdom `getBoundingClientRect`
+ * devuelve 0 (no hay layout real), así que un umbral relativo sería
+ * indeterminista en tests y, para el usuario, un gesto de "tirar hacia
+ * abajo" con el pulgar tiene un recorrido físico parecido sin importar
+ * cuánto contenido tenga la lista. 90px es el punto medio del rango sugerido
+ * (~80-100px).
+ */
+const UMBRAL_CIERRE_ARRASTRE_PX = 90;
+
+/**
+ * `matchMedia` no existe en jsdom (ni la propiedad está definida en
+ * `window`, ver MetaThemeColor.test.tsx) — se guarda con un chequeo de tipo
+ * en vez de `vi.spyOn`. Se consulta en el momento (sin state ni listener):
+ * el arrastre es una interacción corta, no hace falta reaccionar a un
+ * cambio de la preferencia del SO a mitad de gesto.
+ */
+function prefiereMovimientoReducido(): boolean {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
 
 export interface CarritoProps {
   items: ItemCarrito[];
@@ -48,6 +72,12 @@ function FilaItem({ item, onQuitar }: FilaItemProps) {
  */
 export function Carrito({ items, onQuitar, onCobrar, procesando }: CarritoProps) {
   const [expandidoMobile, setExpandidoMobile] = useState(false);
+  // Desplazamiento vertical (px, siempre ≥0) que sigue al dedo mientras se
+  // arrastra el agarre hacia abajo; `arrastrando` distingue "siguiendo el
+  // dedo" (sin transición) de "volviendo a su lugar" (con transición).
+  const [arrastreY, setArrastreY] = useState(0);
+  const [arrastrando, setArrastrando] = useState(false);
+  const inicioArrastreRef = useRef<number | null>(null);
   const total = totalCarrito(items);
   const cantidad = items.length;
   const carritoVacio = cantidad === 0;
@@ -61,6 +91,51 @@ export function Carrito({ items, onQuitar, onCobrar, procesando }: CarritoProps)
     document.addEventListener('keydown', alPresionarTecla);
     return () => document.removeEventListener('keydown', alPresionarTecla);
   }, [expandidoMobile]);
+
+  // Arrastre para cerrar desde la franja superior (agarre) de la hoja
+  // expandida (docs/06-ui-ux.md §6). Pointer Events cubre touch y mouse con
+  // una sola API; `setPointerCapture` asegura que move/up sigan llegando acá
+  // aunque el dedo salga de la franja. jsdom (tests) no implementa
+  // `setPointerCapture`, de ahí el chequeo de tipo antes de llamarlo.
+  function alBajarPuntero(evento: ReactPointerEvent<HTMLDivElement>) {
+    inicioArrastreRef.current = evento.clientY;
+    setArrastrando(true);
+    if (typeof evento.currentTarget.setPointerCapture === 'function') {
+      evento.currentTarget.setPointerCapture(evento.pointerId);
+    }
+  }
+
+  function alMoverPuntero(evento: ReactPointerEvent<HTMLDivElement>) {
+    if (inicioArrastreRef.current === null) return;
+    // Arrastres hacia arriba se ignoran (clamp a 0): la hoja expandida no
+    // se "estira" más allá de su posición de reposo.
+    const delta = Math.max(0, evento.clientY - inicioArrastreRef.current);
+    // prefers-reduced-motion: nunca se actualiza `arrastreY`, así que la
+    // hoja no sigue visualmente al dedo (sin animación de seguimiento).
+    if (!prefiereMovimientoReducido()) {
+      setArrastreY(delta);
+    }
+  }
+
+  function soltarArrastre(evento: ReactPointerEvent<HTMLDivElement>) {
+    if (inicioArrastreRef.current === null) return;
+    const delta = Math.max(0, evento.clientY - inicioArrastreRef.current);
+    inicioArrastreRef.current = null;
+    setArrastrando(false);
+    setArrastreY(0);
+    if (delta > UMBRAL_CIERRE_ARRASTRE_PX) setExpandidoMobile(false);
+  }
+
+  function cancelarArrastre() {
+    inicioArrastreRef.current = null;
+    setArrastrando(false);
+    setArrastreY(0);
+  }
+
+  const estiloArrastre: CSSProperties | undefined =
+    expandidoMobile && arrastreY > 0
+      ? { transform: `translateY(${arrastreY}px)`, transition: arrastrando ? 'none' : 'transform 180ms ease-out' }
+      : undefined;
 
   return (
     <>
@@ -136,15 +211,35 @@ export function Carrito({ items, onQuitar, onCobrar, procesando }: CarritoProps)
             ? 'rounded-t-card shadow-hoja-expandida'
             : 'shadow-hoja'
         }`}
+        style={estiloArrastre}
       >
         {expandidoMobile && (
-          <ul className="flex max-h-[40vh] flex-col gap-2 overflow-y-auto p-3">
-            {carritoVacio ? (
-              <p className="text-sm text-texto-secundario">Todavía no agregaste productos.</p>
-            ) : (
-              items.map((item) => <FilaItem key={item.clave} item={item} onQuitar={onQuitar} />)
-            )}
-          </ul>
+          <>
+            {/* Franja de arrastre: agarre visual + padding generoso, target
+                táctil ≥44px de alto (docs/06-ui-ux.md §5 y §6). Solo esta
+                franja escucha pointer events — la lista de abajo conserva su
+                `overflow-y-auto` sin que el drag le robe el scroll. El
+                agarre es puramente decorativo (`aria-hidden`): el cierre
+                accesible ya existe vía el botón de abajo y Escape. */}
+            <div
+              data-testid="agarre-carrito"
+              aria-hidden="true"
+              className="flex min-h-[44px] touch-none items-center justify-center"
+              onPointerDown={alBajarPuntero}
+              onPointerMove={alMoverPuntero}
+              onPointerUp={soltarArrastre}
+              onPointerCancel={cancelarArrastre}
+            >
+              <span className="h-[5px] w-10 rounded-full bg-borde" />
+            </div>
+            <ul className="flex max-h-[40vh] flex-col gap-2 overflow-y-auto p-3">
+              {carritoVacio ? (
+                <p className="text-sm text-texto-secundario">Todavía no agregaste productos.</p>
+              ) : (
+                items.map((item) => <FilaItem key={item.clave} item={item} onQuitar={onQuitar} />)
+              )}
+            </ul>
+          </>
         )}
         <div className="flex items-center gap-3 p-3">
           <button
