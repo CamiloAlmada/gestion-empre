@@ -13,6 +13,29 @@
  * SOLO deben usar los tokens semánticos y la escala primary — nunca
  * neutral-* ni colores default de Tailwind (ver docs/06-ui-ux.md §4).
  *
+ * Sistema de temas — dos ejes independientes que componen (ver
+ * docs/06-ui-ux.md §4):
+ *   - Modo:   light / dark / system        → data-theme="light|dark" en <html>
+ *   - Estilo: Minimalista (default) / Cálido → data-estilo="calido" en <html>
+ *
+ * Los tokens semánticos se arman en DOS capas ortogonales:
+ *   Capa 1 (más abajo, primer :root): pares crudos "--token-light" /
+ *     "--token-dark" con los valores del estilo Minimalista. Un futuro
+ *     bloque `[data-estilo='calido']` redefine estos mismos pares con los
+ *     valores del estilo Cálido — DEBE declararse DESPUÉS de este :root en
+ *     el archivo: `:root` y `[data-estilo='calido']` empatan en
+ *     especificidad (0,1,0), así que gana el que aparece último en la
+ *     cascada. El orden es load-bearing.
+ *   Capa 2 (segundo :root + [data-theme='dark'] + media query): elige,
+ *     para cada token semántico final (--fondo, --texto, etc.), cuál de los
+ *     dos pares (-light/-dark) usar según el modo activo. Esta capa NO
+ *     conoce estilos: solo lee var(--token-light) / var(--token-dark), que
+ *     ya reflejan el estilo vigente gracias a la Capa 1. Como la
+ *     sustitución de var() ocurre a computed-value time (con el valor ya
+ *     resuelto de la Capa 1), NO hace falta ningún selector combinado
+ *     `[data-estilo][data-theme]`: las 2×2 combinaciones salen solas de
+ *     cruzar ambas capas.
+ *
  * Todos los pares de contraste usados por los componentes están
  * verificados AA (≥4.5:1 texto normal, ≥3:1 componentes UI/foco) — ver
  * docs/06-ui-ux.md §7.
@@ -50,30 +73,100 @@
   --color-neutral-950: oklch(0.1 0.006 75);
 }
 
-/* Tokens semánticos — valores light (default). */
+/* ---------------------------------------------------------------------
+ * Capa 1 — pares crudos por estilo (Minimalista).
+ *
+ * IMPORTANTE: un futuro bloque `[data-estilo='calido']` que redefina estos
+ * mismos custom properties debe declararse DESPUÉS de este :root: ambos
+ * selectores tienen especificidad (0,1,0), y en un empate gana la última
+ * regla en la cascada. No reordenar sin mover ese bloque también.
+ *
+ * --superficie-translucida NO tiene par acá: se deriva una sola vez por
+ * modo en la Capa 2, a partir de --superficie ya resuelto (ver abajo).
+ * --------------------------------------------------------------------- */
 :root {
-  --fondo: var(--color-neutral-100);
-  --superficie: var(--color-neutral-50);
-  --superficie-translucida: oklch(from var(--color-neutral-50) l c h / 0.82);
-  --texto: var(--color-neutral-900);
-  --texto-secundario: var(--color-neutral-600);
-  --borde: var(--color-neutral-400);
-  --exito: oklch(0.48 0.14 145);
-  --peligro: oklch(0.55 0.2 25);
-  --advertencia: oklch(0.5 0.11 55);
+  --fondo-light: var(--color-neutral-100);
+  --fondo-dark: var(--color-neutral-950);
+
+  --superficie-light: var(--color-neutral-50);
+  --superficie-dark: var(--color-neutral-900);
+
+  --texto-light: var(--color-neutral-900);
+  --texto-dark: var(--color-neutral-50);
+
+  --texto-secundario-light: var(--color-neutral-600);
+  --texto-secundario-dark: var(--color-neutral-400);
+
+  --borde-light: var(--color-neutral-400);
+  --borde-dark: var(--color-neutral-500);
+
+  --exito-light: oklch(0.48 0.14 145);
+  --exito-dark: oklch(0.7 0.18 145);
+
+  --peligro-light: oklch(0.55 0.2 25);
+  --peligro-dark: oklch(0.68 0.19 25);
+
+  --advertencia-light: oklch(0.5 0.11 55);
+  --advertencia-dark: oklch(0.7 0.16 55);
+}
+
+/* ---------------------------------------------------------------------
+ * Tokens de forma (radios y sombras). Sin variación por modo ni estilo en
+ * esta capa fundacional: valores por defecto = look actual (Minimalista).
+ * Un futuro bloque `[data-estilo='calido']` puede redefinir estos mismos
+ * custom properties (misma regla de orden que arriba).
+ *
+ * Ninguna utilidad generada por estos tokens (rounded-card, shadow-hoja,
+ * etc.) está en uso todavía — quedan como no-op hasta que otra tarea migre
+ * componentes. Ver @theme inline más abajo.
+ *
+ * --sombra-card/--sombra-flotante: copiados LITERALES de --shadow-sm /
+ * --shadow-lg de tailwindcss@4.3.2 (node_modules/tailwindcss/theme.css),
+ * NO como var(--shadow-*): Tailwind v4 tree-shakea variables de tema que no
+ * se referencian desde una utilidad generada, así que un var() apuntando a
+ * un token no usado se rompería.
+ * --------------------------------------------------------------------- */
+:root {
+  --radio-card: 1rem; /* = rounded-2xl */
+  --radio-elemento: 0.75rem; /* = rounded-xl */
+  --radio-control: 0.5rem; /* = rounded-lg */
+  --radio-flotante: 1rem;
+
+  --sombra-card: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1); /* = shadow-sm */
+  --sombra-flotante: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1); /* = shadow-lg */
+  --sombra-hoja: 0 -4px 16px rgb(0 0 0 / 0.08);
+  --sombra-hoja-expandida: 0 -12px 32px rgb(0 0 0 / 0.16);
+}
+
+/* ---------------------------------------------------------------------
+ * Capa 2 — selección light/dark. Esta capa no conoce estilos: solo cruza
+ * el modo activo con los pares de la Capa 1. Se repite en tres selectores
+ * (light por defecto, dark explícito, dark por prefers-color-scheme) para
+ * cubrir los tres modos: light / dark / system.
+ * --------------------------------------------------------------------- */
+:root {
+  --fondo: var(--fondo-light);
+  --superficie: var(--superficie-light);
+  --superficie-translucida: oklch(from var(--superficie) l c h / 0.82);
+  --texto: var(--texto-light);
+  --texto-secundario: var(--texto-secundario-light);
+  --borde: var(--borde-light);
+  --exito: var(--exito-light);
+  --peligro: var(--peligro-light);
+  --advertencia: var(--advertencia-light);
 }
 
 /* Tokens semánticos — dark explícito, vía data-theme="dark" en <html>. */
 [data-theme='dark'] {
-  --fondo: var(--color-neutral-950);
-  --superficie: var(--color-neutral-900);
-  --superficie-translucida: oklch(from var(--color-neutral-900) l c h / 0.82);
-  --texto: var(--color-neutral-50);
-  --texto-secundario: var(--color-neutral-400);
-  --borde: var(--color-neutral-500);
-  --exito: oklch(0.7 0.18 145);
-  --peligro: oklch(0.68 0.19 25);
-  --advertencia: oklch(0.7 0.16 55);
+  --fondo: var(--fondo-dark);
+  --superficie: var(--superficie-dark);
+  --superficie-translucida: oklch(from var(--superficie) l c h / 0.82);
+  --texto: var(--texto-dark);
+  --texto-secundario: var(--texto-secundario-dark);
+  --borde: var(--borde-dark);
+  --exito: var(--exito-dark);
+  --peligro: var(--peligro-dark);
+  --advertencia: var(--advertencia-dark);
 }
 
 /* Tokens semánticos — modo "system": solo rige cuando NO hay data-theme
@@ -82,20 +175,21 @@
    ambos matchean. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
-    --fondo: var(--color-neutral-950);
-    --superficie: var(--color-neutral-900);
-    --superficie-translucida: oklch(from var(--color-neutral-900) l c h / 0.82);
-    --texto: var(--color-neutral-50);
-    --texto-secundario: var(--color-neutral-400);
-    --borde: var(--color-neutral-500);
-    --exito: oklch(0.7 0.18 145);
-    --peligro: oklch(0.68 0.19 25);
-    --advertencia: oklch(0.7 0.16 55);
+    --fondo: var(--fondo-dark);
+    --superficie: var(--superficie-dark);
+    --superficie-translucida: oklch(from var(--superficie) l c h / 0.82);
+    --texto: var(--texto-dark);
+    --texto-secundario: var(--texto-secundario-dark);
+    --borde: var(--borde-dark);
+    --exito: var(--exito-dark);
+    --peligro: var(--peligro-dark);
+    --advertencia: var(--advertencia-dark);
   }
 }
 
 /* Mapea los tokens semánticos (variables crudas de arriba) a utilidades de
-   Tailwind: bg-fondo, text-texto, border-borde, bg-exito, etc. */
+   Tailwind: bg-fondo, text-texto, border-borde, bg-exito, rounded-card,
+   shadow-hoja, etc. */
 @theme inline {
   --color-fondo: var(--fondo);
   --color-superficie: var(--superficie);
@@ -106,6 +200,16 @@
   --color-exito: var(--exito);
   --color-peligro: var(--peligro);
   --color-advertencia: var(--advertencia);
+
+  --radius-card: var(--radio-card);
+  --radius-elemento: var(--radio-elemento);
+  --radius-control: var(--radio-control);
+  --radius-flotante: var(--radio-flotante);
+
+  --shadow-card: var(--sombra-card);
+  --shadow-flotante: var(--sombra-flotante);
+  --shadow-hoja: var(--sombra-hoja);
+  --shadow-hoja-expandida: var(--sombra-hoja-expandida);
 }
 
 /* Redefine el variant "dark:" para que responda a la misma mecánica que los
@@ -121,3 +225,12 @@
     }
   }
 }
+
+/* Variant estructural para el estilo "Cálido" (data-estilo="calido" en
+   <html>). Los estilos SOLO deben usar `calido:` para diferencias
+   estructurales/de layout que no puedan expresarse como token (p.ej. tab
+   bar flotante despegada) — toda diferencia de color o forma debe salir de
+   redefinir los tokens en un bloque `[data-estilo='calido']` (ver Capa 1
+   más arriba), no de `calido:` disperso en los componentes. Si aparece
+   `calido:` fuera de ese caso estructural, probablemente falta un token. */
+@custom-variant calido (&:where([data-estilo='calido'], [data-estilo='calido'] *));
