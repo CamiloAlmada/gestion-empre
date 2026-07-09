@@ -14,12 +14,14 @@ import {
 import { Button } from '@gestion/ui';
 import { db } from '../firebase';
 import { agruparPorCategoria } from '../componentes/stock/agrupacion';
+import { contarAlertas, filtrarPorAlerta, type TipoAlerta } from '../componentes/stock/alertas';
 import { DetalleProducto } from '../componentes/stock/DetalleProducto';
+import { FranjaAlertas } from '../componentes/stock/FranjaAlertas';
 import { ListaProductosAgrupada } from '../componentes/stock/ListaProductosAgrupada';
 import { ModalAjusteNegativo } from '../componentes/stock/ModalAjusteNegativo';
 import { ModalIngresarPiezas } from '../componentes/stock/ModalIngresarPiezas';
 import { ModalSumarStock } from '../componentes/stock/ModalSumarStock';
-import { agruparPiezasPorProducto, calcularResumen } from '../componentes/stock/resumen';
+import { agruparPiezasPorProducto, calcularResumen, type ResumenStock } from '../componentes/stock/resumen';
 
 type Modal = 'ingreso' | 'sumar' | 'ajuste' | null;
 
@@ -48,6 +50,7 @@ export function Stock() {
   const [productoSeleccionadoId, setProductoSeleccionadoId] = useState<string | null>(null);
   const [modal, setModal] = useState<Modal>(null);
   const [piezaParaAjustar, setPiezaParaAjustar] = useState<Pieza | null>(null);
+  const [alertaActiva, setAlertaActiva] = useState<TipoAlerta | null>(null);
 
   // `db` es el import estable de '../firebase' (no cambia entre renders); la
   // única dependencia real de estas queries es `intento`, que fuerza un
@@ -77,9 +80,35 @@ export function Stock() {
   const categorias = useCollection<Categoria>(categoriasQuery);
 
   const piezasAgrupadas = useMemo(() => agruparPiezasPorProducto(piezas.datos), [piezas.datos]);
+
+  // Resumen por producto, base tanto de las filas (peso/vencimiento) como de
+  // la franja de alertas: se calcula UNA vez acá y se reutiliza, en vez de
+  // recalcularlo en `ListaProductos` y en la franja por separado.
+  const resumenesPorProducto = useMemo(() => {
+    const mapa = new Map<string, ResumenStock>();
+    for (const producto of productos.datos) {
+      mapa.set(producto.id, calcularResumen(producto, piezasAgrupadas.get(producto.id) ?? []));
+    }
+    return mapa;
+  }, [productos.datos, piezasAgrupadas]);
+
+  const conteoAlertas = useMemo(
+    () => contarAlertas(productos.datos, resumenesPorProducto),
+    [productos.datos, resumenesPorProducto],
+  );
+
+  function alternarAlerta(alerta: TipoAlerta) {
+    setAlertaActiva((actual) => (actual === alerta ? null : alerta));
+  }
+
+  const productosFiltrados = useMemo(
+    () => filtrarPorAlerta(productos.datos, resumenesPorProducto, alertaActiva),
+    [productos.datos, resumenesPorProducto, alertaActiva],
+  );
+
   const gruposPorCategoria = useMemo(
-    () => agruparPorCategoria(productos.datos, categorias.datos),
-    [productos.datos, categorias.datos],
+    () => agruparPorCategoria(productosFiltrados, categorias.datos),
+    [productosFiltrados, categorias.datos],
   );
 
   const productoSeleccionado = productos.datos.find((p) => p.id === productoSeleccionadoId) ?? null;
@@ -149,6 +178,7 @@ export function Stock() {
   } else if (productoSeleccionado === null) {
     contenido = (
       <>
+        <FranjaAlertas conteo={conteoAlertas} alertaActiva={alertaActiva} onAlternar={alternarAlerta} />
         <div className="flex justify-end">
           <Link
             to="/stock/productos"
