@@ -171,4 +171,103 @@ describe('Shell', () => {
 
     expect(screen.queryByText('Conexión restablecida')).toBeNull();
   });
+
+  describe('acciones contextuales: dual-render header/cluster (docs/06-ui-ux.md §2)', () => {
+    it('con acciones, existen ambos renders (slot del header y cluster flotante) — la visibilidad la decide CSS, no jsdom (mismo patrón que el modo compacto de DataTable)', () => {
+      configurarAuth('admin');
+
+      render(
+        <MemoryRouter initialEntries={['/stock/productos']}>
+          <ProveedorToasts>
+            <Routes>
+              <Route element={<Shell />}>
+                <Route
+                  path="stock/productos"
+                  element={
+                    <PantallaConHeader
+                      titulo="Productos"
+                      volverA={{ etiqueta: 'Stock', a: '/stock' }}
+                      acciones={<button type="button">Agregar producto</button>}
+                    />
+                  }
+                />
+              </Route>
+            </Routes>
+          </ProveedorToasts>
+        </MemoryRouter>,
+      );
+
+      // El mismo nodo aparece dos veces en el DOM: una vez en el slot oculto
+      // en mobile del header (`hidden md:flex`) y otra en el cluster
+      // flotante oculto en desktop (`md:hidden`).
+      expect(screen.getAllByRole('button', { name: 'Agregar producto' })).toHaveLength(2);
+      expect(screen.getByTestId('cluster-acciones')).toBeTruthy();
+      // El cluster vive DESPUÉS del contenido principal en el DOM (docs/06
+      // §2: los lectores de pantalla llegan al contenido antes que acá).
+      expect(
+        screen
+          .getByText('Contenido de Productos')
+          .compareDocumentPosition(screen.getByTestId('cluster-acciones')) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    });
+
+    it('sin acciones, no se renderiza el cluster flotante', () => {
+      configurarAuth('admin');
+
+      renderizarEn('/venta');
+
+      expect(screen.queryByTestId('cluster-acciones')).toBeNull();
+    });
+
+    it('con acciones, el <main> suma el padding inferior extra (mobile) además del base', () => {
+      configurarAuth('admin');
+
+      const { container } = render(
+        <MemoryRouter initialEntries={['/stock/productos']}>
+          <ProveedorToasts>
+            <Routes>
+              <Route element={<Shell />}>
+                <Route
+                  path="stock/productos"
+                  element={
+                    <PantallaConHeader
+                      titulo="Productos"
+                      volverA={{ etiqueta: 'Stock', a: '/stock' }}
+                      acciones={<button type="button">Agregar producto</button>}
+                    />
+                  }
+                />
+              </Route>
+            </Routes>
+          </ProveedorToasts>
+        </MemoryRouter>,
+      );
+
+      const main = container.querySelector('main');
+      expect(main?.className).toContain('pb-[calc(var(--altura-zona-inferior)+2rem+3.5rem)]');
+      expect(main?.className).toContain('md:pb-[calc(var(--altura-zona-inferior)+2rem)]');
+    });
+
+    it('sin acciones, el <main> usa solo el padding inferior base', () => {
+      configurarAuth('admin');
+
+      const { container } = render(
+        <MemoryRouter initialEntries={['/venta']}>
+          <ProveedorToasts>
+            <Routes>
+              <Route element={<Shell />}>
+                <Route path="venta" element={<div>Contenido de Venta</div>} />
+              </Route>
+            </Routes>
+          </ProveedorToasts>
+        </MemoryRouter>,
+      );
+
+      const main = container.querySelector('main');
+      expect(main?.className).toBe(
+        'mx-auto max-w-5xl p-4 pb-[calc(var(--altura-zona-inferior)+2rem)]',
+      );
+    });
+  });
 });

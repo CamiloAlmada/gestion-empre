@@ -31,11 +31,13 @@ import { useHeader } from '../componentes/header/ContextoHeader';
 // Acciones compactas del header (docs/06-ui-ux.md §2, hasta 2 por pantalla):
 // mismas clases visuales que `Button` de @gestion/ui, pero con `aria-label`
 // propio (Button no lo expone) para que "Agregar" pueda mostrarse como ícono
-// solo en mobile sin perder un nombre accesible descriptivo.
+// solo en mobile sin perder un nombre accesible descriptivo. min-h/min-w de
+// 48px (no 44): en mobile flotan sobre la tab bar (docs/06 §2 y §5 — targets
+// ≥48px ahí).
 const CLASE_ACCION_PRIMARIA =
-  'inline-flex min-h-[44px] min-w-[44px] items-center justify-center gap-1.5 rounded-lg bg-primary-600 px-3 font-medium text-white hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2 focus-visible:ring-offset-superficie';
+  'inline-flex min-h-[48px] min-w-[48px] items-center justify-center gap-1.5 rounded-lg bg-primary-600 px-3 font-medium text-white hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2 focus-visible:ring-offset-superficie';
 const CLASE_ACCION_SECUNDARIA =
-  'inline-flex min-h-[44px] items-center justify-center rounded-lg border border-borde bg-superficie px-3 text-sm font-medium text-texto hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600';
+  'inline-flex min-h-[48px] items-center justify-center rounded-lg border border-borde bg-superficie px-3 text-sm font-medium text-texto hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600';
 
 type EstadoModal = { tipo: 'cerrado' } | { tipo: 'alta' } | { tipo: 'edicion'; producto: Producto };
 

@@ -156,6 +156,57 @@
   --advertencia: var(--advertencia-light);
 }
 
+/* ---------------------------------------------------------------------
+ * Variables de layout del shell. No varían por modo; el estilo Cálido
+ * redefinirá --altura-zona-inferior (tab bar flotante) sin tocar a los
+ * consumidores.
+ * --------------------------------------------------------------------- */
+:root {
+  /* Altura real del header de la app (fila única + padding, sin contar el
+     safe-area del notch), expuesta acá — no en el inline-style de Shell.tsx —
+     para que cualquier consumidor (hoy solo `ListaProductosAgrupada`, para su
+     offset sticky) la lea con `var(--altura-header)` sin repetir el número
+     mágico (docs/04, deuda cerrada por SH-1; TH-A la responsivizó al mover
+     las acciones contextuales fuera del header en mobile, docs/06-ui-ux.md
+     §2). Single source of truth: si el header cambia de altura, se ajusta
+     acá una sola vez.
+     Mobile (fila SIN las 2 acciones, que ahora flotan sobre la tab bar):
+     0.75rem (pt) + 1.75rem (fila título `h1 text-lg`, único elemento que
+     domina la altura cuando no hay `volverA`) + 0.75rem (pb-3) = 3.25rem.
+     Se deja el redondeo a 3.5rem como margen de seguridad: el único
+     consumidor (`ListaProductosAgrupada`, en Stock, pantalla sin `volverA`)
+     necesita que el offset NUNCA quede por debajo de la altura real del
+     header (si no, el contenido sticky se mete debajo). En subvistas CON
+     `volverA` (Productos, Usuarios, detalle de producto) el link "‹ Volver"
+     fija un `min-h-[44px]` (2.75rem) que sí supera este valor — no afecta a
+     este cálculo porque ninguna de esas pantallas usa offset sticky hoy;
+     si alguna futura lo necesitara, este número seguiría quedando corto y
+     habría que revisarlo. */
+  --altura-header: calc(env(safe-area-inset-top) + 3.5rem);
+
+  /* Distancia del borde inferior del viewport al borde superior de la tab
+     bar (hoy: la propia altura de `BarraPestanas`, `h-16` = 4rem). La
+     consumen el carrito del POS (`Carrito.tsx`, resumen fijo mobile), el
+     padding inferior de `<main>` en `Shell.tsx` y el cluster de acciones
+     contextuales flotantes (mobile, docs/06-ui-ux.md §2). Una tarea futura
+     puede redefinirla por estilo (p.ej. tab bar flotante despegada del
+     estilo Cálido) sin tocar a sus consumidores. */
+  --altura-zona-inferior: 4rem;
+}
+
+/* `--altura-header` en `md:`+ (docs/06-ui-ux.md §2): a partir de acá las
+   acciones contextuales vuelven a vivir DENTRO del header (mouse, no zona de
+   pulgar), en una fila propia de hasta 2 botones con `min-h` de 44-48px
+   (según pantalla). 0.75rem (pt) + 2.75rem (fila de acciones, 44px) +
+   0.75rem (pb-3) = 4.25rem — mismo cálculo que tenía el header único antes
+   de TH-A. Si el min-h de las acciones cambia, este número hay que
+   recalcularlo a mano (mismo criterio que el bloque de arriba). */
+@media (min-width: 48rem) {
+  :root {
+    --altura-header: calc(env(safe-area-inset-top) + 4.25rem);
+  }
+}
+
 /* Tokens semánticos — dark explícito, vía data-theme="dark" en <html>. */
 [data-theme='dark'] {
   --fondo: var(--fondo-dark);

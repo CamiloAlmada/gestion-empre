@@ -127,7 +127,14 @@ export function Usuarios() {
   useHeader({
     titulo: 'Usuarios',
     volverA: { etiqueta: 'Ajustes', a: '/ajustes' },
-    acciones: <Button onClick={abrirModalInvitar}>Invitar usuario</Button>,
+    // min-h-[48px]: en mobile esta acción flota sobre la tab bar
+    // (docs/06-ui-ux.md §2 y §5 — targets ≥48px ahí; `Button` no fuerza una
+    // altura mínima propia).
+    acciones: (
+      <Button onClick={abrirModalInvitar} className="min-h-[48px]">
+        Invitar usuario
+      </Button>
+    ),
   });
 
   const consultaUsuarios = useMemo(
