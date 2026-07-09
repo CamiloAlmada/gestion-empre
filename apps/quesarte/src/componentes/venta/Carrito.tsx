@@ -103,11 +103,11 @@ export function Carrito({ items, onQuitar, onCobrar, procesando }: CarritoProps)
           justo encima de la tab bar-píldora (bottom-(--altura-zona-inferior)
           ya crece solo, ver tailwind.css). Sin retoque, una hoja a todo el
           ancho (inset-x-0) con esquina recta quedaría más ancha que la
-          píldora de abajo (que tiene inset-x-3 + esquinas curvas de radio
-          2rem en sus extremos) — se ve como una tapa recta "flotando" sobre
+          píldora de abajo (que tiene inset-x-3 + rounded-flotante, en Cálido
+          píldora completa: 9999px) — se ve como una tapa recta "flotando" sobre
           un borde que se curva hacia adentro debajo de ella. Con
           calido:inset-x-3 la hoja iguala el ancho de la píldora (el
-          desajuste de curvatura que queda en los 2 extremos, ~2rem, es el
+          desajuste de curvatura que queda en los 2 extremos es el
           mismo que tiene cualquier tapa recta sobre un borde redondeado, y
           es sutil comparado con el desborde de 12px por lado sin el ajuste).
           calido:rounded-t-card + border perimetral sin el lado de abajo
