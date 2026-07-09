@@ -554,6 +554,21 @@ describe('clientes', () => {
     );
   });
 
+  it('vendedor NO crea cliente con fechas en stats (las escriben las ventas, no el alta)', async () => {
+    await assertFails(
+      setDoc(doc(db(VENDEDOR), 'clientes', 'cli-x'), {
+        ...clienteAltaRapida(),
+        stats: { cantidadVentas: 0, totalHistoricoCents: 0, primeraCompra: Date.now() },
+      }),
+    );
+  });
+
+  it('vendedor NO crea cliente con un opcional de contacto de tipo inválido (alias numérico)', async () => {
+    await assertFails(
+      setDoc(doc(db(VENDEDOR), 'clientes', 'cli-x'), { ...clienteAltaRapida(), alias: 123 }),
+    );
+  });
+
   it('vendedor NO edita datos de contacto', async () => {
     await assertFails(
       updateDoc(doc(db(VENDEDOR), 'clientes', 'cli-1'), { telefono: '099000000' }),
@@ -593,6 +608,25 @@ describe('clientes', () => {
       updateDoc(doc(db(VENDEDOR), 'clientes', 'cli-1'), {
         'stats.cantidadVentas': increment(-1),
         'stats.totalHistoricoCents': increment(-4500),
+      }),
+    );
+  });
+
+  it('vendedor NO cuela una sub-clave desconocida dentro de stats', async () => {
+    await assertFails(
+      updateDoc(doc(db(VENDEDOR), 'clientes', 'cli-1'), {
+        'stats.cantidadVentas': increment(1),
+        'stats.totalHistoricoCents': increment(4500),
+        'stats.loQueSea': 1,
+      }),
+    );
+  });
+
+  it('vendedor NO actualiza stats con un increment fraccionario (total dejaría de ser entero)', async () => {
+    await assertFails(
+      updateDoc(doc(db(VENDEDOR), 'clientes', 'cli-1'), {
+        'stats.cantidadVentas': increment(1),
+        'stats.totalHistoricoCents': increment(0.5),
       }),
     );
   });

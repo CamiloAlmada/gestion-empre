@@ -110,16 +110,22 @@ service cloud.firestore {
     // Shape estricto para el ALTA de un cliente (create de vendedor o admin): el
     // vendedor hace alta rápida en el POS, así que se valida acá igual que la
     // invitación de usuario. `nombre` obligatorio no vacío, `activo` nace true, y
-    // `stats` NACE EN CERO (cantidadVentas 0, totalHistoricoCents 0, sin fechas):
-    // el cache lo llenan después los increments de la venta, no el alta.
+    // `stats` NACE EN CERO Y SIN FECHAS: `primeraCompra`/`ultimaCompra` las escriben
+    // las VENTAS (increments), nunca el alta, así que ni siquiera se admiten como
+    // claves acá. Los datos de contacto opcionales, si vienen, deben ser strings
+    // (el vendedor los crea desde el mostrador; el "no vacío" es criterio de UI).
     function clienteAltaValida() {
       let d = request.resource.data;
       return clienteClavesConocidas()
         && d.keys().hasAll(['nombre', 'fechaAlta', 'activo', 'stats'])
         && d.nombre is string && d.nombre.size() > 0
         && d.activo == true
-        && d.stats.keys().hasOnly(['cantidadVentas', 'totalHistoricoCents', 'primeraCompra', 'ultimaCompra'])
-        && d.stats.keys().hasAll(['cantidadVentas', 'totalHistoricoCents'])
+        && (!('alias' in d) || d.alias is string)
+        && (!('telefono' in d) || d.telefono is string)
+        && (!('email' in d) || d.email is string)
+        && (!('direccion' in d) || d.direccion is string)
+        && (!('notas' in d) || d.notas is string)
+        && d.stats.keys().hasOnly(['cantidadVentas', 'totalHistoricoCents'])
         && d.stats.cantidadVentas == 0
         && d.stats.totalHistoricoCents == 0;
     }
@@ -128,13 +134,18 @@ service cloud.firestore {
     // deltas de UNA venta. Con `increment()`, `request.resource.data` trae el valor
     // RESULTANTE, así que se compara contra `resource.data`: `cantidadVentas` sube
     // exactamente 1 y `totalHistoricoCents` sube estrictamente (una venta suma
-    // plata). Esto bloquea +2, decrementos (la reversa de la anulación es de admin)
-    // y tocar datos de contacto. Las fechas de `stats` pueden cambiar (cache).
+    // plata) Y sigue siendo entero (`is int` rechaza un increment fraccionario que
+    // corrompería los centésimos). El contador ya queda forzado a int por el `+1`.
+    // `hasOnly` sobre las 4 claves conocidas impide colar sub-claves basura dentro
+    // de `stats`. Esto bloquea +2, decrementos (la reversa de la anulación es de
+    // admin) y tocar datos de contacto. Las fechas de `stats` pueden cambiar (cache).
     function clienteStatsDeltaVenta() {
       let vieja = resource.data.stats;
       let nueva = request.resource.data.stats;
       return soloCambian(['stats'])
+        && nueva.keys().hasOnly(['cantidadVentas', 'totalHistoricoCents', 'primeraCompra', 'ultimaCompra'])
         && nueva.cantidadVentas == vieja.cantidadVentas + 1
+        && nueva.totalHistoricoCents is int
         && nueva.totalHistoricoCents > vieja.totalHistoricoCents;
     }
 
