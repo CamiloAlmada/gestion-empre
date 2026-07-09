@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { Button, Input, Modal, MoneyInput } from '@gestion/ui';
-import type { ModoPrecio, ModoStock, Money, Producto } from '@gestion/core';
+import type { Categoria, ModoPrecio, ModoStock, Money, Producto } from '@gestion/core';
 
 /** Etiquetas en español de `modoPrecio` (docs/02-dominio-quesarte.md). */
 export const ETIQUETAS_MODO_PRECIO: Record<ModoPrecio, string> = {
@@ -47,6 +47,10 @@ export interface ModalProductoProps {
   producto: Producto | null;
   /** `true` mientras `onGuardar` está resolviendo (deshabilita los botones). */
   guardando: boolean;
+  /** Vocabulario vigente, YA ordenado por `orden` (arma la query
+   * `Productos.tsx`, ver `ModalCategorias`). Opciones del select de
+   * categoría. */
+  categorias: Categoria[];
   onGuardar: (datos: DatosProductoFormulario) => void;
   onCerrar: () => void;
 }
@@ -100,6 +104,78 @@ function GrupoOpciones<T extends string>({
   );
 }
 
+interface CampoCategoriaProps {
+  categorias: Categoria[];
+  value: string;
+  onChange: (valor: string) => void;
+  error?: string;
+}
+
+/**
+ * Select nativo de categoría (reemplaza el `Input` de texto libre — CAT-2).
+ * No `SearchSelect`: el vocabulario esperado del negocio es un puñado de
+ * categorías (Quesos, Embutidos, Miel, Frutos secos, Especias…), muy por
+ * debajo de donde un combobox con filtro empieza a pagar su complejidad; el
+ * `<select>` nativo es más rápido de operar y no necesita polyfill de
+ * teclado/focus (ver reporte de CAT-2).
+ *
+ * El valor es el NOMBRE de la categoría (`Producto.categoria` es
+ * denormalizado, no guarda el id — docs/02-dominio-quesarte.md). Un producto
+ * existente puede tener una categoría que ya no está definida en el
+ * vocabulario (renombrada por fuera del flujo normal, o texto libre
+ * histórico todavía no migrado): se agrega como opción extra "(sin
+ * definir)" para no perder el valor ni bloquear la edición del resto del
+ * producto.
+ */
+function CampoCategoria({ categorias, value, onChange, error }: CampoCategoriaProps) {
+  const id = useId();
+  const idError = `${id}-error`;
+  const idHint = `${id}-hint`;
+
+  const huerfana = value !== '' && !categorias.some((c) => c.nombre === value);
+  const sinOpciones = categorias.length === 0 && !huerfana;
+
+  return (
+    <div className="flex flex-col gap-1">
+      <label htmlFor={id} className="text-sm font-medium text-texto">
+        Categoría
+      </label>
+      <select
+        id={id}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={sinOpciones}
+        aria-invalid={error !== undefined ? true : undefined}
+        aria-describedby={error !== undefined ? idError : sinOpciones ? idHint : undefined}
+        className={`min-h-11 rounded-lg border bg-superficie px-3 py-2 text-texto outline-none focus-visible:ring-2 focus-visible:ring-primary-600 disabled:bg-fondo disabled:text-texto-secundario ${
+          error ? 'border-peligro' : 'border-borde'
+        }`}
+      >
+        <option value="" disabled>
+          Elegí una categoría
+        </option>
+        {categorias.map((c) => (
+          <option key={c.id} value={c.nombre}>
+            {c.nombre}
+          </option>
+        ))}
+        {huerfana && <option value={value}>{value} (sin definir)</option>}
+      </select>
+      {error !== undefined ? (
+        <p id={idError} className="text-sm text-peligro">
+          {error}
+        </p>
+      ) : (
+        sinOpciones && (
+          <p id={idHint} className="text-sm text-texto-secundario">
+            Definí categorías desde Productos → Categorías.
+          </p>
+        )
+      )}
+    </div>
+  );
+}
+
 /**
  * Modal de alta/edición de producto. Es UNA sola instancia estable (patrón de
  * `Modal`, ver `Modal.test.tsx`): no se desmonta al cerrar, el contenido
@@ -114,6 +190,7 @@ export function ModalProducto({
   abierto,
   producto,
   guardando,
+  categorias,
   onGuardar,
   onCerrar,
 }: ModalProductoProps) {
@@ -203,8 +280,8 @@ export function ModalProducto({
     >
       <div className="flex flex-col gap-4">
         <Input label="Nombre" value={nombre} onChange={setNombre} error={errores.nombre} />
-        <Input
-          label="Categoría"
+        <CampoCategoria
+          categorias={categorias}
           value={categoria}
           onChange={setCategoria}
           error={errores.categoria}
