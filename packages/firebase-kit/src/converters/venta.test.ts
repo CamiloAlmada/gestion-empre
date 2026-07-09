@@ -144,4 +144,24 @@ describe('ventaConverter.toFirestore', () => {
     expect(items[1]).not.toHaveProperty('gramos');
     expect(items[1]).not.toHaveProperty('piezaId');
   });
+
+  it('omite clienteId/clienteNombre en una venta anónima (byte-idéntica a antes)', () => {
+    const doc = ventaConverter.toFirestore(venta);
+    expect(doc).not.toHaveProperty('clienteId');
+    expect(doc).not.toHaveProperty('clienteNombre');
+  });
+
+  it('persiste clienteId/clienteNombre cuando la venta tiene cliente', () => {
+    const conCliente: Venta = { ...venta, clienteId: 'cli-1', clienteNombre: 'Marta' };
+    const doc = ventaConverter.toFirestore(conCliente);
+    expect(doc.clienteId).toBe('cli-1');
+    expect(doc.clienteNombre).toBe('Marta');
+
+    const reconstruido = ventaConverter.fromFirestore(
+      snapshotDe('otro-id', { ...doc, fecha: timestampFalso(fecha) }),
+      {},
+    );
+    expect(reconstruido.clienteId).toBe('cli-1');
+    expect(reconstruido.clienteNombre).toBe('Marta');
+  });
 });

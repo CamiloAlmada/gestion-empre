@@ -79,6 +79,12 @@ export interface Producto {
   stockUnidades?: number;
   /** Umbral para alertar stock bajo (gramos o unidades según `modoStock`). */
   umbralAlertaStock?: number;
+  /**
+   * Proveedor por defecto al armar una compra de este producto (doc 07). Es solo
+   * una sugerencia: la verdad de a quién se le compró está en el historial de
+   * compras (Fase 2), no acá.
+   */
+  proveedorPrincipalId?: string;
   activo: boolean;
   actualizadoEn: Date;
 }
@@ -131,6 +137,13 @@ export interface Venta {
   totalCents: Money;
   medioPago: MedioPago;
   estado: EstadoVenta;
+  /**
+   * Cliente asociado a la venta (opcional). El POS nunca lo exige: la venta
+   * anónima es el caso por defecto. Denormalizado: se guardan `id` y `nombre`
+   * congelado para no depender de un join al mostrar el historial (ver doc 07).
+   */
+  clienteId?: string;
+  clienteNombre?: string;
 }
 
 /**
@@ -174,4 +187,83 @@ export interface Configuracion {
   /** Umbral de peso restante (gramos) para ofrecer marcar una pieza como agotada. */
   umbralPiezaAgotadaGramos: Peso;
   metodoProrrateo: 'por_valor' | 'por_peso';
+}
+
+/**
+ * Cache denormalizado de estadísticas por cliente (doc 07). NO es la fuente de
+ * verdad: se agrega con `FieldValue.increment()` en el mismo batch de la venta y
+ * su reversa en la anulación (compatible offline — nunca read-modify-write). La
+ * verdad son siempre las ventas.
+ *
+ * `ticketPromedio` NO se persiste (`increment` no divide): se calcula al mostrar
+ * como `totalHistoricoCents / cantidadVentas`.
+ */
+export interface StatsCliente {
+  /** Cantidad de ventas asociadas. `+1` al vender, `−1` al anular. */
+  cantidadVentas: number;
+  /** Suma histórica gastada. `+total` al vender, `−total` al anular. */
+  totalHistoricoCents: Money;
+  /**
+   * Fechas de primera y última compra: cache APROXIMADO. Se escriben desde el
+   * cliente con la fecha de la venta; la anulación NO las rebobina (ver doc 04,
+   * Fase 1.5). Para el dato exacto, consultar las ventas del cliente.
+   */
+  primeraCompra?: Date;
+  ultimaCompra?: Date;
+}
+
+/**
+ * Cliente del mostrador (doc 07). Negocio informal: el único campo obligatorio es
+ * `nombre` (un solo campo, con `alias` opcional; no se fuerza apellido). El resto
+ * son datos personales de gente real: se guarda lo que sirve al negocio, nada más.
+ *
+ * No hay borrado físico: se desactiva con `activo: false` (coherente con usuarios).
+ */
+export interface Cliente {
+  id: string;
+  nombre: string;
+  /** Apodo de mostrador ("Marta la de enfrente"). */
+  alias?: string;
+  telefono?: string;
+  email?: string;
+  direccion?: string;
+  notas?: string;
+  fechaAlta: Date;
+  activo: boolean;
+  stats: StatsCliente;
+}
+
+/**
+ * Datos de una cuenta bancaria de un proveedor, para transferencias (doc 07).
+ * `banco` y `cuenta` obligatorios; `titular` y `moneda` opcionales.
+ */
+export interface DatosPago {
+  banco: string;
+  cuenta: string;
+  titular?: string;
+  moneda?: string;
+}
+
+/**
+ * Proveedor de mercadería (doc 07). A quién se le compra qué, con datos de pago y
+ * de contacto para el viaje/transferencia. Solo lo ve y edita el `admin`: el
+ * vendedor no accede a datos bancarios ni costos de proveedor.
+ *
+ * No hay borrado físico: se desactiva con `activo: false`.
+ */
+export interface Proveedor {
+  id: string;
+  /** Razón social o nombre de fantasía. */
+  nombre: string;
+  contactoNombre?: string;
+  telefono?: string;
+  email?: string;
+  /** Útil: es a dónde hay que viajar a comprar. */
+  direccion?: string;
+  rut?: string;
+  /** Cuentas para transferencias. */
+  pagos?: DatosPago[];
+  notas?: string;
+  fechaAlta: Date;
+  activo: boolean;
 }

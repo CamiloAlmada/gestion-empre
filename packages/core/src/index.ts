@@ -33,6 +33,10 @@ export type {
   MovimientoStock,
   Usuario,
   Configuracion,
+  StatsCliente,
+  Cliente,
+  DatosPago,
+  Proveedor,
 } from './tipos.js';
 export { type ItemCobrable, calcularSubtotal } from './precio.js';
 export { type PiezaElegida, elegirPieza } from './fifo.js';

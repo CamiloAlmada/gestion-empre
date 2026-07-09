@@ -123,6 +123,35 @@ export class CategoriaDuplicadaError extends ErrorCategoria {
 }
 
 /**
+ * Errores de la gestión de clientes y proveedores (`clientes.ts`, `proveedores.ts`).
+ *
+ * Mismo patrón que las otras familias: una raíz abstracta por entidad para el
+ * `catch` genérico en su pantalla, y una clase concreta de validación previa
+ * (fail fast antes de tocar Firestore). No comparten jerarquía con el POS: son
+ * ABM de fichas, no escrituras del mostrador (salvo el alta rápida de cliente,
+ * que igual usa `crearCliente`).
+ */
+export abstract class ErrorCliente extends Error {}
+
+/** El nombre del cliente es inválido: vacío tras `trim()`. */
+export class ClienteInvalidoError extends ErrorCliente {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ClienteInvalidoError';
+  }
+}
+
+export abstract class ErrorProveedor extends Error {}
+
+/** El nombre del proveedor es inválido: vacío tras `trim()`. */
+export class ProveedorInvalidoError extends ErrorProveedor {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ProveedorInvalidoError';
+  }
+}
+
+/**
  * Errores del alta de usuarios por invitación (`invitaciones.ts`).
  *
  * Mismo patrón que `ErrorEscrituraPOS`: una raíz abstracta para el `catch`

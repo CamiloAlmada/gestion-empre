@@ -24,6 +24,7 @@ interface ProductoDoc {
   stockGranelGramos?: number;
   stockUnidades?: number;
   umbralAlertaStock?: number;
+  proveedorPrincipalId?: string;
   activo: boolean;
   actualizadoEn: Timestamp;
 }
@@ -54,6 +55,7 @@ export const productoConverter: FirestoreDataConverter<Producto> = {
       stockGranelGramos,
       stockUnidades,
       umbralAlertaStock,
+      proveedorPrincipalId,
       activo,
       actualizadoEn,
     } = producto;
@@ -71,6 +73,7 @@ export const productoConverter: FirestoreDataConverter<Producto> = {
     if (stockGranelGramos !== undefined) doc.stockGranelGramos = stockGranelGramos;
     if (stockUnidades !== undefined) doc.stockUnidades = stockUnidades;
     if (umbralAlertaStock !== undefined) doc.umbralAlertaStock = umbralAlertaStock;
+    if (proveedorPrincipalId !== undefined) doc.proveedorPrincipalId = proveedorPrincipalId;
     return doc;
   },
   fromFirestore(snapshot: QueryDocumentSnapshot, options?: SnapshotOptions): Producto {
@@ -88,6 +91,7 @@ export const productoConverter: FirestoreDataConverter<Producto> = {
         datos.stockGranelGramos !== undefined ? peso(datos.stockGranelGramos) : undefined,
       stockUnidades: datos.stockUnidades,
       umbralAlertaStock: datos.umbralAlertaStock,
+      proveedorPrincipalId: datos.proveedorPrincipalId,
       activo: datos.activo,
       actualizadoEn: datos.actualizadoEn.toDate(),
     };

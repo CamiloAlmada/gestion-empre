@@ -39,6 +39,8 @@ interface VentaDoc {
   totalCents: number;
   medioPago: MedioPago;
   estado: EstadoVenta;
+  clienteId?: string;
+  clienteNombre?: string;
 }
 
 function itemADoc(item: ItemVenta): ItemVentaDoc {
@@ -79,11 +81,15 @@ function itemDeDoc(doc: ItemVentaDoc): ItemVenta {
  *   con el mismo cuidado que las entidades top-level. `piezaId`/`gramos`/
  *   `unidades` ausentes en Firestore ↔ `undefined` en dominio; `gramos` y
  *   `unidades` son excluyentes según el producto (al peso o por unidad).
+ * - `clienteId`/`clienteNombre` (doc 07) son opcionales: la venta anónima no los
+ *   trae. Ausentes en Firestore ↔ `undefined` en dominio; si están `undefined`
+ *   al escribir, se omiten del doc (nunca `null`).
  */
 export const ventaConverter: FirestoreDataConverter<Venta> = {
   toFirestore(venta: WithFieldValue<Venta>): DocumentData {
-    const { numero, fecha, usuarioId, items, totalCents, medioPago, estado } = venta;
-    return {
+    const { numero, fecha, usuarioId, items, totalCents, medioPago, estado, clienteId, clienteNombre } =
+      venta;
+    const doc: DocumentData = {
       numero,
       fecha,
       usuarioId,
@@ -92,6 +98,9 @@ export const ventaConverter: FirestoreDataConverter<Venta> = {
       medioPago,
       estado,
     };
+    if (clienteId !== undefined) doc.clienteId = clienteId;
+    if (clienteNombre !== undefined) doc.clienteNombre = clienteNombre;
+    return doc;
   },
   fromFirestore(snapshot: QueryDocumentSnapshot, options?: SnapshotOptions): Venta {
     const datos = snapshot.data(options) as VentaDoc;
@@ -104,6 +113,8 @@ export const ventaConverter: FirestoreDataConverter<Venta> = {
       totalCents: money(datos.totalCents),
       medioPago: datos.medioPago,
       estado: datos.estado,
+      clienteId: datos.clienteId,
+      clienteNombre: datos.clienteNombre,
     };
   },
 };
