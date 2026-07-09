@@ -19,7 +19,7 @@ export function AvisoPwa() {
           destacar sobre el contenido, en los dos temas. En light queda un
           toast oscuro sobre fondo claro; en dark, uno claro sobre fondo
           oscuro. Contraste verificado en docs/06-ui-ux.md §7. */}
-      <div className="flex items-center gap-3 rounded-lg bg-texto px-4 py-2 text-sm text-fondo shadow-lg">
+      <div className="flex items-center gap-3 rounded-control bg-texto px-4 py-2 text-sm text-fondo shadow-flotante">
         <span>Lista para usar sin conexión</span>
         <button
           type="button"

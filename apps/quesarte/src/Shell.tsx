@@ -39,12 +39,12 @@ const CLASES_HEADER =
 // pantalla vía `useHeader({ acciones })`, en un segundo render — la
 // visibilidad la decide CSS puro (`hidden md:flex` en el header / `md:hidden`
 // acá), igual patrón que el modo compacto de `DataTable`. Se posiciona sobre
-// la tab bar con `--altura-zona-inferior` + un margen fijo. `[&>*]:shadow-lg`
+// la tab bar con `--altura-zona-inferior` + un margen fijo. `[&>*]:shadow-flotante`
 // da elevación a cada acción directa (ya tienen fondo propio — `Button` o los
 // links `bg-superficie border`/`bg-primary-600` de cada pantalla — así que
 // alcanza con la sombra, sin envolver los hijos en un contenedor opaco
 // adicional que no podríamos estilar desde acá al ser un `ReactNode` opaco).
-const CLASES_CLUSTER_ACCIONES = 'fixed right-4 z-30 flex gap-2 md:hidden [&>*]:shadow-lg';
+const CLASES_CLUSTER_ACCIONES = 'fixed right-4 z-30 flex gap-2 md:hidden [&>*]:shadow-flotante';
 
 const CLASE_VOLVER =
   'flex min-h-[44px] shrink-0 items-center gap-1 rounded px-1 text-sm font-medium text-texto-secundario ' +

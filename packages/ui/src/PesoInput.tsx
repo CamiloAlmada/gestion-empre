@@ -128,7 +128,7 @@ export function PesoInput({
         <div
           role="group"
           aria-label={`Unidad de ${label}`}
-          className="inline-flex overflow-hidden rounded-lg border border-borde"
+          className="inline-flex overflow-hidden rounded-control border border-borde"
         >
           <button
             type="button"
@@ -151,7 +151,7 @@ export function PesoInput({
         </div>
       </div>
       <div
-        className={`flex items-center gap-1 rounded-lg border px-3 py-2 focus-within:ring-2 focus-within:ring-primary-600 ${
+        className={`flex items-center gap-1 rounded-control border px-3 py-2 focus-within:ring-2 focus-within:ring-primary-600 ${
           mensajeError ? 'border-peligro' : 'border-borde'
         } ${disabled ? 'bg-fondo' : 'bg-superficie'}`}
       >

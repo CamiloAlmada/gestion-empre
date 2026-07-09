@@ -65,7 +65,7 @@ export function ModalCobro({ abierto, onCerrar, total, procesando, onConfirmar }
                 aria-pressed={activo}
                 disabled={procesando}
                 onClick={() => setMedioPago(opcion.valor)}
-                className={`flex min-h-[64px] items-center justify-center rounded-xl border px-4 text-base font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 disabled:cursor-not-allowed disabled:opacity-50 ${
+                className={`flex min-h-[64px] items-center justify-center rounded-elemento border px-4 text-base font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 disabled:cursor-not-allowed disabled:opacity-50 ${
                   activo ? 'border-primary-600 bg-primary-600 text-white' : 'border-borde bg-superficie text-texto hover:bg-fondo'
                 }`}
               >

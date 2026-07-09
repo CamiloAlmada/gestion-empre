@@ -35,9 +35,9 @@ import { useHeader } from '../componentes/header/ContextoHeader';
 // 48px (no 44): en mobile flotan sobre la tab bar (docs/06 §2 y §5 — targets
 // ≥48px ahí).
 const CLASE_ACCION_PRIMARIA =
-  'inline-flex min-h-[48px] min-w-[48px] items-center justify-center gap-1.5 rounded-lg bg-primary-600 px-3 font-medium text-white hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2 focus-visible:ring-offset-superficie';
+  'inline-flex min-h-[48px] min-w-[48px] items-center justify-center gap-1.5 rounded-control bg-primary-600 px-3 font-medium text-white hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2 focus-visible:ring-offset-superficie';
 const CLASE_ACCION_SECUNDARIA =
-  'inline-flex min-h-[48px] items-center justify-center rounded-lg border border-borde bg-superficie px-3 text-sm font-medium text-texto hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600';
+  'inline-flex min-h-[48px] items-center justify-center rounded-control border border-borde bg-superficie px-3 text-sm font-medium text-texto hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600';
 
 type EstadoModal = { tipo: 'cerrado' } | { tipo: 'alta' } | { tipo: 'edicion'; producto: Producto };
 
@@ -338,7 +338,7 @@ export function Productos() {
       {!enLinea && (
         <div
           role="status"
-          className="flex items-center gap-2 rounded-xl border border-borde bg-superficie px-4 py-3 text-sm text-advertencia"
+          className="flex items-center gap-2 rounded-elemento border border-borde bg-superficie px-4 py-3 text-sm text-advertencia"
         >
           <span aria-hidden="true">⚠</span>
           <span>Sin conexión: no se pueden gestionar categorías hasta reconectar.</span>
@@ -356,7 +356,7 @@ export function Productos() {
       ) : error !== null ? (
         <div
           role="alert"
-          className="flex flex-col items-center gap-3 rounded-2xl border border-borde bg-superficie p-8 text-center"
+          className="flex flex-col items-center gap-3 rounded-card border border-borde bg-superficie p-8 text-center"
         >
           <p className="text-peligro">No se pudieron cargar los productos.</p>
           <p className="text-sm text-texto-secundario">Revisá tu conexión e intentá de nuevo.</p>

@@ -146,7 +146,7 @@ export function ModalAjusteNegativo({
           <span id={grupoTipoId} className="text-sm font-medium text-texto">
             Tipo
           </span>
-          <div role="group" aria-labelledby={grupoTipoId} className="flex gap-1 rounded-xl border border-borde p-1">
+          <div role="group" aria-labelledby={grupoTipoId} className="flex gap-1 rounded-elemento border border-borde p-1">
             {OPCIONES_TIPO.map((opcion) => {
               const activo = tipo === opcion.valor;
               return (
@@ -156,7 +156,7 @@ export function ModalAjusteNegativo({
                   aria-pressed={activo}
                   disabled={enviando}
                   onClick={() => setTipo(opcion.valor)}
-                  className={`min-h-[44px] flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 disabled:cursor-not-allowed disabled:opacity-50 ${
+                  className={`min-h-[44px] flex-1 rounded-control px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 disabled:cursor-not-allowed disabled:opacity-50 ${
                     activo ? 'bg-primary-600 text-white' : 'text-texto-secundario hover:text-texto'
                   }`}
                 >
@@ -207,7 +207,7 @@ export function ModalAjusteNegativo({
             placeholder="Ej: recuento de fin de mes, pieza en mal estado…"
             aria-invalid={errorNota !== undefined ? true : undefined}
             aria-describedby={errorNota !== undefined ? notaErrorId : undefined}
-            className={`resize-none rounded-lg border bg-superficie px-3 py-2 text-texto outline-none focus-visible:ring-2 focus-visible:ring-primary-600 disabled:bg-fondo disabled:text-texto-secundario ${
+            className={`resize-none rounded-control border bg-superficie px-3 py-2 text-texto outline-none focus-visible:ring-2 focus-visible:ring-primary-600 disabled:bg-fondo disabled:text-texto-secundario ${
               errorNota !== undefined ? 'border-peligro' : 'border-borde'
             }`}
           />

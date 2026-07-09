@@ -94,7 +94,7 @@ function BotonCentral({ item, activo, onSeleccionar }: BotonItemProps) {
         aria-current={activo ? 'page' : undefined}
         aria-label={item.etiqueta}
         onClick={() => onSeleccionar(item.id)}
-        className="absolute -top-6 flex h-14 w-14 items-center justify-center rounded-full bg-primary-600 text-white shadow-lg transition-colors hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2 focus-visible:ring-offset-fondo"
+        className="absolute -top-6 flex h-14 w-14 items-center justify-center rounded-full bg-primary-600 text-white shadow-flotante transition-colors hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2 focus-visible:ring-offset-fondo"
       >
         <span aria-hidden="true" className="flex h-7 w-7 items-center justify-center">
           {item.icono}

@@ -96,7 +96,7 @@ export function CantidadInput({
         disabled={disabled}
         aria-invalid={mensajeError !== undefined ? true : undefined}
         aria-describedby={mensajeError !== undefined ? errorId : undefined}
-        className={`rounded-lg border bg-superficie px-3 py-2 text-texto tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-primary-600 disabled:bg-fondo disabled:text-texto-secundario ${
+        className={`rounded-control border bg-superficie px-3 py-2 text-texto tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-primary-600 disabled:bg-fondo disabled:text-texto-secundario ${
           mensajeError ? 'border-peligro' : 'border-borde'
         }`}
       />

@@ -21,7 +21,7 @@ export function ListaVentas({ ventas, onSeleccionar }: ListaVentasProps) {
           <button
             type="button"
             onClick={() => onSeleccionar(venta)}
-            className="flex min-h-[56px] w-full flex-col gap-1 rounded-2xl border border-borde bg-superficie p-4 text-left transition-colors hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
+            className="flex min-h-[56px] w-full flex-col gap-1 rounded-card border border-borde bg-superficie p-4 text-left transition-colors hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
           >
             <div className="flex items-center justify-between gap-2">
               <span className="font-semibold text-texto">Venta #{venta.numero}</span>

@@ -35,7 +35,7 @@ export function Input({
         disabled={disabled}
         aria-invalid={error !== undefined ? true : undefined}
         aria-describedby={error !== undefined ? idError : undefined}
-        className={`rounded-lg border bg-superficie px-3 py-2 text-texto outline-none focus-visible:ring-2 focus-visible:ring-primary-600 disabled:bg-fondo disabled:text-texto-secundario ${
+        className={`rounded-control border bg-superficie px-3 py-2 text-texto outline-none focus-visible:ring-2 focus-visible:ring-primary-600 disabled:bg-fondo disabled:text-texto-secundario ${
           error ? 'border-peligro' : 'border-borde'
         }`}
       />

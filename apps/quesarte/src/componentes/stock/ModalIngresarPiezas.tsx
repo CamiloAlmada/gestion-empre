@@ -182,7 +182,7 @@ export function ModalIngresarPiezas({ abierto, onCerrar, db, producto, usuarioId
           const idFecha = `ingreso-venc-${fila.clave}`;
           const idErrorFecha = `${idFecha}-error`;
           return (
-            <div key={fila.clave} className="flex flex-col gap-2 rounded-xl border border-borde p-3">
+            <div key={fila.clave} className="flex flex-col gap-2 rounded-elemento border border-borde p-3">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-semibold text-texto">Pieza {i + 1}</span>
                 {filas.length > 1 && (
@@ -217,7 +217,7 @@ export function ModalIngresarPiezas({ abierto, onCerrar, db, producto, usuarioId
                   disabled={enviando}
                   aria-invalid={fila.errorFecha !== undefined ? true : undefined}
                   aria-describedby={fila.errorFecha !== undefined ? idErrorFecha : undefined}
-                  className={`rounded-lg border bg-superficie px-3 py-2 text-texto outline-none focus-visible:ring-2 focus-visible:ring-primary-600 disabled:bg-fondo disabled:text-texto-secundario ${
+                  className={`rounded-control border bg-superficie px-3 py-2 text-texto outline-none focus-visible:ring-2 focus-visible:ring-primary-600 disabled:bg-fondo disabled:text-texto-secundario ${
                     fila.errorFecha !== undefined ? 'border-peligro' : 'border-borde'
                   }`}
                 />

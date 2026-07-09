@@ -167,7 +167,7 @@ export function MoneyInput({
         {label}
       </label>
       <div
-        className={`flex items-center gap-1 rounded-lg border px-3 py-2 focus-within:ring-2 focus-within:ring-primary-600 ${
+        className={`flex items-center gap-1 rounded-control border px-3 py-2 focus-within:ring-2 focus-within:ring-primary-600 ${
           mensajeError ? 'border-peligro' : 'border-borde'
         } ${disabled ? 'bg-fondo' : 'bg-superficie'}`}
       >

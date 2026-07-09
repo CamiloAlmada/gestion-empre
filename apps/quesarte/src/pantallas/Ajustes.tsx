@@ -26,7 +26,7 @@ interface SeccionProps {
 
 function Seccion({ titulo, children }: SeccionProps) {
   return (
-    <section className="flex flex-col gap-3 rounded-2xl border border-borde p-4">
+    <section className="flex flex-col gap-3 rounded-card border border-borde p-4">
       <h2 className="text-base font-semibold text-texto">{titulo}</h2>
       {children}
     </section>
@@ -42,7 +42,7 @@ function SelectorTema() {
     <div
       role="group"
       aria-label="Apariencia"
-      className="flex gap-1 rounded-xl border border-borde p-1"
+      className="flex gap-1 rounded-elemento border border-borde p-1"
     >
       {OPCIONES_TEMA.map((opcion) => {
         const activo = tema === opcion.valor;
@@ -52,7 +52,7 @@ function SelectorTema() {
             type="button"
             aria-pressed={activo}
             onClick={() => setTema(opcion.valor)}
-            className={`min-h-[44px] flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 ${
+            className={`min-h-[44px] flex-1 rounded-control px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 ${
               activo ? 'bg-primary-600 text-white' : 'text-texto-secundario hover:text-texto'
             }`}
           >
@@ -99,7 +99,7 @@ export function Ajustes() {
         <Seccion titulo="Usuarios">
           <Link
             to="/ajustes/usuarios"
-            className="flex min-h-[44px] w-full items-center justify-between rounded-lg border border-borde px-4 py-3 text-left text-texto hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
+            className="flex min-h-[44px] w-full items-center justify-between rounded-control border border-borde px-4 py-3 text-left text-texto hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
           >
             <span>Gestión de usuarios</span>
             <span aria-hidden="true" className="text-texto-secundario">

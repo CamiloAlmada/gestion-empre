@@ -15,11 +15,11 @@ export interface StatCardProps {
  */
 export function StatCard({ titulo, valor, detalle, icono }: StatCardProps) {
   return (
-    <div className="flex items-center gap-4 rounded-2xl border border-borde bg-superficie p-4">
+    <div className="flex items-center gap-4 rounded-card border border-borde bg-superficie p-4">
       {icono !== undefined && (
         <div
           aria-hidden="true"
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary-600 text-white"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-elemento bg-primary-600 text-white"
         >
           {icono}
         </div>

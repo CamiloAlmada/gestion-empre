@@ -30,7 +30,7 @@ export function Button({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`rounded-lg px-4 py-2 font-medium transition-colors disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2 focus-visible:ring-offset-superficie ${clasesPorVariante[variante]} ${className}`}
+      className={`rounded-control px-4 py-2 font-medium transition-colors disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2 focus-visible:ring-offset-superficie ${clasesPorVariante[variante]} ${className}`}
     >
       {children}
     </button>

@@ -32,7 +32,7 @@ export function RutaProtegida({ children }: RutaProtegidaProps) {
   if (perfil === null || !perfil.activo) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-fondo p-4">
-        <div className="flex w-full max-w-sm flex-col gap-4 rounded-xl bg-superficie p-6 text-center shadow-sm">
+        <div className="flex w-full max-w-sm flex-col gap-4 rounded-elemento bg-superficie p-6 text-center shadow-card">
           <h1 className="text-lg font-semibold text-texto">Cuenta no autorizada</h1>
           <p className="text-sm text-texto-secundario">
             Tu cuenta no está habilitada. Contactá al administrador.

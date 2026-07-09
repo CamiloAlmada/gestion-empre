@@ -54,7 +54,7 @@ export function ModalAgregarPiezaEntera({
                 <button
                   type="button"
                   onClick={() => onAgregar(pieza)}
-                  className="flex min-h-[56px] w-full items-center justify-between gap-2 rounded-xl border border-borde bg-superficie p-3 text-left hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
+                  className="flex min-h-[56px] w-full items-center justify-between gap-2 rounded-elemento border border-borde bg-superficie p-3 text-left hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
                 >
                   <span className="flex flex-col">
                     <span className="font-medium text-texto">{formatearPeso(pieza.pesoRestanteGramos)}</span>

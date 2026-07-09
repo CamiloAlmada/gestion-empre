@@ -107,7 +107,7 @@ export function Modal({ abierto, onCerrar, titulo, children, acciones }: ModalPr
       aria-labelledby={tituloId}
       onClick={manejarClickBackdrop}
       onKeyDown={manejarKeyDown}
-      className="m-auto w-[min(90vw,28rem)] rounded-2xl border border-borde bg-superficie p-0 text-texto shadow-lg backdrop:bg-primary-950/60"
+      className="m-auto w-[min(90vw,28rem)] rounded-card border border-borde bg-superficie p-0 text-texto shadow-flotante backdrop:bg-primary-950/60"
     >
       <div className="flex max-h-[85vh] flex-col gap-4 p-6">
         <h2 id={tituloId} className="text-lg font-semibold text-texto">

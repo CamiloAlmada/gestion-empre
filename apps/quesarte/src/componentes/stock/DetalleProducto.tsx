@@ -25,7 +25,7 @@ export interface DetalleProductoProps {
 // min-h-[44px]: target táctil mínimo (docs/06-ui-ux.md §5), aunque la celda
 // de DataTable ya suma su propio padding alrededor.
 const CLASE_BOTON_FILA =
-  'inline-flex min-h-[44px] items-center justify-center rounded-lg border border-borde px-3 text-sm font-medium text-texto hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600';
+  'inline-flex min-h-[44px] items-center justify-center rounded-control border border-borde px-3 text-sm font-medium text-texto hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600';
 
 /**
  * Detalle de stock de UN producto, montado en su propia ruta

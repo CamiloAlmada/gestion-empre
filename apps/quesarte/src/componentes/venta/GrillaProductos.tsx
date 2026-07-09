@@ -78,7 +78,7 @@ export function GrillaProductos({ productos, piezasAgrupadas, onSeleccionar }: G
                   type="button"
                   onClick={() => onSeleccionar(producto)}
                   disabled={agotado}
-                  className="flex min-h-[96px] w-full flex-col justify-between gap-1 rounded-2xl border border-borde bg-superficie p-4 text-left transition-colors hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-superficie"
+                  className="flex min-h-[96px] w-full flex-col justify-between gap-1 rounded-card border border-borde bg-superficie p-4 text-left transition-colors hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-superficie"
                 >
                   <span className="font-semibold text-texto">{producto.nombre}</span>
                   <span className="tabular-nums text-texto">

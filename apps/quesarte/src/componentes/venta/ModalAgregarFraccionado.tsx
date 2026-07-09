@@ -93,7 +93,7 @@ export function ModalAgregarFraccionado({
                 No hay piezas disponibles de este producto.
               </p>
             ) : (
-              <div className="flex flex-col gap-2 rounded-xl border border-borde p-3">
+              <div className="flex flex-col gap-2 rounded-elemento border border-borde p-3">
                 <p className="text-sm text-texto">
                   De: pieza del {formatearFecha(piezaMostrada.fechaIngreso)} (
                   {formatearPeso(piezaMostrada.pesoRestanteGramos)} restante)
@@ -115,7 +115,7 @@ export function ModalAgregarFraccionado({
                           role="option"
                           aria-selected={pieza.id === piezaMostrada.id}
                           onClick={() => elegirPiezaManual(pieza)}
-                          className="flex min-h-[44px] w-full items-center justify-between rounded-lg border border-borde px-3 py-2 text-left text-sm text-texto hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
+                          className="flex min-h-[44px] w-full items-center justify-between rounded-control border border-borde px-3 py-2 text-left text-sm text-texto hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
                         >
                           <span>Pieza del {formatearFecha(pieza.fechaIngreso)}</span>
                           <span className="tabular-nums">{formatearPeso(pieza.pesoRestanteGramos)}</span>
@@ -126,7 +126,7 @@ export function ModalAgregarFraccionado({
                 )}
 
                 {!suficiente && (
-                  <div role="alert" className="flex flex-col gap-2 rounded-lg bg-fondo p-3 text-sm text-peligro">
+                  <div role="alert" className="flex flex-col gap-2 rounded-control bg-fondo p-3 text-sm text-peligro">
                     <p>
                       Esta pieza tiene {formatearPeso(piezaMostrada.pesoRestanteGramos)}, menos de lo
                       pedido. Elegí otra pieza o ajustá el peso. También podés agregar lo que queda de esta

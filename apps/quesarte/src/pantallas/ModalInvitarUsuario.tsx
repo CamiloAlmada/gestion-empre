@@ -101,7 +101,7 @@ export function ModalInvitarUsuario({
         {!enLinea && (
           <p
             role="status"
-            className="rounded-xl border border-borde bg-superficie p-3 text-sm text-advertencia"
+            className="rounded-elemento border border-borde bg-superficie p-3 text-sm text-advertencia"
           >
             <span aria-hidden="true">⚠</span> Necesitás conexión para invitar usuarios.
           </p>
@@ -129,7 +129,7 @@ export function ModalInvitarUsuario({
           <div
             role="group"
             aria-label="Rol"
-            className="flex gap-1 rounded-xl border border-borde p-1"
+            className="flex gap-1 rounded-elemento border border-borde p-1"
           >
             {OPCIONES_ROL.map((opcion) => {
               const activa = opcion.valor === rol;
@@ -140,7 +140,7 @@ export function ModalInvitarUsuario({
                   aria-pressed={activa}
                   disabled={invitando}
                   onClick={() => setRol(opcion.valor)}
-                  className={`min-h-[44px] flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 ${
+                  className={`min-h-[44px] flex-1 rounded-control px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 ${
                     activa ? 'bg-primary-600 text-white' : 'text-texto-secundario hover:text-texto'
                   }`}
                 >

@@ -45,7 +45,7 @@ function SelectorRolFila({ usuario, disabled, onCambiarRol }: ControlFilaProps) 
     <div
       role="group"
       aria-label={`Rol de ${usuario.nombre}`}
-      className="inline-flex gap-1 rounded-lg border border-borde p-1"
+      className="inline-flex gap-1 rounded-control border border-borde p-1"
     >
       {OPCIONES_ROL_FILA.map((opcion) => {
         const activa = opcion.valor === usuario.rol;
@@ -58,7 +58,7 @@ function SelectorRolFila({ usuario, disabled, onCambiarRol }: ControlFilaProps) 
             onClick={() => {
               if (!activa) onCambiarRol(opcion.valor);
             }}
-            className={`min-h-[44px] rounded-md px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 disabled:cursor-not-allowed disabled:opacity-50 ${
+            className={`min-h-[44px] rounded-control px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 disabled:cursor-not-allowed disabled:opacity-50 ${
               activa ? 'bg-primary-600 text-white' : 'text-texto-secundario hover:text-texto'
             }`}
           >
@@ -88,7 +88,7 @@ function ToggleActivoFila({ usuario, disabled, onCambiar }: ToggleActivoFilaProp
       aria-label={`${usuario.activo ? 'Desactivar' : 'Activar'} a ${usuario.nombre}`}
       disabled={disabled}
       onClick={() => onCambiar(!usuario.activo)}
-      className="inline-flex min-h-[44px] items-center gap-2 rounded-lg border border-borde px-3 py-2 text-sm font-medium text-texto transition-colors hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 disabled:cursor-not-allowed disabled:opacity-50"
+      className="inline-flex min-h-[44px] items-center gap-2 rounded-control border border-borde px-3 py-2 text-sm font-medium text-texto transition-colors hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 disabled:cursor-not-allowed disabled:opacity-50"
     >
       <span
         aria-hidden="true"
@@ -304,7 +304,7 @@ export function Usuarios() {
       {!enLinea && (
         <div
           role="status"
-          className="flex items-center gap-2 rounded-xl border border-borde bg-superficie px-4 py-3 text-sm text-advertencia"
+          className="flex items-center gap-2 rounded-elemento border border-borde bg-superficie px-4 py-3 text-sm text-advertencia"
         >
           <span aria-hidden="true">⚠</span>
           <span>Sin conexión: no se pueden invitar usuarios hasta reconectar.</span>
@@ -322,7 +322,7 @@ export function Usuarios() {
       ) : error !== null ? (
         <div
           role="alert"
-          className="flex flex-col items-center gap-3 rounded-2xl border border-borde bg-superficie p-8 text-center"
+          className="flex flex-col items-center gap-3 rounded-card border border-borde bg-superficie p-8 text-center"
         >
           <p className="text-peligro">No se pudieron cargar los usuarios.</p>
           <p className="text-sm text-texto-secundario">Revisá tu conexión e intentá de nuevo.</p>

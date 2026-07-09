@@ -18,7 +18,7 @@ interface FilaItemProps {
 
 function FilaItem({ item, onQuitar }: FilaItemProps) {
   return (
-    <li className="flex items-start justify-between gap-2 rounded-xl border border-borde bg-superficie p-3">
+    <li className="flex items-start justify-between gap-2 rounded-elemento border border-borde bg-superficie p-3">
       <div className="flex flex-col">
         <span className="font-medium text-texto">{item.producto.nombre}</span>
         <span className="text-sm text-texto-secundario">{detalleItem(item)}</span>
@@ -65,7 +65,7 @@ export function Carrito({ items, onQuitar, onCobrar, procesando }: CarritoProps)
   return (
     <>
       {/* Ancho: panel lateral siempre visible. */}
-      <aside className="hidden lg:sticky lg:top-20 lg:flex lg:h-[calc(100vh-6rem)] lg:flex-col lg:gap-3 lg:rounded-2xl lg:border lg:border-borde lg:bg-superficie lg:p-4">
+      <aside className="hidden lg:sticky lg:top-20 lg:flex lg:h-[calc(100vh-6rem)] lg:flex-col lg:gap-3 lg:rounded-card lg:border lg:border-borde lg:bg-superficie lg:p-4">
         <h2 className="text-base font-semibold text-texto">Carrito</h2>
         {carritoVacio ? (
           <p className="text-sm text-texto-secundario">Todavía no agregaste productos.</p>
@@ -102,8 +102,8 @@ export function Carrito({ items, onQuitar, onCobrar, procesando }: CarritoProps)
       <div
         className={`fixed inset-x-0 bottom-(--altura-zona-inferior) z-20 border-t border-borde bg-superficie lg:hidden ${
           expandidoMobile
-            ? 'rounded-t-2xl shadow-[0_-12px_32px_rgb(0_0_0/0.16)]'
-            : 'shadow-[0_-4px_16px_rgb(0_0_0/0.08)]'
+            ? 'rounded-t-card shadow-hoja-expandida'
+            : 'shadow-hoja'
         }`}
       >
         {expandidoMobile && (
@@ -121,7 +121,7 @@ export function Carrito({ items, onQuitar, onCobrar, procesando }: CarritoProps)
             onClick={() => setExpandidoMobile((v) => !v)}
             aria-expanded={expandidoMobile}
             disabled={carritoVacio}
-            className="flex min-h-[48px] flex-1 items-center gap-2 rounded-lg px-2 text-left text-texto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 disabled:text-texto-secundario"
+            className="flex min-h-[48px] flex-1 items-center gap-2 rounded-control px-2 text-left text-texto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 disabled:text-texto-secundario"
           >
             <span aria-hidden="true">{expandidoMobile ? '▾' : '▴'}</span>
             <span>{carritoVacio ? 'Carrito vacío' : cantidad === 1 ? '1 ítem' : `${cantidad} ítems`}</span>

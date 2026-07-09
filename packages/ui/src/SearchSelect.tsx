@@ -194,14 +194,14 @@ export function SearchSelect({
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
         disabled={disabled}
-        className="w-full rounded-lg border border-borde bg-superficie px-3 py-2 text-texto outline-none focus-visible:ring-2 focus-visible:ring-primary-600 disabled:bg-fondo disabled:text-texto-secundario"
+        className="w-full rounded-control border border-borde bg-superficie px-3 py-2 text-texto outline-none focus-visible:ring-2 focus-visible:ring-primary-600 disabled:bg-fondo disabled:text-texto-secundario"
       />
       {abierto && (
         <ul
           id={listboxId}
           role="listbox"
           aria-label={label}
-          className="absolute top-full z-10 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border border-borde bg-superficie py-1 shadow-lg"
+          className="absolute top-full z-10 mt-1 max-h-64 w-full overflow-y-auto rounded-control border border-borde bg-superficie py-1 shadow-flotante"
         >
           {opcionesFiltradas.length === 0 ? (
             <li className="px-3 py-2 text-sm text-texto-secundario">Sin resultados.</li>

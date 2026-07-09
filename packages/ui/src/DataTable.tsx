@@ -46,7 +46,7 @@ export function DataTable<T>({
 }: DataTableProps<T>) {
   if (filas.length === 0) {
     return (
-      <div className="rounded-2xl border border-borde bg-superficie p-8 text-center text-texto-secundario">
+      <div className="rounded-card border border-borde bg-superficie p-8 text-center text-texto-secundario">
         {vacio ?? 'No hay datos para mostrar.'}
       </div>
     );
@@ -54,7 +54,7 @@ export function DataTable<T>({
 
   const tabla = (
     <div
-      className={`overflow-x-auto rounded-2xl border border-borde ${filaCompacta !== undefined ? 'hidden md:block' : ''}`}
+      className={`overflow-x-auto rounded-card border border-borde ${filaCompacta !== undefined ? 'hidden md:block' : ''}`}
     >
       <table aria-label={etiqueta} className="w-full min-w-max border-collapse bg-superficie text-texto">
         <thead>
@@ -101,7 +101,7 @@ export function DataTable<T>({
       <ul
         role="list"
         aria-label={etiqueta}
-        className="flex flex-col divide-y divide-borde overflow-hidden rounded-2xl border border-borde bg-superficie md:hidden"
+        className="flex flex-col divide-y divide-borde overflow-hidden rounded-card border border-borde bg-superficie md:hidden"
       >
         {filas.map((fila) => (
           <li key={claveFila(fila)}>{filaCompacta(fila)}</li>

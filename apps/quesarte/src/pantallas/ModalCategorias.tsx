@@ -227,7 +227,7 @@ export function ModalCategorias({
         {!enLinea && (
           <p
             role="status"
-            className="rounded-xl border border-borde bg-superficie p-3 text-sm text-advertencia"
+            className="rounded-elemento border border-borde bg-superficie p-3 text-sm text-advertencia"
           >
             <span aria-hidden="true">⚠</span> Necesitás conexión para gestionar categorías.
           </p>
@@ -257,7 +257,7 @@ export function ModalCategorias({
         ) : error !== null ? (
           <div
             role="alert"
-            className="flex flex-col items-center gap-3 rounded-2xl border border-borde p-6 text-center"
+            className="flex flex-col items-center gap-3 rounded-card border border-borde p-6 text-center"
           >
             <p className="text-peligro">No se pudieron cargar las categorías.</p>
             <Button variante="secundaria" onClick={onReintentar}>
@@ -267,7 +267,7 @@ export function ModalCategorias({
         ) : (
           <>
             {mostrarSeed && (
-              <div className="flex flex-col gap-2 rounded-xl border border-borde bg-fondo p-3 text-sm text-texto">
+              <div className="flex flex-col gap-2 rounded-elemento border border-borde bg-fondo p-3 text-sm text-texto">
                 <p>
                   Hay productos con categorías en uso que todavía no están definidas acá (
                   {candidatosSeed.join(', ')}).
@@ -292,7 +292,7 @@ export function ModalCategorias({
                 {categorias.map((categoria, indice) => (
                   <li
                     key={categoria.id}
-                    className="flex items-center gap-2 rounded-xl border border-borde p-3"
+                    className="flex items-center gap-2 rounded-elemento border border-borde p-3"
                   >
                     {edicion?.id === categoria.id ? (
                       <div className="flex flex-1 flex-col gap-2">
@@ -327,7 +327,7 @@ export function ModalCategorias({
                           aria-label={`Subir ${categoria.nombre}`}
                           onClick={() => subir(indice)}
                           disabled={!enLinea || indice === 0 || reordenando !== null}
-                          className="flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-borde text-texto hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 disabled:cursor-not-allowed disabled:opacity-40"
+                          className="flex min-h-11 min-w-11 items-center justify-center rounded-control border border-borde text-texto hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 disabled:cursor-not-allowed disabled:opacity-40"
                         >
                           ↑
                         </button>
@@ -336,7 +336,7 @@ export function ModalCategorias({
                           aria-label={`Bajar ${categoria.nombre}`}
                           onClick={() => bajar(indice)}
                           disabled={!enLinea || indice === categorias.length - 1 || reordenando !== null}
-                          className="flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-borde text-texto hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 disabled:cursor-not-allowed disabled:opacity-40"
+                          className="flex min-h-11 min-w-11 items-center justify-center rounded-control border border-borde text-texto hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 disabled:cursor-not-allowed disabled:opacity-40"
                         >
                           ↓
                         </button>

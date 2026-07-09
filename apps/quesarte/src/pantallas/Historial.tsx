@@ -67,7 +67,7 @@ export function Historial() {
     contenido = <p className="py-8 text-center text-texto-secundario">Cargando ventas…</p>;
   } else if (ventas.error !== null) {
     contenido = (
-      <div className="flex flex-col items-center gap-3 rounded-2xl border border-borde bg-superficie p-8 text-center">
+      <div className="flex flex-col items-center gap-3 rounded-card border border-borde bg-superficie p-8 text-center">
         <p role="alert" className="text-peligro">
           No se pudo cargar el historial. Revisá tu conexión e intentá de nuevo.
         </p>
@@ -86,7 +86,7 @@ export function Historial() {
     );
   } else if (ventas.datos.length === 0) {
     contenido = (
-      <div className="flex flex-col items-center gap-3 rounded-2xl border border-borde bg-superficie p-8 text-center">
+      <div className="flex flex-col items-center gap-3 rounded-card border border-borde bg-superficie p-8 text-center">
         <p className="text-texto-secundario">Todavía no hay ventas.</p>
       </div>
     );

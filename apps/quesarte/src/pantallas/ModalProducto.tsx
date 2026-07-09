@@ -81,7 +81,7 @@ function GrupoOpciones<T extends string>({
       <div
         role="group"
         aria-label={label}
-        className="flex flex-wrap gap-1 rounded-xl border border-borde p-1"
+        className="flex flex-wrap gap-1 rounded-elemento border border-borde p-1"
       >
         {opciones.map((opcion) => {
           const activa = opcion.valor === valor;
@@ -91,7 +91,7 @@ function GrupoOpciones<T extends string>({
               type="button"
               aria-pressed={activa}
               onClick={() => onChange(opcion.valor)}
-              className={`min-h-[44px] flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 ${
+              className={`min-h-[44px] flex-1 rounded-control px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 ${
                 activa ? 'bg-primary-600 text-white' : 'text-texto-secundario hover:text-texto'
               }`}
             >
@@ -147,7 +147,7 @@ function CampoCategoria({ categorias, value, onChange, error }: CampoCategoriaPr
         disabled={sinOpciones}
         aria-invalid={error !== undefined ? true : undefined}
         aria-describedby={error !== undefined ? idError : sinOpciones ? idHint : undefined}
-        className={`min-h-11 rounded-lg border bg-superficie px-3 py-2 text-texto outline-none focus-visible:ring-2 focus-visible:ring-primary-600 disabled:bg-fondo disabled:text-texto-secundario ${
+        className={`min-h-11 rounded-control border bg-superficie px-3 py-2 text-texto outline-none focus-visible:ring-2 focus-visible:ring-primary-600 disabled:bg-fondo disabled:text-texto-secundario ${
           error ? 'border-peligro' : 'border-borde'
         }`}
       >
@@ -303,7 +303,7 @@ export function ModalProducto({
             />
           </>
         ) : (
-          <div className="flex flex-col gap-1 rounded-xl border border-borde p-3">
+          <div className="flex flex-col gap-1 rounded-elemento border border-borde p-3">
             <p className="text-sm text-texto">
               <span className="font-medium">Modo de precio:</span>{' '}
               {ETIQUETAS_MODO_PRECIO[modoPrecio]}

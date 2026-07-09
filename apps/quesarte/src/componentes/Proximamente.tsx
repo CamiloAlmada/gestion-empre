@@ -14,7 +14,7 @@ export interface ProximamenteProps {
  */
 export function Proximamente({ titulo, icono }: ProximamenteProps) {
   return (
-    <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3 rounded-2xl border border-borde p-8 text-center">
+    <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3 rounded-card border border-borde p-8 text-center">
       <span className="text-texto-secundario">{icono}</span>
       <h2 className="text-xl font-semibold text-texto">{titulo}</h2>
       <p className="text-texto-secundario">Disponible próximamente.</p>

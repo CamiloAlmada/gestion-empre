@@ -134,7 +134,7 @@ export function DetalleProductoPantalla() {
 
   if (productos.error !== null || piezas.error !== null) {
     return (
-      <div className="flex flex-col items-center gap-3 rounded-2xl border border-borde bg-superficie p-8 text-center">
+      <div className="flex flex-col items-center gap-3 rounded-card border border-borde bg-superficie p-8 text-center">
         <p role="alert" className="text-peligro">
           No se pudo cargar el producto. Revisá tu conexión e intentá de nuevo.
         </p>
@@ -145,13 +145,13 @@ export function DetalleProductoPantalla() {
 
   if (noEncontrado || producto === null) {
     return (
-      <div className="flex flex-col items-center gap-3 rounded-2xl border border-borde bg-superficie p-8 text-center">
+      <div className="flex flex-col items-center gap-3 rounded-card border border-borde bg-superficie p-8 text-center">
         <p role="alert" className="text-peligro">
           No encontramos ese producto. Puede haberse desactivado.
         </p>
         <Link
           to="/stock"
-          className="inline-flex min-h-[44px] items-center justify-center rounded-lg bg-primary-600 px-4 font-medium text-white hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2 focus-visible:ring-offset-superficie"
+          className="inline-flex min-h-[44px] items-center justify-center rounded-control bg-primary-600 px-4 font-medium text-white hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2 focus-visible:ring-offset-superficie"
         >
           Volver a Stock
         </Link>

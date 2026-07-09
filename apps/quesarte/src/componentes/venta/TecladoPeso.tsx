@@ -30,7 +30,7 @@ const FILAS_DIGITOS: TeclaPeso[][] = [
 ];
 
 const CLASE_TECLA =
-  'flex min-h-[48px] min-w-[48px] items-center justify-center rounded-xl border border-borde bg-superficie text-xl font-medium text-texto hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 disabled:cursor-not-allowed disabled:opacity-40';
+  'flex min-h-[48px] min-w-[48px] items-center justify-center rounded-elemento border border-borde bg-superficie text-xl font-medium text-texto hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 disabled:cursor-not-allowed disabled:opacity-40';
 
 /**
  * Teclado numérico propio para ingresar peso (docs/06-ui-ux.md §6): dígitos
@@ -96,7 +96,7 @@ export function TecladoPeso({
         <div
           role="group"
           aria-label={`Unidad de ${label}`}
-          className="inline-flex overflow-hidden rounded-lg border border-borde"
+          className="inline-flex overflow-hidden rounded-control border border-borde"
         >
           <button
             type="button"
@@ -124,7 +124,7 @@ export function TecladoPeso({
         aria-readonly="true"
         aria-labelledby={id}
         aria-live="polite"
-        className="rounded-xl border border-borde bg-superficie px-4 py-3 text-right text-3xl font-bold tabular-nums text-texto"
+        className="rounded-elemento border border-borde bg-superficie px-4 py-3 text-right text-3xl font-bold tabular-nums text-texto"
       >
         {textoMostrado}
         <span className="ml-1 text-base font-medium text-texto-secundario">{unidad}</span>

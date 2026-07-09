@@ -59,7 +59,7 @@ export function Toast({ id, mensaje, tipo, onDescartar }: ToastProps) {
   return (
     <div
       role={tipo === 'error' ? 'alert' : 'status'}
-      className={`pointer-events-auto flex w-full max-w-sm items-center gap-3 rounded-lg px-4 py-3 text-sm shadow-lg transition-all duration-200 ease-out motion-reduce:transition-none ${
+      className={`pointer-events-auto flex w-full max-w-sm items-center gap-3 rounded-control px-4 py-3 text-sm shadow-flotante transition-all duration-200 ease-out motion-reduce:transition-none ${
         visible ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0'
       } ${CLASES_POR_TIPO[tipo]}`}
     >
