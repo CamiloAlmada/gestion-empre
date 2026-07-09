@@ -1,7 +1,7 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
-import { ProveedorToasts } from '@gestion/ui';
+import { ProveedorTema, ProveedorToasts } from '@gestion/ui';
 import { App } from './App';
 
 const mocks = vi.hoisted(() => ({
@@ -96,21 +96,45 @@ function configurarAuth(rol: 'admin' | 'vendedor') {
 }
 
 // Venta (ruteada en "/") usa useToasts(): se envuelve con ProveedorToasts
-// igual que la composición real de main.tsx (fuera de <App>).
+// igual que la composición real de main.tsx (fuera de <App>). ProveedorTema
+// también se agrega acá (TH-D): App ahora monta <MetaThemeColor /> siempre
+// (fuera de las rutas, ver App.tsx), que llama a useTema() y por lo tanto
+// necesita el provider — mismo orden que main.tsx.
 function renderizarEn(ruta: string) {
   return render(
     <MemoryRouter initialEntries={[ruta]}>
-      <ProveedorToasts>
-        <App />
-      </ProveedorToasts>
+      <ProveedorTema>
+        <ProveedorToasts>
+          <App />
+        </ProveedorToasts>
+      </ProveedorTema>
     </MemoryRouter>,
   );
 }
 
 describe('App - rutas', () => {
+  beforeEach(() => {
+    // App monta <MetaThemeColor /> siempre (TH-D), que llama a
+    // `window.matchMedia` — ausente en jsdom (ni siquiera existe la
+    // propiedad, así que hace falta `vi.stubGlobal`, no alcanza con
+    // `vi.spyOn`). Este suite no ejercita el detalle de MetaThemeColor (ver
+    // su propio test), así que un doble mínimo que no rompa el montaje
+    // alcanza.
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn().mockReturnValue({
+        matches: false,
+        media: '(prefers-color-scheme: dark)',
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      }),
+    );
+  });
+
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it('"/" redirige a la pantalla de Venta', () => {

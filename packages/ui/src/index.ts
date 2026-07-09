@@ -5,6 +5,7 @@ export {
   ProveedorTema,
   useTema,
   type Tema,
+  type Estilo,
   type EstadoTema,
   type ProveedorTemaProps,
 } from './ProveedorTema';

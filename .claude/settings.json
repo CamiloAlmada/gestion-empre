@@ -1,0 +1,39 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -n \"top-\\\\|header\\\\|Header\\\\|64px\\\\|espacio\\\\|altura\" /tmp/wt-cat3/docs/06-ui-ux.md | head -80)",
+      "Read(//private/tmp/wt-cat3/docs/**)",
+      "Read(//tmp/wt-cat2/packages/firebase-kit/src/**)",
+      "Read(//private/tmp/wt-cat2/packages/firebase-kit/src/**)",
+      "Read(//tmp/wt-cat2/packages/ui/src/**)",
+      "Read(//private/tmp/wt-cat2/packages/ui/src/**)",
+      "Read(//tmp/wt-cat3/packages/ui/src/**)",
+      "Read(//private/tmp/wt-cat3/packages/ui/src/**)",
+      "Read(//tmp/wt-cat3/apps/quesarte/src/pantallas/**)",
+      "Read(//private/tmp/wt-cat3/apps/quesarte/src/pantallas/**)",
+      "Bash(cd /tmp/wt-cat2 && find apps/quesarte/src -iname \"*test*\" | sort)",
+      "Read(//private/tmp/wt-cat2/**)",
+      "Read(//tmp/wt-cat2/apps/quesarte/src/pantallas/**)",
+      "Read(//private/tmp/wt-cat2/apps/quesarte/src/pantallas/**)",
+      "Read(//tmp/wt-cat3/docs/**)",
+      "Bash(grep -n \"orderBy\\\\|useCollection\\(\" -r /tmp/wt-cat3/apps/quesarte/src --include=\"*.tsx\" | grep -v \".test.\")",
+      "Read(//private/tmp/wt-cat3/apps/quesarte/src/**)",
+      "Read(//tmp/wt-cat3/apps/quesarte/src/**)",
+      "Bash(cd /tmp/wt-cat2 && grep -rn \"Categoria\\\\b\" packages/core/src | grep -v test)",
+      "Bash(cd /tmp/wt-cat2 && cat packages/firebase-kit/src/categorias.test.ts | head -100)",
+      "Read(//tmp/wt-cat3/packages/firebase-kit/src/**)",
+      "Read(//private/tmp/wt-cat3/packages/firebase-kit/src/**)",
+      "Bash(grep -rn \"ordenarCategorias\\\\|compararCategoria\\\\|sort.*orden\\\\|\\\\.sort\\(\" /tmp/wt-cat3/packages/core/src /tmp/wt-cat3/packages/firebase-kit/src /tmp/wt-cat3/apps/quesarte/src 2>/dev/null | grep -v \".test.\")",
+      "Read(//private/tmp/wt-cat3/packages/core/src/**)",
+      "Bash(cd /tmp/wt-cat2 && sed -n '1,90p' packages/core/src/tipos.ts)",
+      "Bash(cd /tmp/wt-cat2 && cat apps/quesarte/src/pantallas/Ajustes.tsx)",
+      "Bash(grep -n \"DataTable\" /tmp/wt-cat3/packages/ui/src/index.ts)",
+      "Read(//tmp/wt-cat2/apps/quesarte/src/**)",
+      "Read(//private/tmp/wt-cat2/apps/quesarte/src/**)"
+    ],
+    "additionalDirectories": [
+      "/tmp/wt-cat3/apps/quesarte/src/componentes/stock",
+      "/private/tmp/wt-cat3/apps/quesarte/src/componentes/stock"
+    ]
+  }
+}

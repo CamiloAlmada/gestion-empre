@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
-import { Button, useTema, type Tema } from '@gestion/ui';
+import { Button, useTema, type Estilo, type Tema } from '@gestion/ui';
 import { useAuth } from '@gestion/firebase-kit';
 import { useHeader } from '../componentes/header/ContextoHeader';
 
@@ -8,6 +8,11 @@ const OPCIONES_TEMA: { valor: Tema; etiqueta: string }[] = [
   { valor: 'light', etiqueta: 'Claro' },
   { valor: 'dark', etiqueta: 'Oscuro' },
   { valor: 'system', etiqueta: 'Sistema' },
+];
+
+const OPCIONES_ESTILO: { valor: Estilo; etiqueta: string }[] = [
+  { valor: 'minimalista', etiqueta: 'Minimalista' },
+  { valor: 'calido', etiqueta: 'Cálido' },
 ];
 
 // Claves tipadas por `perfil.rol` (de @gestion/core vía @gestion/firebase-kit)
@@ -34,32 +39,74 @@ function Seccion({ titulo, children }: SeccionProps) {
 }
 
 /** Grupo segmentado (docs/06-ui-ux.md §5): botones con `aria-pressed`, opción
- * activa marcada visualmente además de por el estado ARIA. */
+ * activa marcada visualmente además de por el estado ARIA. Con dos grupos
+ * seguidos dentro de la misma sección ("Apariencia"), cada uno lleva una
+ * etiqueta visible propia ("Modo" / "Estilo") además del `aria-label` — sin
+ * eso, dos grupos sin texto visible que los distinga son ambiguos para un
+ * usuario vidente (el lector de pantalla sí los distingue por `aria-label`,
+ * pero no alcanza). */
 function SelectorTema() {
   const { tema, setTema } = useTema();
 
   return (
-    <div
-      role="group"
-      aria-label="Apariencia"
-      className="flex gap-1 rounded-elemento border border-borde p-1"
-    >
-      {OPCIONES_TEMA.map((opcion) => {
-        const activo = tema === opcion.valor;
-        return (
-          <button
-            key={opcion.valor}
-            type="button"
-            aria-pressed={activo}
-            onClick={() => setTema(opcion.valor)}
-            className={`min-h-[44px] flex-1 rounded-control px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 ${
-              activo ? 'bg-primary-600 text-white' : 'text-texto-secundario hover:text-texto'
-            }`}
-          >
-            {opcion.etiqueta}
-          </button>
-        );
-      })}
+    <div className="flex flex-col gap-1.5">
+      <span className="text-sm font-medium text-texto-secundario">Modo</span>
+      <div
+        role="group"
+        aria-label="Modo"
+        className="flex gap-1 rounded-elemento border border-borde p-1"
+      >
+        {OPCIONES_TEMA.map((opcion) => {
+          const activo = tema === opcion.valor;
+          return (
+            <button
+              key={opcion.valor}
+              type="button"
+              aria-pressed={activo}
+              onClick={() => setTema(opcion.valor)}
+              className={`min-h-[44px] flex-1 rounded-control px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 ${
+                activo ? 'bg-primary-600 text-white' : 'text-texto-secundario hover:text-texto'
+              }`}
+            >
+              {opcion.etiqueta}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** Mismo patrón que `SelectorTema`, para el eje `estilo` (Minimalista /
+ * Cálido, docs/06-ui-ux.md §4). */
+function SelectorEstilo() {
+  const { estilo, setEstilo } = useTema();
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-sm font-medium text-texto-secundario">Estilo</span>
+      <div
+        role="group"
+        aria-label="Estilo"
+        className="flex gap-1 rounded-elemento border border-borde p-1"
+      >
+        {OPCIONES_ESTILO.map((opcion) => {
+          const activo = estilo === opcion.valor;
+          return (
+            <button
+              key={opcion.valor}
+              type="button"
+              aria-pressed={activo}
+              onClick={() => setEstilo(opcion.valor)}
+              className={`min-h-[44px] flex-1 rounded-control px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 ${
+                activo ? 'bg-primary-600 text-white' : 'text-texto-secundario hover:text-texto'
+              }`}
+            >
+              {opcion.etiqueta}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -79,6 +126,7 @@ export function Ajustes() {
     <div className="flex flex-col gap-4">
       <Seccion titulo="Apariencia">
         <SelectorTema />
+        <SelectorEstilo />
       </Seccion>
 
       <Seccion titulo="Cuenta">

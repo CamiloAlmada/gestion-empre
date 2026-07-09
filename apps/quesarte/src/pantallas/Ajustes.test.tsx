@@ -54,6 +54,7 @@ describe('Ajustes', () => {
     vi.clearAllMocks();
     window.localStorage.clear();
     document.documentElement.removeAttribute('data-theme');
+    document.documentElement.removeAttribute('data-estilo');
   });
 
   it('muestra nombre, correo y rol (en español) del perfil', () => {
@@ -94,6 +95,51 @@ describe('Ajustes', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Sistema' }));
 
     expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
+  });
+
+  it('elegir "Cálido" aplica data-estilo="calido"', () => {
+    configurarAuth();
+
+    renderizar();
+    fireEvent.click(screen.getByRole('button', { name: 'Cálido' }));
+
+    expect(document.documentElement.getAttribute('data-estilo')).toBe('calido');
+    expect(screen.getByRole('button', { name: 'Cálido' }).getAttribute('aria-pressed')).toBe(
+      'true',
+    );
+  });
+
+  it('elegir "Minimalista" quita el data-estilo fijado', () => {
+    configurarAuth();
+
+    renderizar();
+    fireEvent.click(screen.getByRole('button', { name: 'Cálido' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Minimalista' }));
+
+    expect(document.documentElement.hasAttribute('data-estilo')).toBe(false);
+    expect(screen.getByRole('button', { name: 'Minimalista' }).getAttribute('aria-pressed')).toBe(
+      'true',
+    );
+  });
+
+  it('expone los grupos "Modo" y "Estilo" como grupos ARIA distintos', () => {
+    configurarAuth();
+
+    renderizar();
+
+    expect(screen.getByRole('group', { name: 'Modo' })).toBeTruthy();
+    expect(screen.getByRole('group', { name: 'Estilo' })).toBeTruthy();
+  });
+
+  it('cambiar el estilo no afecta el tema elegido, y viceversa', () => {
+    configurarAuth();
+
+    renderizar();
+    fireEvent.click(screen.getByRole('button', { name: 'Oscuro' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cálido' }));
+
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+    expect(document.documentElement.getAttribute('data-estilo')).toBe('calido');
   });
 
   it('el botón Salir llama a salir()', () => {
