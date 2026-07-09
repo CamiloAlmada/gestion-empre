@@ -148,6 +148,13 @@ estimadas — NO va acá: extiende Fase 3):
    ficha con datos de pago; el historial de compras de la ficha se completa
    solo cuando Fase 2 exista.
 
+Decisión consciente (CP-A, 2026-07-09): las reglas exigen que una venta con
+cliente SUBA estrictamente `stats.totalHistoricoCents` — asociar cliente a una
+venta de $0 haría fallar el batch. Una venta de mostrador siempre es > 0; si
+algún día existieran ventas de $0 (muestras), relajar la regla a `>=` junto
+con `registrarVenta`. El índice `compras (proveedorId, fecha desc)` del doc 07
+queda para Fase 2 (la colección aún no existe).
+
 Criterios de aceptación (los 6 primeros del doc 07; los de inteligencia y
 "próximo viaje" quedan para Fase 3):
 - [ ] Venta sin cliente idéntica a hoy (≤3 toques, cero fricción nueva).
