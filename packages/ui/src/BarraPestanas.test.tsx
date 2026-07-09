@@ -64,4 +64,30 @@ describe('BarraPestanas', () => {
 
     expect(screen.getByRole('navigation', { name: 'Navegación principal' })).toBeTruthy();
   });
+
+  it('la barra base queda pegada a los 3 bordes (Minimalista, sin cambios)', () => {
+    render(<BarraPestanas items={items} activa="stock" onSeleccionar={vi.fn()} />);
+
+    const nav = screen.getByRole('navigation', { name: 'Navegación principal' });
+    expect(nav.className).toContain('inset-x-0');
+    expect(nav.className).toContain('bottom-0');
+    expect(nav.className).toContain('border-t');
+  });
+
+  it('trae los overrides `calido:` para la píldora flotante despegada (docs/06-ui-ux.md §4, TH-F)', () => {
+    render(<BarraPestanas items={items} activa="stock" onSeleccionar={vi.fn()} />);
+
+    const nav = screen.getByRole('navigation', { name: 'Navegación principal' });
+    // Despegada de los laterales y del borde inferior.
+    expect(nav.className).toContain('calido:inset-x-3');
+    expect(nav.className).toContain('calido:bottom-[max(env(safe-area-inset-bottom),0.75rem)]');
+    // Forma píldora + sombra flotante en vez de la franja translúcida con borde superior.
+    expect(nav.className).toContain('calido:rounded-flotante');
+    expect(nav.className).toContain('calido:shadow-flotante');
+    // Borde perimetral (no solo arriba) y sin el padding de safe-area de la base.
+    expect(nav.className).toContain('calido:border');
+    expect(nav.className).toContain('calido:border-borde');
+    expect(nav.className).toContain('calido:border-t-0');
+    expect(nav.className).toContain('calido:pb-0');
+  });
 });

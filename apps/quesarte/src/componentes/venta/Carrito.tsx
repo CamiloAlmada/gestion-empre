@@ -99,8 +99,24 @@ export function Carrito({ items, onQuitar, onCobrar, procesando }: CarritoProps)
           onClick={() => setExpandidoMobile(false)}
         />
       )}
+      {/* Estilo Cálido (docs/06-ui-ux.md §4, tarea TH-F): la hoja se apoya
+          justo encima de la tab bar-píldora (bottom-(--altura-zona-inferior)
+          ya crece solo, ver tailwind.css). Sin retoque, una hoja a todo el
+          ancho (inset-x-0) con esquina recta quedaría más ancha que la
+          píldora de abajo (que tiene inset-x-3 + esquinas curvas de radio
+          2rem en sus extremos) — se ve como una tapa recta "flotando" sobre
+          un borde que se curva hacia adentro debajo de ella. Con
+          calido:inset-x-3 la hoja iguala el ancho de la píldora (el
+          desajuste de curvatura que queda en los 2 extremos, ~2rem, es el
+          mismo que tiene cualquier tapa recta sobre un borde redondeado, y
+          es sutil comparado con el desborde de 12px por lado sin el ajuste).
+          calido:rounded-t-card + border perimetral sin el lado de abajo
+          (calido:border-b-0) la hacen leer como card flotante propia en vez
+          de una franja pegada al viewport, consistente con el resto de
+          Cálido. Ver diagrama en el reporte de la tarea. */}
       <div
-        className={`fixed inset-x-0 bottom-(--altura-zona-inferior) z-20 border-t border-borde bg-superficie lg:hidden ${
+        data-testid="hoja-carrito-mobil"
+        className={`fixed inset-x-0 bottom-(--altura-zona-inferior) z-20 border-t border-borde bg-superficie lg:hidden calido:inset-x-3 calido:rounded-t-card calido:border calido:border-b-0 ${
           expandidoMobile
             ? 'rounded-t-card shadow-hoja-expandida'
             : 'shadow-hoja'

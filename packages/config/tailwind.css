@@ -225,8 +225,7 @@
   --color-primary-950: oklch(0.215 0.054 50);
 
   /* c) Tokens de forma: radios píldora, sombras suaves (look "One UI"
-     cálido, docs/06-ui-ux.md §3-4). --altura-zona-inferior NO se redefine
-     acá — la tab bar flotante despegada es de la tarea TH-F. */
+     cálido, docs/06-ui-ux.md §3-4). */
   --radio-card: 1.5rem;
   --radio-elemento: 1rem;
   --radio-control: 0.875rem;
@@ -236,6 +235,18 @@
   --sombra-flotante:
     0 12px 32px -8px oklch(0.35 0.06 55 / 0.25),
     0 4px 12px -4px oklch(0.35 0.06 55 / 0.15);
+
+  /* d) Zona inferior (tarea TH-F): en Minimalista la tab bar es una franja
+     pegada al borde (altura h-16 = 4rem, sin separación propia — el único
+     margen es el safe-area que ya absorbe su propio padding interno). En
+     Cálido la tab bar es una píldora DESPEGADA del borde inferior por
+     max(safe-area, 0.75rem) (ver BarraPestanas.tsx, calido:bottom-[...]),
+     así que la distancia total entre el borde inferior del viewport y el
+     borde SUPERIOR de la barra —que es lo que mide este token, consumido
+     por Carrito.tsx, el pb de <main> en Shell.tsx y el cluster de acciones
+     flotantes— crece en esa misma separación: altura de la píldora (4rem)
+     + el hueco que la despega del borde (max(safe-area, 0.75rem)). */
+  --altura-zona-inferior: calc(4rem + max(env(safe-area-inset-bottom), 0.75rem));
 }
 
 /* ---------------------------------------------------------------------
