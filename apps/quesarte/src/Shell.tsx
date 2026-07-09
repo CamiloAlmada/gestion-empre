@@ -1,4 +1,4 @@
-import { useEffect, useRef, type CSSProperties } from 'react';
+import { useEffect, useRef } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router';
 import { BarraPestanas, useToasts, type ItemBarraPestanas } from '@gestion/ui';
 import { useAuth, useOnlineStatus } from '@gestion/firebase-kit';
@@ -29,19 +29,22 @@ const CLASES_HEADER =
   '[@supports_not_(backdrop-filter:_blur(1px))]:bg-superficie ' +
   '[@media(prefers-reduced-transparency:reduce)]:bg-superficie';
 
-// Altura real del header (fila única + padding, sin contar el safe-area del
-// notch) expuesta como variable CSS en el contenedor raíz: cualquier
-// contenido ruteado que necesite un offset sticky "bajo el header" (p.ej.
-// los encabezados de categoría de `ListaProductosAgrupada`) la consume con
-// `var(--altura-header)` en vez de repetir el número mágico (docs/04, deuda
-// cerrada por SH-1). Single source of truth: si el header cambia de altura,
-// se ajusta acá una sola vez.
-//
-// 4.25rem = pt-[...+0.75rem] + fila de acciones min-h-[44px] (2.75rem) +
-// pb-3 (0.75rem), los tres tomados de `CLASES_HEADER` y de `CLASE_VOLVER`
-// más abajo. Si cambia cualquiera de esos tres valores (paddings del header o
-// min-height de las acciones), este número hay que recalcularlo a mano.
-const ESTILO_RAIZ = { '--altura-header': 'calc(env(safe-area-inset-top) + 4.25rem)' } as CSSProperties;
+// `--altura-header` (usada por `ListaProductosAgrupada` para su offset
+// sticky) ya no se define acá: vive en `@gestion/config/tailwind.css`, junto
+// a `--altura-zona-inferior`, con la aritmética documentada ahí (responsiva a
+// `md:`, ver docs/06-ui-ux.md §2).
+
+// Cluster flotante de acciones contextuales en mobile (ergonomía de pulgar,
+// docs/06-ui-ux.md §2, decidido 2026-07-09): mismos nodos que declara la
+// pantalla vía `useHeader({ acciones })`, en un segundo render — la
+// visibilidad la decide CSS puro (`hidden md:flex` en el header / `md:hidden`
+// acá), igual patrón que el modo compacto de `DataTable`. Se posiciona sobre
+// la tab bar con `--altura-zona-inferior` + un margen fijo. `[&>*]:shadow-lg`
+// da elevación a cada acción directa (ya tienen fondo propio — `Button` o los
+// links `bg-superficie border`/`bg-primary-600` de cada pantalla — así que
+// alcanza con la sombra, sin envolver los hijos en un contenedor opaco
+// adicional que no podríamos estilar desde acá al ser un `ReactNode` opaco).
+const CLASES_CLUSTER_ACCIONES = 'fixed right-4 z-30 flex gap-2 md:hidden [&>*]:shadow-lg';
 
 const CLASE_VOLVER =
   'flex min-h-[44px] shrink-0 items-center gap-1 rounded px-1 text-sm font-medium text-texto-secundario ' +
@@ -122,11 +125,15 @@ function ShellInterior() {
     { id: 'ajustes', etiqueta: 'Ajustes', icono: <IconoAjustes /> },
   ];
 
+  const hayAcciones = config?.acciones !== undefined;
+
   return (
-    <div className="min-h-screen bg-fondo" style={ESTILO_RAIZ}>
+    <div className="min-h-screen bg-fondo">
       <header className={CLASES_HEADER}>
         {/* Una sola fila: volver + título truncan/comparten espacio a la
-            izquierda, chip de conexión y acciones (hasta 2) a la derecha. */}
+            izquierda, chip de conexión y acciones (hasta 2, solo `md:`+: en
+            mobile flotan sobre la tab bar, ver cluster más abajo) a la
+            derecha. */}
         <div className="mx-auto flex max-w-5xl items-center gap-3">
           <div className="flex min-w-0 flex-1 items-center gap-2">
             {config?.volverA !== undefined && (
@@ -137,16 +144,39 @@ function ShellInterior() {
             <h1 className="truncate text-lg font-semibold text-texto">{titulo}</h1>
           </div>
           {!enLinea && <ChipSinConexion />}
-          {config?.acciones !== undefined && (
-            <div className="flex shrink-0 items-center gap-2">{config.acciones}</div>
+          {hayAcciones && (
+            <div className="hidden shrink-0 items-center gap-2 md:flex">{config?.acciones}</div>
           )}
         </div>
       </header>
-      {/* pb-24: deja espacio para no quedar tapado por la tab bar fija
-          (~64px + safe-area-inset-bottom). */}
-      <main className="mx-auto max-w-5xl p-4 pb-24">
+      {/* Padding inferior base (`--altura-zona-inferior` + 2rem = 6rem de
+          siempre) para no quedar tapado por la tab bar fija; con acciones
+          contextuales, en mobile suma el alto del cluster flotante (~3.5rem)
+          para que el final del contenido no quede tapado por él — a partir
+          de `md:` las acciones ya viven en el header, así que el padding
+          extra no aplica. */}
+      <main
+        className={`mx-auto max-w-5xl p-4 ${
+          hayAcciones
+            ? 'pb-[calc(var(--altura-zona-inferior)+2rem+3.5rem)] md:pb-[calc(var(--altura-zona-inferior)+2rem)]'
+            : 'pb-[calc(var(--altura-zona-inferior)+2rem)]'
+        }`}
+      >
         <Outlet />
       </main>
+      {/* Cluster flotante de acciones (mobile, ver CLASES_CLUSTER_ACCIONES):
+          DESPUÉS del `<main>` en el DOM a propósito — los lectores de
+          pantalla llegan al contenido principal antes que a estas acciones
+          (docs/06-ui-ux.md §2). */}
+      {hayAcciones && (
+        <div
+          data-testid="cluster-acciones"
+          className={CLASES_CLUSTER_ACCIONES}
+          style={{ bottom: 'calc(var(--altura-zona-inferior) + 0.75rem)' }}
+        >
+          {config?.acciones}
+        </div>
+      )}
       <BarraPestanas items={items} activa={tabActiva} onSeleccionar={(id) => navigate(`/${id}`)} />
     </div>
   );
