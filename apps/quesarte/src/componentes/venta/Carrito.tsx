@@ -70,7 +70,7 @@ function FilaItem({ item, onQuitar, onCambiarUnidades, onEditarAlPeso, onAgregar
         <button
           type="button"
           onClick={() => onEditarAlPeso(item)}
-          aria-label={`Editar ${nombre} en el carrito`}
+          aria-label={`Editar ${nombre}, ${detalleItem(item)}`}
           className="flex flex-1 flex-col items-start rounded-control text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
         >
           <span className="font-medium text-texto">{nombre}</span>

@@ -358,7 +358,9 @@ describe('Venta - editar carrito en el lugar (docs/06-ui-ux.md §6, POS-3)', () 
     fireEvent.click(screen.getByRole('button', { name: 'Agregar' }));
     expect(screen.getAllByText(/300 g · pieza del/).length).toBeGreaterThan(0);
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Editar Queso Colonia en el carrito' })[0]!);
+    fireEvent.click(
+      screen.getAllByRole('button', { name: 'Editar Queso Colonia, 300 g · pieza del 01/01/2026' })[0]!,
+    );
 
     expect(screen.getByText('Editar · Queso Colonia')).toBeTruthy();
     // Precarga el peso actual del ítem.
@@ -388,7 +390,7 @@ describe('Venta - editar carrito en el lugar (docs/06-ui-ux.md §6, POS-3)', () 
     tipearPeso('0,2');
     fireEvent.click(screen.getByRole('button', { name: 'Agregar' }));
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Editar Nuez mariposa en el carrito' })[0]!);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Editar Nuez mariposa, 200 g' })[0]!);
 
     expect(screen.getByText('Editar · Nuez mariposa')).toBeTruthy();
     expect(lecturaPeso()).toBe('0,2kg');
@@ -402,6 +404,47 @@ describe('Venta - editar carrito en el lugar (docs/06-ui-ux.md §6, POS-3)', () 
 
     // 45000 * 500 / 1000 = 22500 -> $ 225,00 (reemplazo: un solo ítem).
     expect(screen.getAllByText('$ 225,00').length).toBeGreaterThan(0);
+  });
+
+  it('granel: si el stock cambió en vivo (onSnapshot) mientras el ítem está en el carrito, editar usa el valor ACTUAL, no el capturado al agregar', () => {
+    configurarAuth();
+    configurarCollections({ productos: estadoOk([nuezMariposa]), piezas: estadoOk([]) });
+    const arbol = (
+      <MemoryRouter>
+        <ProveedorToasts>
+          <ProveedorHeader>
+            <ProveedorCarrito>
+              <Venta />
+            </ProveedorCarrito>
+          </ProveedorHeader>
+        </ProveedorToasts>
+      </MemoryRouter>
+    );
+    const { rerender } = render(arbol);
+
+    // Se agrega con el stock original (500 g).
+    fireEvent.click(screen.getByText('Nuez mariposa'));
+    tipearPeso('0,2');
+    fireEvent.click(screen.getByRole('button', { name: 'Agregar' }));
+
+    // El stock baja a 150 g "en vivo" (el listener de Firestore trajo un
+    // update): la copia que el ítem del carrito lleva (`stockGranelGramos:
+    // 500`) queda vieja.
+    configurarCollections({
+      productos: estadoOk([{ ...nuezMariposa, stockGranelGramos: peso(150) }]),
+      piezas: estadoOk([]),
+    });
+    rerender(arbol);
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Editar Nuez mariposa, 200 g' })[0]!);
+
+    // El modal de edición muestra el stock ACTUAL (150 g), no el de cuando
+    // se agregó el ítem (500 g).
+    expect(screen.getByText('Disponible: 150 g')).toBeTruthy();
+
+    // Pedir el peso que ya tenía (200 g) ahora excede el stock actual (150 g).
+    expect(screen.getByRole('alert').textContent).toContain('Superás el stock disponible');
+    expect((screen.getByRole('button', { name: 'Guardar' }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('pieza_entera: "+" del carrito abre el selector excluyendo la pieza ya carriteada', () => {

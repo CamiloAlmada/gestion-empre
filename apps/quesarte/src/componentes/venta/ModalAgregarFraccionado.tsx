@@ -62,18 +62,33 @@ export function ModalAgregarFraccionado({
     }
     setMostrarSelector(false);
     // Solo al transicionar `abierto` (mismo criterio que el resto de los
-    // modales del proyecto): `itemEnEdicion`/`piezasDisponibles` son props
-    // estables mientras el modal está abierto (Venta.tsx las recalcula, pero
-    // no cambian a mitad de edición).
+    // modales del proyecto): la precarga de `itemEnEdicion` es un valor
+    // inicial, no un valor que deba seguir sincronizado con las props. A
+    // diferencia de lo que decía este comentario antes, `piezasDisponibles`
+    // SÍ puede cambiar mientras el modal sigue abierto (Venta.tsx la deriva
+    // de un listener de Firestore — la pieza precargada puede agotarse o
+    // darse de baja en vivo). No lo resolvemos re-corriendo este efecto con
+    // `piezasDisponibles` en las deps (eso pisaría el peso/pieza que el
+    // usuario ya esté tipeando/eligiendo a mitad de edición): en cambio,
+    // `piezaVigente` de abajo revalida en cada render si la pieza mostrada
+    // (precargada o elegida a mano) sigue existiendo en la lista viva.
   }, [abierto]);
 
   const sinPiezas = piezasDisponibles.length === 0;
   const resultadoFifo =
     !sinPiezas && gramos !== null && gramos > 0 ? elegirPieza(piezasDisponibles, gramos) : null;
   const piezaMostrada = piezaManual ?? resultadoFifo?.pieza ?? null;
+  // `resultadoFifo.pieza` sale siempre de `piezasDisponibles` (vigente por
+  // construcción); solo `piezaManual` es estado propio que puede haber
+  // quedado apuntando a una pieza que ya no está en la lista viva (se agotó,
+  // se dio de baja, o — en modo edición — así llegó precargada desde
+  // `itemEnEdicion.pieza`). Se revalida por `id` en cada render, no una sola
+  // vez al abrir.
+  const piezaVigente = piezaMostrada !== null && piezasDisponibles.some((p) => p.id === piezaMostrada.id);
   const suficiente =
     piezaMostrada !== null && gramos !== null ? piezaMostrada.pesoRestanteGramos >= gramos : false;
-  const puedeAgregar = gramos !== null && gramos > 0 && piezaMostrada !== null && suficiente;
+  const puedeAgregar =
+    gramos !== null && gramos > 0 && piezaMostrada !== null && piezaVigente && suficiente;
 
   function confirmar() {
     if (!puedeAgregar || gramos === null || piezaMostrada === null) return;
@@ -161,17 +176,28 @@ export function ModalAgregarFraccionado({
                   </ul>
                 )}
 
-                {!suficiente && (
+                {!piezaVigente ? (
+                  // La pieza mostrada (precargada al editar, o elegida a
+                  // mano) ya no está en la lista viva: se agotó o se dio de
+                  // baja mientras el modal seguía abierto. No tiene sentido
+                  // mostrar el aviso de "insuficiente" con un `pesoRestanteGramos`
+                  // que ya no es real — se pide elegir otra del listado.
                   <div role="alert" className="flex flex-col gap-2 rounded-control bg-fondo p-3 text-sm text-peligro">
-                    <p>
-                      Esta pieza tiene {formatearPeso(piezaMostrada.pesoRestanteGramos)}, menos de lo
-                      pedido. Elegí otra pieza o ajustá el peso. También podés agregar lo que queda de esta
-                      pieza y el resto de otra.
-                    </p>
-                    <Button variante="secundaria" onClick={usarRestoDeEstaPieza} className="self-start">
-                      Usar lo que queda ({formatearPeso(piezaMostrada.pesoRestanteGramos)})
-                    </Button>
+                    <p>Esta pieza ya no está disponible (se agotó o se dio de baja). Elegí otra.</p>
                   </div>
+                ) : (
+                  !suficiente && (
+                    <div role="alert" className="flex flex-col gap-2 rounded-control bg-fondo p-3 text-sm text-peligro">
+                      <p>
+                        Esta pieza tiene {formatearPeso(piezaMostrada.pesoRestanteGramos)}, menos de lo
+                        pedido. Elegí otra pieza o ajustá el peso. También podés agregar lo que queda de esta
+                        pieza y el resto de otra.
+                      </p>
+                      <Button variante="secundaria" onClick={usarRestoDeEstaPieza} className="self-start">
+                        Usar lo que queda ({formatearPeso(piezaMostrada.pesoRestanteGramos)})
+                      </Button>
+                    </div>
+                  )
                 )}
               </div>
             ))}

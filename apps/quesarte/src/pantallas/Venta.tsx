@@ -137,7 +137,22 @@ export function Venta() {
   // Producto activo para los modales de "agregar" (grilla tocada, o "+" de
   // pieza_entera/agregar otra pieza) O el producto del ítem en edición (fila
   // del carrito tocada) — nunca ambos a la vez.
-  const productoActivo = itemParaEditar?.producto ?? productoParaAgregar;
+  const productoBase = itemParaEditar?.producto ?? productoParaAgregar;
+  // Al editar, se resuelve el producto VIVO por id contra `productos.datos`
+  // (mismo snapshot en tiempo real que ya usa `piezasAgrupadas` para
+  // `fraccionado_por_pieza`) en vez de quedarse con `itemParaEditar.producto`
+  // — la copia que el ítem lleva desde que se agregó al carrito, potencialmente
+  // vieja. Importa sobre todo para `granel`: su "Disponible"/`excede` sale
+  // directo de `producto.stockGranelGramos` (no hay un ajuste vía piezas que
+  // lo mantenga fresco); sin este fallback, el ModalAgregarGranel de edición
+  // mostraría el stock de cuando se agregó el ítem, no el actual. Si el
+  // producto ya no está en `productos.datos` (p. ej. se desactivó mientras
+  // tanto — la query solo trae `activo === true`), se cae al snapshot del
+  // ítem: mejor mostrar datos viejos que reventar con `undefined`.
+  const productoActivo =
+    itemParaEditar !== null && productoBase !== null
+      ? (productos.datos.find((p) => p.id === productoBase.id) ?? productoBase)
+      : productoBase;
 
   // `itemEnEdicion` se le pasa SOLO al modal cuyo `modoStock` coincide con el
   // del ítem en edición: los otros tres modales siguen montados en el DOM
@@ -184,13 +199,9 @@ export function Venta() {
   function confirmarFraccionado(pieza: Pieza, gramos: Peso) {
     if (productoActivo === null) return;
     if (itemParaEditar !== null) {
-      actualizarCarrito(
-        reemplazarItem(
-          carrito,
-          itemParaEditar.clave,
-          crearItemFraccionado(productoActivo, pieza, gramos, itemParaEditar.clave),
-        ),
-      );
+      const clave = itemParaEditar.clave;
+      const itemNuevo = crearItemFraccionado(productoActivo, pieza, gramos, clave);
+      actualizarCarrito((items) => reemplazarItem(items, clave, itemNuevo));
       cerrarModales();
     } else {
       agregarAlCarrito(crearItemFraccionado(productoActivo, pieza, gramos, proximaClave()));
@@ -200,13 +211,9 @@ export function Venta() {
   function confirmarGranel(gramos: Peso) {
     if (productoActivo === null) return;
     if (itemParaEditar !== null) {
-      actualizarCarrito(
-        reemplazarItem(
-          carrito,
-          itemParaEditar.clave,
-          crearItemGranel(productoActivo, gramos, itemParaEditar.clave),
-        ),
-      );
+      const clave = itemParaEditar.clave;
+      const itemNuevo = crearItemGranel(productoActivo, gramos, clave);
+      actualizarCarrito((items) => reemplazarItem(items, clave, itemNuevo));
       cerrarModales();
     } else {
       agregarAlCarrito(crearItemGranel(productoActivo, gramos, proximaClave()));
@@ -321,7 +328,7 @@ export function Venta() {
         onQuitar={quitarDelCarrito}
         onCobrar={() => setModalCobroAbierto(true)}
         procesando={cobrando}
-        onCambiarUnidades={(clave, delta) => actualizarCarrito(cambiarUnidades(carrito, clave, delta))}
+        onCambiarUnidades={(clave, delta) => actualizarCarrito((items) => cambiarUnidades(items, clave, delta))}
         onEditarAlPeso={editarAlPeso}
         onAgregarOtraPieza={(item) => abrirParaAgregar(item.producto)}
       />

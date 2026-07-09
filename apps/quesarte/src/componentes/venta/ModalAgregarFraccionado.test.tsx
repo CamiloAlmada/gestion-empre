@@ -178,6 +178,51 @@ describe('ModalAgregarFraccionado', () => {
       expect(screen.getByRole('button', { name: 'Guardar' })).toBeTruthy();
     });
 
+    it('la pieza precargada desaparece de la lista viva (onSnapshot): "Guardar" se deshabilita con el aviso de no disponible', () => {
+      const pieza = piezaDe({ id: 'a', fechaIngreso: new Date('2026-01-01T10:00:00'), pesoRestanteGramos: peso(900) });
+      const otraPieza = piezaDe({ id: 'b', fechaIngreso: new Date('2026-01-05T10:00:00'), pesoRestanteGramos: peso(500) });
+      const itemEnEdicion = crearItemFraccionado(producto, pieza, peso(300), 'clave-x');
+      const onAgregar = vi.fn();
+      const { rerender } = render(
+        <ModalAgregarFraccionado
+          abierto
+          onCerrar={vi.fn()}
+          producto={producto}
+          piezasDisponibles={[pieza, otraPieza]}
+          onAgregar={onAgregar}
+          itemEnEdicion={itemEnEdicion}
+        />,
+      );
+
+      expect((screen.getByRole('button', { name: 'Guardar' }) as HTMLButtonElement).disabled).toBe(false);
+
+      // La pieza precargada ('a') se agota/da de baja en vivo: el listener
+      // de Firestore ya no la trae. El modal sigue `abierto` (no se cerró),
+      // así que el efecto de precarga NO vuelve a correr — la revalidación
+      // tiene que pasar en cada render, no solo al abrir.
+      rerender(
+        <ModalAgregarFraccionado
+          abierto
+          onCerrar={vi.fn()}
+          producto={producto}
+          piezasDisponibles={[otraPieza]}
+          onAgregar={onAgregar}
+          itemEnEdicion={itemEnEdicion}
+        />,
+      );
+
+      expect(screen.getByRole('alert').textContent).toContain('ya no está disponible');
+      expect((screen.getByRole('button', { name: 'Guardar' }) as HTMLButtonElement).disabled).toBe(true);
+      expect(onAgregar).not.toHaveBeenCalled();
+
+      // Elegir la pieza que SÍ sigue viva desde el selector recupera el flujo.
+      fireEvent.click(screen.getByRole('button', { name: 'Cambiar pieza' }));
+      fireEvent.click(screen.getByText(/Pieza del 05\/01\/2026/));
+
+      expect(screen.queryByRole('alert')).toBeNull();
+      expect((screen.getByRole('button', { name: 'Guardar' }) as HTMLButtonElement).disabled).toBe(false);
+    });
+
     it('confirmar en modo edición llama a onAgregar con el peso nuevo (reemplazo lo decide quien escucha)', () => {
       const pieza = piezaDe({ id: 'a', fechaIngreso: new Date('2026-01-01T10:00:00'), pesoRestanteGramos: peso(900) });
       const itemEnEdicion = crearItemFraccionado(producto, pieza, peso(300), 'clave-x');

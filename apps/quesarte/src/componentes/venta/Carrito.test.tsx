@@ -219,14 +219,21 @@ describe('Carrito', () => {
         pesoInicialGramos: peso(1000),
         pesoRestanteGramos: peso(700),
         costoKgCents: money(500),
-        fechaIngreso: new Date('2026-01-01'),
+        // Con hora explícita (no medianoche UTC) para que `formatearFecha`
+        // (usa hora LOCAL) no corra un día para atrás en zonas horarias
+        // detrás de UTC — mismo criterio que `piezaDe` en Venta.test.tsx.
+        fechaIngreso: new Date('2026-01-01T10:00:00'),
         estado: 'disponible' as const,
       };
       const item = crearItemFraccionado(producto, pieza, peso(300), 'clave-x');
 
       renderCarrito({ items: [item], onEditarAlPeso });
 
-      fireEvent.click(screen.getAllByRole('button', { name: 'Editar Producto en el carrito' })[0]!);
+      // El aria-label incluye el detalle (peso/pieza): el lector de pantalla
+      // no pierde esa info al enfocar la fila.
+      fireEvent.click(
+        screen.getAllByRole('button', { name: 'Editar Producto, 300 g · pieza del 01/01/2026' })[0]!,
+      );
 
       expect(onEditarAlPeso).toHaveBeenCalledWith(item);
     });
@@ -239,7 +246,7 @@ describe('Carrito', () => {
 
       renderCarrito({ items: [item], onEditarAlPeso, onQuitar });
 
-      fireEvent.click(screen.getAllByRole('button', { name: 'Editar Producto en el carrito' })[0]!);
+      fireEvent.click(screen.getAllByRole('button', { name: 'Editar Producto, 300 g' })[0]!);
       expect(onEditarAlPeso).toHaveBeenCalledWith(item);
       expect(onQuitar).not.toHaveBeenCalled();
 

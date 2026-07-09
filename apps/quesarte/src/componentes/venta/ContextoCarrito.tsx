@@ -17,13 +17,21 @@ interface EstadoCarritoContexto {
   /**
    * Reemplaza la lista completa de ítems (docs/06-ui-ux.md §6, "el carrito es
    * editable en el lugar"). A propósito NO sabe nada de cambiar unidades ni
-   * de reemplazar un ítem puntual — quien llama ya calculó la lista nueva con
-   * las funciones puras de `itemsCarrito.ts` (`cambiarUnidades`,
-   * `reemplazarItem`); el contexto solo la aplica. Mantenerlo así de tonto
-   * evita que la lógica de edición se filtre acá, la misma razón por la que
-   * `agregar`/`quitar`/`vaciar` tampoco calculan nada.
+   * de reemplazar un ítem puntual — quien llama ya trae la función pura de
+   * `itemsCarrito.ts` (`cambiarUnidades`, `reemplazarItem`) aplicada con
+   * *currying* sobre sus argumentos (clave, delta/ítem nuevo); el contexto
+   * solo la ejecuta contra el `items` VIGENTE. Recibe un actualizador
+   * funcional — igual que `agregar`/`quitar`, que hacen
+   * `setItems((actual) => …)` en vez de capturar `items` del render — y no
+   * una lista ya calculada: capturar `items` en el render y calcular la
+   * lista nueva ANTES de llamar a `actualizar` dejaría una lost-update
+   * latente si dos actualizaciones llegan a batchearse (p. ej. dos toques
+   * rápidos del stepper), porque la segunda pisaría a la primera con una
+   * lista calculada sobre el mismo `items` viejo. Mantenerlo así de tonto
+   * (solo ejecuta, no decide QUÉ cambiar) evita que la lógica de edición se
+   * filtre acá.
    */
-  actualizar: (nuevosItems: ItemCarrito[]) => void;
+  actualizar: (actualizador: (items: ItemCarrito[]) => ItemCarrito[]) => void;
   /** Próxima clave estable de lista (React) para un ítem nuevo. Vive acá y no
    * en `Venta.tsx` por la misma razón que el resto del estado: si el
    * contador reviviera en cada montaje de `Venta`, un ítem agregado antes de
@@ -78,8 +86,8 @@ export function ProveedorCarrito({ children }: ProveedorCarritoProps) {
     setItems([]);
   }, []);
 
-  const actualizar = useCallback((nuevosItems: ItemCarrito[]) => {
-    setItems(nuevosItems);
+  const actualizar = useCallback((actualizador: (items: ItemCarrito[]) => ItemCarrito[]) => {
+    setItems(actualizador);
   }, []);
 
   const proximaClave = useCallback(() => {
