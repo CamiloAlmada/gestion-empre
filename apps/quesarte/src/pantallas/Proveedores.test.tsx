@@ -1,0 +1,295 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter, Route, Routes, useParams } from 'react-router';
+import { ProveedorToasts } from '@gestion/ui';
+import type { Proveedor } from '@gestion/core';
+import { Proveedores } from './Proveedores';
+import { ProveedorHeader, useHeaderActual } from '../componentes/header/ContextoHeader';
+
+const mocks = vi.hoisted(() => ({
+  useOnlineStatus: vi.fn(() => true),
+  useCollection: vi.fn(),
+  crearProveedor: vi.fn(),
+}));
+
+// Mismo criterio que Productos.test.tsx/Usuarios.test.tsx: `proveedorConverter`
+// pasa tal cual (identidad, no se ejercita); solo se mockean los hooks y la
+// única operación de I/O de la pantalla (`crearProveedor`, ya provista por
+// packages/firebase-kit — CP-A). La query se arma con las funciones REALES
+// de 'firebase/firestore' (mockeadas más abajo para no requerir un `db` real).
+vi.mock('@gestion/firebase-kit', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@gestion/firebase-kit')>();
+  return {
+    ...actual,
+    useOnlineStatus: mocks.useOnlineStatus,
+    useCollection: mocks.useCollection,
+    crearProveedor: mocks.crearProveedor,
+  };
+});
+
+vi.mock('../firebase', () => ({ db: {} }));
+
+interface RefFalsa {
+  __path: string;
+  withConverter: () => RefFalsa;
+}
+
+function crearRefFalsa(path: string): RefFalsa {
+  const ref: RefFalsa = { __path: path, withConverter: () => ref };
+  return ref;
+}
+
+vi.mock('firebase/firestore', () => ({
+  collection: (_db: unknown, path: string) => crearRefFalsa(path),
+  query: (ref: RefFalsa, ...clausulas: unknown[]) => ({ ...ref, __clausulas: clausulas }),
+  where: (...args: unknown[]) => ({ __tipo: 'where', args }),
+  orderBy: (...args: unknown[]) => ({ __tipo: 'orderBy', args }),
+}));
+
+interface EstadoColeccionFalso<T> {
+  datos: T[];
+  cargando: boolean;
+  error: unknown;
+}
+
+let estadoProveedores: EstadoColeccionFalso<Proveedor> = { datos: [], cargando: false, error: null };
+
+mocks.useCollection.mockImplementation(() => estadoProveedores);
+
+function configurarCollection(overrides: { datos?: Proveedor[]; cargando?: boolean; error?: unknown }) {
+  estadoProveedores = {
+    datos: overrides.datos ?? [],
+    cargando: overrides.cargando ?? false,
+    error: overrides.error ?? null,
+  };
+}
+
+function proveedorDe(over: Partial<Proveedor> & Pick<Proveedor, 'id'>): Proveedor {
+  return {
+    nombre: 'Proveedor',
+    fechaAlta: new Date('2026-01-01'),
+    activo: true,
+    ...over,
+  };
+}
+
+/** Expone el header contextual actual, para aserirlo sin montar `Shell`
+ * completo (mismo criterio que Productos.test.tsx). */
+function VisorHeader() {
+  const config = useHeaderActual();
+  return (
+    <div>
+      <p data-testid="titulo-header">{config?.titulo}</p>
+      <p data-testid="volver-header">{config?.volverA ? `${config.volverA.etiqueta}:${config.volverA.a}` : ''}</p>
+      <div data-testid="acciones-header">{config?.acciones}</div>
+    </div>
+  );
+}
+
+/** Placeholder de la ruta de ficha: solo confirma a qué `id` navegó. */
+function PlaceholderFicha() {
+  const { id } = useParams<{ id: string }>();
+  return <div>Ficha de {id}</div>;
+}
+
+function renderizar() {
+  return render(
+    <MemoryRouter initialEntries={['/stock/proveedores']}>
+      <ProveedorToasts>
+        <ProveedorHeader>
+          <VisorHeader />
+          <Routes>
+            <Route path="/stock/proveedores" element={<Proveedores />} />
+            <Route path="/stock/proveedor/:id" element={<PlaceholderFicha />} />
+          </Routes>
+        </ProveedorHeader>
+      </ProveedorToasts>
+    </MemoryRouter>,
+  );
+}
+
+describe('Proveedores', () => {
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+    mocks.useOnlineStatus.mockReturnValue(true);
+    estadoProveedores = { datos: [], cargando: false, error: null };
+  });
+
+  it('header contextual: título "Proveedores", volver a Stock y acción "Agregar proveedor"', () => {
+    configurarCollection({ datos: [] });
+
+    renderizar();
+
+    expect(screen.getByTestId('titulo-header').textContent).toBe('Proveedores');
+    expect(screen.getByTestId('volver-header').textContent).toBe('Stock:/stock');
+    expect(screen.getAllByRole('button', { name: 'Agregar proveedor' }).length).toBeGreaterThan(0);
+  });
+
+  it('estado cargando', () => {
+    configurarCollection({ cargando: true });
+
+    renderizar();
+
+    expect(screen.getByText('Cargando proveedores…')).toBeTruthy();
+  });
+
+  it('estado error muestra mensaje y botón de reintento', () => {
+    configurarCollection({ error: new Error('boom') });
+
+    renderizar();
+
+    expect(screen.getByRole('alert').textContent).toContain('No se pudieron cargar los proveedores.');
+    expect(screen.getByRole('button', { name: 'Reintentar' })).toBeTruthy();
+  });
+
+  it('estado vacío ofrece alta', () => {
+    configurarCollection({ datos: [] });
+
+    renderizar();
+
+    expect(screen.getByText('No hay proveedores todavía.')).toBeTruthy();
+  });
+
+  it('renderiza el listado en orden, con contacto/teléfono cuando existen', () => {
+    configurarCollection({
+      datos: [
+        proveedorDe({ id: 'p1', nombre: 'Quesos del Norte', contactoNombre: 'Juan', telefono: '099123456' }),
+        proveedorDe({ id: 'p2', nombre: 'Miel Artesanal' }),
+      ],
+    });
+
+    renderizar();
+
+    expect(screen.getByText('Quesos del Norte')).toBeTruthy();
+    expect(screen.getByText('Juan · 099123456')).toBeTruthy();
+    expect(screen.getByText('Miel Artesanal')).toBeTruthy();
+  });
+
+  it('la búsqueda filtra por nombre ignorando acentos', () => {
+    configurarCollection({
+      datos: [
+        proveedorDe({ id: 'p1', nombre: 'Quesos Añejo' }),
+        proveedorDe({ id: 'p2', nombre: 'Miel Artesanal' }),
+      ],
+    });
+
+    renderizar();
+    fireEvent.change(screen.getByLabelText('Buscar'), { target: { value: 'anejo' } });
+
+    expect(screen.getByText('Quesos Añejo')).toBeTruthy();
+    expect(screen.queryByText('Miel Artesanal')).toBeNull();
+  });
+
+  it('tocar una fila navega a su ficha (/stock/proveedor/:id)', () => {
+    configurarCollection({ datos: [proveedorDe({ id: 'p1', nombre: 'Quesos del Norte' })] });
+
+    renderizar();
+    fireEvent.click(screen.getByRole('button', { name: /Quesos del Norte/ }));
+
+    expect(screen.getByText('Ficha de p1')).toBeTruthy();
+  });
+
+  it('inactivos ocultos: la query filtra activo == true (no depende de un flag client-side)', () => {
+    configurarCollection({ datos: [] });
+
+    renderizar();
+
+    const llamada = mocks.useCollection.mock.calls[0]![0] as { __clausulas: unknown[] };
+    expect(llamada.__clausulas).toContainEqual({ __tipo: 'where', args: ['activo', '==', true] });
+  });
+
+  describe('alta', () => {
+    it('valida el nombre requerido y no llama a crearProveedor', () => {
+      configurarCollection({ datos: [] });
+
+      renderizar();
+      fireEvent.click(screen.getAllByRole('button', { name: 'Agregar proveedor' })[0]!);
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+      expect(screen.getByText('Ingresá el nombre del proveedor.')).toBeTruthy();
+      expect(mocks.crearProveedor).not.toHaveBeenCalled();
+    });
+
+    it('crea un proveedor con los datos básicos y cierra con éxito', async () => {
+      configurarCollection({ datos: [] });
+      mocks.crearProveedor.mockResolvedValue({ proveedorId: 'nuevo' });
+
+      renderizar();
+      fireEvent.click(screen.getAllByRole('button', { name: 'Agregar proveedor' })[0]!);
+      fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Quesos del Norte' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+      await waitFor(() => expect(mocks.crearProveedor).toHaveBeenCalledTimes(1));
+      const [, datos] = mocks.crearProveedor.mock.calls[0] as [unknown, { nombre: string }];
+      expect(datos.nombre).toBe('Quesos del Norte');
+      expect(await screen.findByText('Proveedor creado.')).toBeTruthy();
+    });
+
+    it('agregar una cuenta de pago sin banco/cuenta bloquea el guardado', () => {
+      configurarCollection({ datos: [] });
+
+      renderizar();
+      fireEvent.click(screen.getAllByRole('button', { name: 'Agregar proveedor' })[0]!);
+      fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Quesos del Norte' } });
+      fireEvent.click(screen.getByRole('button', { name: '+ Agregar cuenta' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+      expect(screen.getByText('Cada cuenta necesita banco y número de cuenta.')).toBeTruthy();
+      expect(mocks.crearProveedor).not.toHaveBeenCalled();
+    });
+
+    it('carga una cuenta de pago completa y la envía dentro de pagos[]', async () => {
+      configurarCollection({ datos: [] });
+      mocks.crearProveedor.mockResolvedValue({ proveedorId: 'nuevo' });
+
+      renderizar();
+      fireEvent.click(screen.getAllByRole('button', { name: 'Agregar proveedor' })[0]!);
+      fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Quesos del Norte' } });
+      fireEvent.click(screen.getByRole('button', { name: '+ Agregar cuenta' }));
+      fireEvent.change(screen.getByLabelText('Banco'), { target: { value: 'Itaú' } });
+      fireEvent.change(screen.getByLabelText('Número de cuenta'), { target: { value: '123-456' } });
+      fireEvent.change(screen.getByLabelText('Titular (opcional)'), { target: { value: 'Juan Pérez' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+      await waitFor(() => expect(mocks.crearProveedor).toHaveBeenCalledTimes(1));
+      const [, datos] = mocks.crearProveedor.mock.calls[0] as [
+        unknown,
+        { pagos?: { banco: string; cuenta: string; titular?: string }[] },
+      ];
+      expect(datos.pagos).toEqual([{ banco: 'Itaú', cuenta: '123-456', titular: 'Juan Pérez', moneda: undefined }]);
+    });
+
+    it('quitar una cuenta la elimina del borrador antes de guardar', async () => {
+      configurarCollection({ datos: [] });
+      mocks.crearProveedor.mockResolvedValue({ proveedorId: 'nuevo' });
+
+      renderizar();
+      fireEvent.click(screen.getAllByRole('button', { name: 'Agregar proveedor' })[0]!);
+      fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Quesos del Norte' } });
+      fireEvent.click(screen.getByRole('button', { name: '+ Agregar cuenta' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Quitar cuenta 1' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+      await waitFor(() => expect(mocks.crearProveedor).toHaveBeenCalledTimes(1));
+      const [, datos] = mocks.crearProveedor.mock.calls[0] as [unknown, { pagos?: unknown[] }];
+      expect(datos.pagos).toBeUndefined();
+    });
+
+    it('sin conexión: guarda sin esperar el ack, cierra al instante y avisa que falta sincronizar', async () => {
+      configurarCollection({ datos: [] });
+      mocks.useOnlineStatus.mockReturnValue(false);
+      mocks.crearProveedor.mockResolvedValue({ proveedorId: 'nuevo' });
+
+      renderizar();
+      fireEvent.click(screen.getAllByRole('button', { name: 'Agregar proveedor' })[0]!);
+      fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Quesos del Norte' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+      const dialog = document.querySelector('dialog') as HTMLDialogElement;
+      expect(dialog.open).toBe(false);
+      expect(mocks.crearProveedor).toHaveBeenCalledTimes(1);
+      expect(await screen.findByText('Guardado sin conexión. Se sincronizará al reconectar.')).toBeTruthy();
+    });
+  });
+});

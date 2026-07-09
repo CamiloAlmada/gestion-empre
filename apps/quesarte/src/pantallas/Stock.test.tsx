@@ -191,6 +191,27 @@ describe('Stock - header contextual', () => {
     const link = screen.getByRole('link', { name: 'Catálogo' });
     expect(link.getAttribute('href')).toBe('/stock/productos');
   });
+
+  it('admin: además ve la acción "Proveedores" que linkea a /stock/proveedores', () => {
+    configurarAuth('admin');
+    configurarCollections({ productos: estadoOk([]), piezas: estadoOk([]) });
+
+    renderizar();
+
+    const link = screen.getByRole('link', { name: 'Proveedores' });
+    expect(link.getAttribute('href')).toBe('/stock/proveedores');
+  });
+
+  it('vendedor: no ve la acción "Proveedores" (solo admin, docs/07)', () => {
+    configurarAuth('vendedor');
+    configurarCollections({ productos: estadoOk([]), piezas: estadoOk([]) });
+
+    renderizar();
+
+    expect(screen.queryByRole('link', { name: 'Proveedores' })).toBeNull();
+    // el catálogo sigue visible para el vendedor (necesario para el POS)
+    expect(screen.getByRole('link', { name: 'Catálogo' })).toBeTruthy();
+  });
 });
 
 describe('Stock - lista maestra (agrupación)', () => {

@@ -84,6 +84,19 @@ vi.mock('./pantallas/DetalleProductoPantalla', () => ({
   DetalleProductoPantalla: () => <div>Contenido de DetalleProductoPantalla</div>,
 }));
 
+// Proveedores/DetalleProveedorPantalla (rutas de /stock/proveedores, solo
+// admin) también arman su query de Firestore al importarse, mismo motivo que
+// Productos/Usuarios arriba: se mockean enteras (tienen sus propios test
+// files), este suite solo prueba que las rutas existen y el gate de
+// `RutaSoloAdmin` funciona para ellas.
+vi.mock('./pantallas/Proveedores', () => ({
+  Proveedores: () => <div>Contenido de Proveedores</div>,
+}));
+
+vi.mock('./pantallas/DetalleProveedorPantalla', () => ({
+  DetalleProveedorPantalla: () => <div>Contenido de DetalleProveedorPantalla</div>,
+}));
+
 function configurarAuth(rol: 'admin' | 'vendedor') {
   mocks.useAuth.mockReturnValue({
     usuario: { uid: 'u1' },
@@ -199,5 +212,39 @@ describe('App - rutas', () => {
     renderizarEn('/stock/producto/abc123');
 
     expect(screen.getByText('Contenido de DetalleProductoPantalla')).toBeTruthy();
+  });
+
+  it('vendedor que navega a /stock/proveedores es redirigido a Venta (docs/07: solo admin)', () => {
+    configurarAuth('vendedor');
+
+    renderizarEn('/stock/proveedores');
+
+    expect(screen.getByRole('heading', { name: 'Venta', level: 1 })).toBeTruthy();
+    expect(screen.queryByText('Contenido de Proveedores')).toBeNull();
+  });
+
+  it('admin que navega a /stock/proveedores ve la pantalla de Proveedores', () => {
+    configurarAuth('admin');
+
+    renderizarEn('/stock/proveedores');
+
+    expect(screen.getByText('Contenido de Proveedores')).toBeTruthy();
+  });
+
+  it('vendedor que navega a /stock/proveedor/:id es redirigido a Venta (docs/07: solo admin)', () => {
+    configurarAuth('vendedor');
+
+    renderizarEn('/stock/proveedor/abc123');
+
+    expect(screen.getByRole('heading', { name: 'Venta', level: 1 })).toBeTruthy();
+    expect(screen.queryByText('Contenido de DetalleProveedorPantalla')).toBeNull();
+  });
+
+  it('admin que navega a /stock/proveedor/:id ve la ficha del proveedor', () => {
+    configurarAuth('admin');
+
+    renderizarEn('/stock/proveedor/abc123');
+
+    expect(screen.getByText('Contenido de DetalleProveedorPantalla')).toBeTruthy();
   });
 });

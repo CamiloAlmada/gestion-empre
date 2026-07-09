@@ -1,0 +1,210 @@
+import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router';
+import { collection, orderBy, query, where } from 'firebase/firestore';
+import type { Proveedor } from '@gestion/core';
+import {
+  crearProveedor,
+  proveedorConverter,
+  useCollection,
+  useOnlineStatus,
+  type DatosProveedor,
+} from '@gestion/firebase-kit';
+import { Button, Input, useToasts } from '@gestion/ui';
+import { db } from '../firebase';
+import { ModalProveedor } from './ModalProveedor';
+import { useHeader } from '../componentes/header/ContextoHeader';
+
+/** Minúsculas y sin diacríticos, para que la búsqueda ignore acentos (mismo
+ * criterio que Productos.tsx). */
+function normalizarTexto(texto: string): string {
+  return texto
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase();
+}
+
+/** Segunda línea de la fila: contacto y/o teléfono, unidos si hay ambos. */
+function textoContacto(proveedor: Proveedor): string {
+  return [proveedor.contactoNombre, proveedor.telefono].filter((v): v is string => !!v).join(' · ');
+}
+
+interface FilaProveedorProps {
+  proveedor: Proveedor;
+  onSeleccionar: () => void;
+}
+
+function FilaProveedor({ proveedor, onSeleccionar }: FilaProveedorProps) {
+  const contacto = textoContacto(proveedor);
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={onSeleccionar}
+        className="flex min-h-[56px] w-full items-center gap-2 rounded-elemento border border-borde bg-superficie p-4 text-left transition-colors hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
+      >
+        <div className="flex flex-1 flex-col gap-0.5">
+          <span className="font-medium text-texto">{proveedor.nombre}</span>
+          {contacto !== '' && <span className="text-sm text-texto-secundario">{contacto}</span>}
+        </div>
+        <span aria-hidden="true" className="text-texto-secundario">
+          ›
+        </span>
+      </button>
+    </li>
+  );
+}
+
+/**
+ * Listado de proveedores (sección interna del tab Stock, solo admin — la
+ * ruta ya está protegida por `RutaSoloAdmin` en App.tsx, mismo patrón que
+ * `Usuarios.tsx`: no hace falta re-chequear el rol acá adentro). Orden
+ * alfabético, inactivos ocultos (docs/07-clientes-proveedores.md). Los
+ * proveedores son pocos: una lista simple con búsqueda por nombre, sin la
+ * maquinaria de `DataTable` (no hay columnas que ganarse el lugar, solo
+ * nombre + contacto — docs/06-ui-ux.md §1 "ante la duda, menos").
+ *
+ * Tocar una fila navega a su ficha (`/stock/proveedor/:id`, ruta real). El
+ * alta se hace acá (acción de header, como Productos); edición y
+ * desactivación viven en la ficha (`DetalleProveedorPantalla`), donde ya se
+ * ve el detalle completo del proveedor.
+ */
+export function Proveedores() {
+  const navigate = useNavigate();
+  const enLinea = useOnlineStatus();
+  const { mostrarToast } = useToasts();
+
+  const [busqueda, setBusqueda] = useState('');
+  const [modalAltaAbierto, setModalAltaAbierto] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+  // Fuerza resuscripción al "Reintentar" (misma técnica que Stock/Productos:
+  // useCollection resuscribe por identidad de query, no por contenido).
+  const [intentoId, setIntentoId] = useState(0);
+
+  useHeader({
+    titulo: 'Proveedores',
+    volverA: { etiqueta: 'Stock', a: '/stock' },
+    acciones: (
+      <Button onClick={() => setModalAltaAbierto(true)} className="min-h-[48px]">
+        Agregar proveedor
+      </Button>
+    ),
+  });
+
+  const consultaProveedores = useMemo(
+    () =>
+      query(
+        collection(db, 'proveedores').withConverter(proveedorConverter),
+        where('activo', '==', true),
+        orderBy('nombre'),
+      ),
+    [intentoId],
+  );
+  const { datos: proveedores, cargando, error } = useCollection(consultaProveedores);
+
+  const proveedoresFiltrados = useMemo(() => {
+    const consulta = normalizarTexto(busqueda.trim());
+    if (consulta === '') return proveedores;
+    return proveedores.filter((p) => normalizarTexto(p.nombre).includes(consulta));
+  }, [proveedores, busqueda]);
+
+  function reintentar() {
+    setIntentoId((n) => n + 1);
+  }
+
+  /**
+   * Alta de proveedor: mismo patrón híbrido de escrituras offline del
+   * proyecto (docs/06-ui-ux.md §8) que `Productos.tsx` — acá delegado a
+   * `crearProveedor` (packages/firebase-kit), que ya arma el documento y
+   * valida el nombre.
+   */
+  async function handleCrear(datos: DatosProveedor) {
+    const escritura = crearProveedor(db, datos);
+
+    if (!enLinea) {
+      setModalAltaAbierto(false);
+      mostrarToast('Guardado sin conexión. Se sincronizará al reconectar.', 'info');
+      escritura.catch(() => {
+        mostrarToast('No se pudo sincronizar el proveedor creado.', 'error');
+      });
+      return;
+    }
+
+    setGuardando(true);
+    try {
+      await escritura;
+      mostrarToast('Proveedor creado.', 'exito');
+      setModalAltaAbierto(false);
+    } catch {
+      mostrarToast('No se pudo crear el proveedor. Intentá de nuevo.', 'error');
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  let contenido;
+  if (cargando) {
+    contenido = <p className="py-8 text-center text-texto-secundario">Cargando proveedores…</p>;
+  } else if (error !== null) {
+    contenido = (
+      <div className="flex flex-col items-center gap-3 rounded-card border border-borde bg-superficie p-8 text-center">
+        <p role="alert" className="text-peligro">
+          No se pudieron cargar los proveedores. Revisá tu conexión e intentá de nuevo.
+        </p>
+        <Button onClick={reintentar}>Reintentar</Button>
+      </div>
+    );
+  } else if (proveedores.length === 0) {
+    contenido = (
+      <div className="flex flex-col items-center gap-3 rounded-card border border-borde bg-superficie p-8 text-center">
+        <p className="text-texto-secundario">No hay proveedores todavía.</p>
+        <Button onClick={() => setModalAltaAbierto(true)}>Agregar proveedor</Button>
+      </div>
+    );
+  } else if (proveedoresFiltrados.length === 0) {
+    contenido = (
+      <p className="py-8 text-center text-texto-secundario">
+        No se encontraron proveedores para "{busqueda.trim()}".
+      </p>
+    );
+  } else {
+    contenido = (
+      <ul role="list" className="flex flex-col gap-2">
+        {proveedoresFiltrados.map((proveedor) => (
+          <FilaProveedor
+            key={proveedor.id}
+            proveedor={proveedor}
+            onSeleccionar={() => navigate(`/stock/proveedor/${proveedor.id}`)}
+          />
+        ))}
+      </ul>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      {!enLinea && (
+        <div
+          role="status"
+          className="flex items-center gap-2 rounded-elemento border border-borde bg-superficie px-4 py-3 text-sm text-advertencia"
+        >
+          <span aria-hidden="true">⚠</span>
+          <span>Sin conexión: los cambios se sincronizarán al reconectar.</span>
+        </div>
+      )}
+
+      <div className="w-full max-w-xs">
+        <Input label="Buscar" value={busqueda} onChange={setBusqueda} placeholder="Nombre" />
+      </div>
+
+      {contenido}
+
+      <ModalProveedor
+        abierto={modalAltaAbierto}
+        proveedor={null}
+        guardando={guardando}
+        onGuardar={(datos) => void handleCrear(datos)}
+        onCerrar={() => setModalAltaAbierto(false)}
+      />
+    </div>
+  );
+}

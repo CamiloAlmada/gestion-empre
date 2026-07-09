@@ -2,7 +2,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { collection, orderBy, query, where } from 'firebase/firestore';
 import type { Categoria, Pieza, Producto } from '@gestion/core';
-import { categoriaConverter, piezaConverter, productoConverter, useCollection } from '@gestion/firebase-kit';
+import {
+  categoriaConverter,
+  piezaConverter,
+  productoConverter,
+  useAuth,
+  useCollection,
+} from '@gestion/firebase-kit';
 import { Button } from '@gestion/ui';
 import { db } from '../firebase';
 import { agruparPorCategoria } from '../componentes/stock/agrupacion';
@@ -26,6 +32,8 @@ import { useHeader } from '../componentes/header/ContextoHeader';
  */
 export function Stock() {
   const navigate = useNavigate();
+  const { perfil } = useAuth();
+  const esAdmin = perfil?.rol === 'admin';
 
   const [intento, setIntento] = useState(0);
   const [alertaActiva, setAlertaActiva] = useState<TipoAlerta | null>(null);
@@ -105,15 +113,29 @@ export function Stock() {
 
   useHeader({
     titulo: 'Stock',
-    // min-h-[48px]: esta acción ahora también flota sobre la tab bar en
+    // min-h-[48px]: estas acciones ahora también flotan sobre la tab bar en
     // mobile (zona del pulgar, docs/06-ui-ux.md §2 y §5 — targets ≥48px).
+    // "Proveedores" solo para admin (docs/07-clientes-proveedores.md: "el
+    // vendedor no ve datos bancarios ni costos de proveedor" — acá se oculta
+    // la entrada, la ruta además queda protegida por `RutaSoloAdmin` en
+    // App.tsx si un vendedor navega a mano).
     acciones: (
-      <Link
-        to="/stock/productos"
-        className="inline-flex min-h-[48px] items-center justify-center rounded-control border border-borde bg-superficie px-3 text-sm font-medium text-texto hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
-      >
-        Catálogo
-      </Link>
+      <>
+        <Link
+          to="/stock/productos"
+          className="inline-flex min-h-[48px] items-center justify-center rounded-control border border-borde bg-superficie px-3 text-sm font-medium text-texto hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
+        >
+          Catálogo
+        </Link>
+        {esAdmin && (
+          <Link
+            to="/stock/proveedores"
+            className="inline-flex min-h-[48px] items-center justify-center rounded-control border border-borde bg-superficie px-3 text-sm font-medium text-texto hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
+          >
+            Proveedores
+          </Link>
+        )}
+      </>
     ),
   });
 
