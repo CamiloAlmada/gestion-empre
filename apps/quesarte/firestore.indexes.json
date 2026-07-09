@@ -24,6 +24,14 @@
         { "fieldPath": "estado", "order": "ASCENDING" },
         { "fieldPath": "fechaIngreso", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "ventas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "clienteId", "order": "ASCENDING" },
+        { "fieldPath": "fecha", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

@@ -100,6 +100,44 @@ service cloud.firestore {
         && d.orden is int && d.orden >= 0;
     }
 
+    // Claves permitidas de un cliente (doc 07). Ninguna otra puede aparecer, ni en
+    // el alta rápida del vendedor ni en la edición del admin.
+    function clienteClavesConocidas() {
+      return request.resource.data.keys().hasOnly(
+        ['nombre', 'alias', 'telefono', 'email', 'direccion', 'notas', 'fechaAlta', 'activo', 'stats']);
+    }
+
+    // Shape estricto para el ALTA de un cliente (create de vendedor o admin): el
+    // vendedor hace alta rápida en el POS, así que se valida acá igual que la
+    // invitación de usuario. `nombre` obligatorio no vacío, `activo` nace true, y
+    // `stats` NACE EN CERO (cantidadVentas 0, totalHistoricoCents 0, sin fechas):
+    // el cache lo llenan después los increments de la venta, no el alta.
+    function clienteAltaValida() {
+      let d = request.resource.data;
+      return clienteClavesConocidas()
+        && d.keys().hasAll(['nombre', 'fechaAlta', 'activo', 'stats'])
+        && d.nombre is string && d.nombre.size() > 0
+        && d.activo == true
+        && d.stats.keys().hasOnly(['cantidadVentas', 'totalHistoricoCents', 'primeraCompra', 'ultimaCompra'])
+        && d.stats.keys().hasAll(['cantidadVentas', 'totalHistoricoCents'])
+        && d.stats.cantidadVentas == 0
+        && d.stats.totalHistoricoCents == 0;
+    }
+
+    // Update de VENDEDOR sobre un cliente: SOLO el cache `stats`, y solo con los
+    // deltas de UNA venta. Con `increment()`, `request.resource.data` trae el valor
+    // RESULTANTE, así que se compara contra `resource.data`: `cantidadVentas` sube
+    // exactamente 1 y `totalHistoricoCents` sube estrictamente (una venta suma
+    // plata). Esto bloquea +2, decrementos (la reversa de la anulación es de admin)
+    // y tocar datos de contacto. Las fechas de `stats` pueden cambiar (cache).
+    function clienteStatsDeltaVenta() {
+      let vieja = resource.data.stats;
+      let nueva = request.resource.data.stats;
+      return soloCambian(['stats'])
+        && nueva.cantidadVentas == vieja.cantidadVentas + 1
+        && nueva.totalHistoricoCents > vieja.totalHistoricoCents;
+    }
+
     // --- Colecciones ---
 
     match /usuarios/{uid} {
@@ -163,12 +201,16 @@ service cloud.firestore {
       // Historial visible para todo usuario activo.
       allow read: if usuarioActivo();
       // Cualquier usuario activo (vendedor o admin) registra su propia venta
-      // completada con total e items presentes.
+      // completada con total e items presentes. `clienteId`/`clienteNombre` son
+      // opcionales (doc 07): si NO vienen, la venta anónima pasa igual que antes;
+      // si vienen, deben ser strings (shape del denormalizado).
       allow create: if usuarioActivo()
         && request.resource.data.usuarioId == request.auth.uid
         && request.resource.data.estado == 'completada'
         && request.resource.data.totalCents is int
-        && request.resource.data.items is list;
+        && request.resource.data.items is list
+        && (!('clienteId' in request.resource.data) || request.resource.data.clienteId is string)
+        && (!('clienteNombre' in request.resource.data) || request.resource.data.clienteNombre is string);
       // Única mutación permitida: anulación por admin (completada -> anulada),
       // sin tocar ningún otro campo (la reversa de stock va por movimientos).
       allow update: if esAdmin()
@@ -176,6 +218,34 @@ service cloud.firestore {
         && request.resource.data.estado == 'anulada'
         && soloCambian(['estado']);
       // Las ventas no se borran (auditoría).
+      allow delete: if false;
+    }
+
+    match /clientes/{id} {
+      // Cualquier usuario activo lee clientes (el vendedor los busca en el POS).
+      allow read: if usuarioActivo();
+      // Alta (rápida o completa): vendedor o admin, con shape estricto y stats en
+      // cero (el vendedor da de alta clientes desde el mostrador, doc 07).
+      allow create: if usuarioActivo() && clienteAltaValida();
+      // Admin edita datos de contacto/activo y revierte el cache de stats al anular
+      // (decrementos): puede cambiar cualquier campo conocido, sin introducir
+      // claves nuevas (preserva el shape).
+      allow update: if esAdmin() && clienteClavesConocidas();
+      // Vendedor solo suma al cache `stats` el efecto de UNA venta (nunca resta ni
+      // toca datos de contacto).
+      allow update: if esVendedor()
+        && clienteClavesConocidas()
+        && clienteStatsDeltaVenta();
+      // No se borran: se desactivan (activo:false), preservando historial y stats.
+      allow delete: if false;
+    }
+
+    match /proveedores/{id} {
+      // Solo admin: el vendedor no ve datos bancarios ni costos de proveedor
+      // (criterio de aceptación del doc 07, verificado por reglas — no solo UI).
+      allow read: if esAdmin();
+      allow create, update: if esAdmin();
+      // No se borran: se desactivan (activo:false).
       allow delete: if false;
     }
 

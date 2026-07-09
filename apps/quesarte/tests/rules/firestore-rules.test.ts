@@ -68,6 +68,16 @@ function ventaValida(usuarioId: string) {
   };
 }
 
+// Payload de alta rápida de cliente (shape estricto: stats nace en cero).
+function clienteAltaRapida(nombre = 'Nuevo') {
+  return {
+    nombre,
+    fechaAlta: Date.now(),
+    activo: true,
+    stats: { cantidadVentas: 0, totalHistoricoCents: 0 },
+  };
+}
+
 // Movimiento válido a nombre de un usuario.
 function movimientoValido(usuarioId: string) {
   return {
@@ -150,6 +160,26 @@ beforeEach(async () => {
     });
     await setDoc(doc(seed, 'movimientos', 'mov-1'), movimientoValido(VENDEDOR));
     await setDoc(doc(seed, 'compras', 'compra-1'), { proveedor: 'X', totalCents: 100000 });
+    // Cliente con historial (stats no en cero) para probar los updates.
+    await setDoc(doc(seed, 'clientes', 'cli-1'), {
+      nombre: 'Marta',
+      telefono: '099111222',
+      fechaAlta: Date.now(),
+      activo: true,
+      stats: {
+        cantidadVentas: 2,
+        totalHistoricoCents: 5000,
+        primeraCompra: Date.now(),
+        ultimaCompra: Date.now(),
+      },
+    });
+    await setDoc(doc(seed, 'proveedores', 'prov-1'), {
+      nombre: 'Lácteos Colonia',
+      rut: '210000000012',
+      pagos: [{ banco: 'BROU', cuenta: '001234567' }],
+      fechaAlta: Date.now(),
+      activo: true,
+    });
     await setDoc(doc(seed, 'configuracion', 'general'), {
       nombreNegocio: 'Quesarte',
       umbralPiezaAgotadaGramos: 50,
@@ -470,6 +500,163 @@ describe('ventas', () => {
 
   it('nadie borra ventas', async () => {
     await assertFails(deleteDoc(doc(db(ADMIN), 'ventas', 'venta-1')));
+  });
+
+  it('vendedor crea venta CON cliente (clienteId/clienteNombre string)', async () => {
+    await assertSucceeds(
+      setDoc(doc(db(VENDEDOR), 'ventas', 'venta-con-cli'), {
+        ...ventaValida(VENDEDOR),
+        clienteId: 'cli-1',
+        clienteNombre: 'Marta',
+      }),
+    );
+  });
+
+  it('vendedor NO crea venta con clienteId no-string', async () => {
+    await assertFails(
+      setDoc(doc(db(VENDEDOR), 'ventas', 'venta-cli-mala'), {
+        ...ventaValida(VENDEDOR),
+        clienteId: 123,
+      }),
+    );
+  });
+});
+
+describe('clientes', () => {
+  it('vendedor lee clientes (los busca en el POS)', async () => {
+    await assertSucceeds(getDoc(doc(db(VENDEDOR), 'clientes', 'cli-1')));
+  });
+
+  it('vendedor crea cliente válido (alta rápida, stats en cero)', async () => {
+    await assertSucceeds(
+      setDoc(doc(db(VENDEDOR), 'clientes', 'cli-nuevo'), clienteAltaRapida()),
+    );
+  });
+
+  it('vendedor NO crea cliente con stats distinto de cero', async () => {
+    await assertFails(
+      setDoc(doc(db(VENDEDOR), 'clientes', 'cli-x'), {
+        ...clienteAltaRapida(),
+        stats: { cantidadVentas: 5, totalHistoricoCents: 9999 },
+      }),
+    );
+  });
+
+  it('vendedor NO crea cliente con nombre vacío', async () => {
+    await assertFails(
+      setDoc(doc(db(VENDEDOR), 'clientes', 'cli-x'), clienteAltaRapida('')),
+    );
+  });
+
+  it('vendedor NO crea cliente con clave desconocida', async () => {
+    await assertFails(
+      setDoc(doc(db(VENDEDOR), 'clientes', 'cli-x'), { ...clienteAltaRapida(), rol: 'admin' }),
+    );
+  });
+
+  it('vendedor NO edita datos de contacto', async () => {
+    await assertFails(
+      updateDoc(doc(db(VENDEDOR), 'clientes', 'cli-1'), { telefono: '099000000' }),
+    );
+  });
+
+  it('vendedor actualiza stats con deltas coherentes de una venta (+1, total sube)', async () => {
+    await assertSucceeds(
+      updateDoc(doc(db(VENDEDOR), 'clientes', 'cli-1'), {
+        'stats.cantidadVentas': increment(1),
+        'stats.totalHistoricoCents': increment(4500),
+        'stats.ultimaCompra': Date.now(),
+      }),
+    );
+  });
+
+  it('vendedor NO actualiza stats con cantidadVentas +2', async () => {
+    await assertFails(
+      updateDoc(doc(db(VENDEDOR), 'clientes', 'cli-1'), {
+        'stats.cantidadVentas': increment(2),
+        'stats.totalHistoricoCents': increment(4500),
+      }),
+    );
+  });
+
+  it('vendedor NO actualiza stats si el total no sube', async () => {
+    await assertFails(
+      updateDoc(doc(db(VENDEDOR), 'clientes', 'cli-1'), {
+        'stats.cantidadVentas': increment(1),
+        'stats.totalHistoricoCents': increment(-1000),
+      }),
+    );
+  });
+
+  it('vendedor NO decrementa stats (la reversa de la anulación es de admin)', async () => {
+    await assertFails(
+      updateDoc(doc(db(VENDEDOR), 'clientes', 'cli-1'), {
+        'stats.cantidadVentas': increment(-1),
+        'stats.totalHistoricoCents': increment(-4500),
+      }),
+    );
+  });
+
+  it('admin edita datos de contacto', async () => {
+    await assertSucceeds(
+      updateDoc(doc(db(ADMIN), 'clientes', 'cli-1'), { telefono: '099000000', alias: 'La Marta' }),
+    );
+  });
+
+  it('admin revierte stats al anular (decrementos)', async () => {
+    await assertSucceeds(
+      updateDoc(doc(db(ADMIN), 'clientes', 'cli-1'), {
+        'stats.cantidadVentas': increment(-1),
+        'stats.totalHistoricoCents': increment(-4500),
+      }),
+    );
+  });
+
+  it('admin NO agrega una clave desconocida', async () => {
+    await assertFails(
+      updateDoc(doc(db(ADMIN), 'clientes', 'cli-1'), { superpoder: true }),
+    );
+  });
+
+  it('nadie borra clientes (ni el admin)', async () => {
+    await assertFails(deleteDoc(doc(db(ADMIN), 'clientes', 'cli-1')));
+  });
+});
+
+describe('proveedores (solo admin)', () => {
+  it('vendedor NO lee proveedores (criterio de aceptación doc 07)', async () => {
+    await assertFails(getDoc(doc(db(VENDEDOR), 'proveedores', 'prov-1')));
+  });
+
+  it('vendedor NO crea proveedores', async () => {
+    await assertFails(
+      setDoc(doc(db(VENDEDOR), 'proveedores', 'prov-x'), {
+        nombre: 'X',
+        fechaAlta: Date.now(),
+        activo: true,
+      }),
+    );
+  });
+
+  it('admin lee y crea proveedores', async () => {
+    await assertSucceeds(getDoc(doc(db(ADMIN), 'proveedores', 'prov-1')));
+    await assertSucceeds(
+      setDoc(doc(db(ADMIN), 'proveedores', 'prov-x'), {
+        nombre: 'Nuevo proveedor',
+        fechaAlta: Date.now(),
+        activo: true,
+      }),
+    );
+  });
+
+  it('admin actualiza proveedores', async () => {
+    await assertSucceeds(
+      updateDoc(doc(db(ADMIN), 'proveedores', 'prov-1'), { telefono: '099999999' }),
+    );
+  });
+
+  it('nadie borra proveedores (ni el admin)', async () => {
+    await assertFails(deleteDoc(doc(db(ADMIN), 'proveedores', 'prov-1')));
   });
 });
 

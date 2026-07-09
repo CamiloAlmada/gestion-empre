@@ -184,6 +184,13 @@ beforeEach(async () => {
       fechaIngreso: Date.now(),
       estado: 'disponible',
     });
+    // Cliente sin historial (stats en cero) para probar la asociación en la venta.
+    await setDoc(doc(seed, 'clientes', 'cli-1'), {
+      nombre: 'Marta',
+      fechaAlta: Date.now(),
+      activo: true,
+      stats: { cantidadVentas: 0, totalHistoricoCents: 0 },
+    });
   });
 });
 
@@ -295,6 +302,41 @@ describe('las reglas bloquean lo que la UI no debería mandar', () => {
     await assertSucceeds(
       setDoc(doc(vend, 'piezas', 'pz-frac'), { pesoRestanteGramos: increment(-100) }, { merge: true }),
     );
+  });
+});
+
+describe('registrarVenta con cliente actualiza stats en el mismo batch (vendedor)', () => {
+  function ventaGranelConCliente(esPrimeraCompra: boolean): EntradaVenta {
+    return {
+      ...ventaGranel(),
+      cliente: { id: 'cli-1', nombre: 'Marta', esPrimeraCompra },
+    };
+  }
+
+  it('el vendedor asocia el cliente y suma stats (increment) en un solo batch', async () => {
+    await assertSucceeds(registrarVenta(db(VENDEDOR), ventaGranelConCliente(true)));
+
+    const cli = await getDoc(doc(db(ADMIN), 'clientes', 'cli-1'));
+    expect(cli.data()?.stats.cantidadVentas).toBe(1);
+    expect(cli.data()?.stats.totalHistoricoCents).toBe(4500);
+    expect(cli.data()?.stats.primeraCompra).toBeDefined();
+    expect(cli.data()?.stats.ultimaCompra).toBeDefined();
+  });
+
+  it('la anulación (admin) revierte los contadores del cliente en un solo batch', async () => {
+    const { ventaId } = await registrarVenta(db(VENDEDOR), ventaGranelConCliente(false));
+    // Tras la venta: cantidadVentas 1, total 4500.
+    const trasVenta = await getDoc(doc(db(ADMIN), 'clientes', 'cli-1'));
+    expect(trasVenta.data()?.stats.cantidadVentas).toBe(1);
+
+    const ventaSnap = await getDoc(doc(db(ADMIN), 'ventas', ventaId).withConverter(ventaConverter));
+    const venta = ventaSnap.data();
+    if (venta === undefined) throw new Error('la venta recién registrada no se encontró');
+    await assertSucceeds(anularVenta(db(ADMIN), venta, ADMIN));
+
+    const trasAnular = await getDoc(doc(db(ADMIN), 'clientes', 'cli-1'));
+    expect(trasAnular.data()?.stats.cantidadVentas).toBe(0);
+    expect(trasAnular.data()?.stats.totalHistoricoCents).toBe(0);
   });
 });
 
