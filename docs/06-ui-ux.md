@@ -156,6 +156,32 @@ Nota de diseño: `peligro` está optimizado como color de TEXTO. En botones con
 fondo `peligro`, el label usa `text-white dark:text-fondo` (no hay un valor
 único de `peligro` que cumpla AA en ambos roles en dark).
 
+### Estilo Cálido (verificado 2026-07-09, mismo script; 32/32 pares AA)
+
+| Uso | Par (light) | Ratio | Par (dark) | Ratio |
+|---|---|---|---|---|
+| Texto principal / fondo | `texto`/`fondo` | 14.50:1 | ídem | 17.54:1 |
+| Texto principal / superficie | `texto`/`superficie` | 15.84:1 | ídem | 15.46:1 |
+| Texto secundario / superficie | | 7.53:1 | | 6.96:1 |
+| Texto secundario / fondo | | 6.90:1 | | 7.89:1 |
+| Botón primario (blanco/primary-600) | | 4.89:1 | ídem (no redefine) | 4.89:1 |
+| Botón primario hover (blanco/primary-700) | | 7.15:1 | ídem | 7.15:1 |
+| Texto de error (`peligro`/superficie) | | 5.33:1 | | 6.01:1 |
+| Botón peligro (label) | blanco/`peligro` | 5.57:1 | `fondo`/`peligro` | 6.82:1 |
+| Borde de input / superficie (UI ≥3:1) | | 3.52:1 | | 3.13:1 |
+| Ring de foco primary-600 / superficie (UI ≥3:1) | | 4.69:1 | | 3.55:1 |
+| Ring de foco primary-600 / fondo (UI ≥3:1) | | 4.29:1 | | 4.03:1 |
+| `exito` / superficie | | 6.18:1 | | 7.46:1 |
+| `advertencia` / superficie | | 6.21:1 | | 6.73:1 |
+| Texto de marca: `primary-700` light / `primary-300` dark | /superficie | 6.85:1 | /superficie | 9.35:1 |
+| — ídem sobre fondo | /fondo | 6.27:1 | /fondo | 10.61:1 |
+| Borde de tab bar flotante / fondo (UI ≥3:1) | `borde`/`fondo` | 3.23:1 | ídem | 3.55:1 |
+
+Notas Cálido: la escala primary naranja tiene la chroma recortada por escalón
+para quedar en gamut sRGB (verificado sin clipping); el par más justo es el
+ring `primary-600`/superficie en dark (3.55:1). El par `borde`/`fondo` existe
+por el borde de la tab bar flotante.
+
 **Usos decorativos aprobados** (sin requisito de par AA por no llevar texto ni
 comunicar información por sí solos — la información va por otra vía):
 - Pill `primary-100` / `dark:primary-900/40` detrás del ícono del tab activo en
