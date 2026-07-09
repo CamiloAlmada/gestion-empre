@@ -60,8 +60,9 @@ pnpm turbo lint                       # lint de todo
 
 ## Estado actual
 
-Fase 0 implementada e integrada en `main` (monorepo, `@gestion/{config,core,ui,firebase-kit}`,
-app quesería con login PWA, reglas deny-all, CI/CD). Pendiente de cierre: secrets y
-variables en GitHub, `.env` locales y primer push/deploy — ver estado en
-`docs/04-plan-fases.md`. Siguiente: Fase 1 (leer las notas arrastradas del review
-de Fase 0 al inicio de esa sección).
+Fases 0 y 1 CERRADAS (2026-07-08, criterios verificados por el dueño en producción:
+https://quesarte-uy.web.app). El MVP está operativo: POS con FIFO + override + pieza
+entera + cobro offline, Stock (ingreso, ajustes, merma), Productos, Historial con
+anulación, Usuarios por invitación, Ajustes con tema. 761 tests. Siguiente: Fase 2
+(compras, prorrateo de gastos, márgenes) — leer las notas arrastradas de los reviews
+de Fase 1 al inicio de esa sección en `docs/04-plan-fases.md`.

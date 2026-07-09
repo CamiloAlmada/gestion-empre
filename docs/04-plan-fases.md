@@ -93,22 +93,28 @@ light/dark/system, checklist a11y en la DoD). Las tareas de `packages/ui`
 incluyen `ProveedorTema`/`useTema` y `BarraPestanas` además de los componentes
 de datos.
 
-Estado (2026-07-08): las 10 tareas implementadas, con review senior integral
-(C8) aprobado y sus hallazgos corregidos. 761 tests en verde (255+ de la app,
-53 de reglas contra emulador). Pendiente ÚNICAMENTE la verificación de los
-criterios de abajo con el dueño sobre la app en producción (el review los
-pre-evaluó todos como "SÍ"; el de offline requiere dispositivo real).
+Estado: las 10 tareas implementadas, con review senior integral (C8) aprobado y
+sus hallazgos corregidos. 761 tests en verde (255+ de la app, 53 de reglas
+contra emulador).
 
 Criterios de aceptación:
-- [ ] Vender 0,5 kg de un queso descuenta de la rueda más antigua y deja rastro
+- [x] Vender 0,5 kg de un queso descuenta de la rueda más antigua y deja rastro
       en movimientos.
-- [ ] Vender un salame consume la pieza exacta elegida y cobra por SU peso.
-- [ ] Vender 100 g de nuez descuenta del granel sin piezas.
-- [ ] Vender 2 frascos de miel descuenta unidades a precio fijo.
-- [ ] Una venta anulada restaura stock vía movimientos inversos.
-- [ ] Con el wifi apagado se puede completar una venta; al volver la conexión
+- [x] Vender un salame consume la pieza exacta elegida y cobra por SU peso.
+- [x] Vender 100 g de nuez descuenta del granel sin piezas.
+- [x] Vender 2 frascos de miel descuenta unidades a precio fijo.
+- [x] Una venta anulada restaura stock vía movimientos inversos.
+- [x] Con el wifi apagado se puede completar una venta; al volver la conexión
       aparece en Firestore.
-- [ ] Un `vendedor` no puede editar precios (bloqueado por reglas, no solo UI).
+- [x] Un `vendedor` no puede editar precios (bloqueado por reglas, no solo UI).
+
+**FASE 1 CERRADA (2026-07-08)**: 7/7 criterios verificados por el dueño sobre la
+app en producción con datos reales (incluido offline en dispositivo real Android).
+Incidente resuelto durante la verificación: `firestore.indexes.json` estaba vacío
+desde Fase 0 y las queries con `where`+`orderBy` fallaban en prod con un error
+genérico — se poblaron los 3 índices compuestos prescritos en doc 02 y los hooks
+de firebase-kit ahora loguean el `FirestoreError` a consola (trae el link de
+creación del índice faltante).
 
 ## Fase 2 — Compras, costeo y precios
 
