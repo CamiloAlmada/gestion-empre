@@ -305,6 +305,61 @@ describe('registrarVenta', () => {
   });
 });
 
+// Localiza el update del batch cuyo ref apunta a la colección `clientes` (el
+// resto de los updates son de stock sobre productos/piezas).
+function updateDeCliente(): [RefFalsa, Record<string, unknown>] | undefined {
+  const call = mocks.batch.update.mock.calls.find((c) => {
+    const [ref] = c as [RefFalsa, unknown];
+    return ref.path.startsWith('clientes/');
+  });
+  return call as [RefFalsa, Record<string, unknown>] | undefined;
+}
+
+describe('registrarVenta con cliente', () => {
+  it('venta anónima (sin cliente): no toca clientes y no denormaliza cliente en la venta', async () => {
+    await registrarVenta(db, entradaDe([itemGranel(100, 4500)], 4500));
+
+    expect(updateDeCliente()).toBeUndefined();
+    const [, ventaDoc] = mocks.batch.set.mock.calls[0] as [RefFalsa, Venta];
+    expect(ventaDoc.clienteId).toBeUndefined();
+    expect(ventaDoc.clienteNombre).toBeUndefined();
+  });
+
+  it('con cliente: denormaliza clienteId/clienteNombre y suma stats en el mismo batch', async () => {
+    const entrada: EntradaVenta = {
+      ...entradaDe([itemGranel(100, 4500)], 4500),
+      cliente: { id: 'cli-1', nombre: 'Marta', esPrimeraCompra: false },
+    };
+    await registrarVenta(db, entrada);
+
+    const [, ventaDoc] = mocks.batch.set.mock.calls[0] as [RefFalsa, Venta];
+    expect(ventaDoc.clienteId).toBe('cli-1');
+    expect(ventaDoc.clienteNombre).toBe('Marta');
+
+    const cliente = updateDeCliente();
+    expect(cliente).toBeDefined();
+    const [ref, update] = cliente as [RefFalsa, Record<string, unknown>];
+    expect(ref.path).toBe('clientes/cli-1');
+    expect(incremento(update['stats.cantidadVentas'])).toBe(1);
+    expect(incremento(update['stats.totalHistoricoCents'])).toBe(4500);
+    expect(update['stats.ultimaCompra']).toBeInstanceOf(Date);
+    // No es primera compra: no se inicializa primeraCompra.
+    expect(update).not.toHaveProperty('stats.primeraCompra');
+  });
+
+  it('primera compra: además inicializa stats.primeraCompra con la fecha de la venta', async () => {
+    const entrada: EntradaVenta = {
+      ...entradaDe([itemGranel(100, 4500)], 4500),
+      cliente: { id: 'cli-2', nombre: 'Nuevo', esPrimeraCompra: true },
+    };
+    await registrarVenta(db, entrada);
+
+    const [, update] = updateDeCliente() as [RefFalsa, Record<string, unknown>];
+    expect(update['stats.primeraCompra']).toBeInstanceOf(Date);
+    expect(update['stats.ultimaCompra']).toBeInstanceOf(Date);
+  });
+});
+
 describe('anularVenta', () => {
   function ventaCompletada(items: ItemVenta[]): Venta {
     return {
@@ -417,5 +472,45 @@ describe('anularVenta', () => {
 
     const [, movDoc] = mocks.batch.set.mock.calls[0] as [RefFalsa, Record<string, unknown>];
     expect(movDoc).toMatchObject({ tipo: 'devolucion', deltaUnidades: 3 });
+  });
+
+  it('venta sin cliente: la anulación no toca ninguna colección de clientes', async () => {
+    const venta = ventaCompletada([
+      {
+        productoId: 'prod1',
+        nombreProducto: 'Nuez',
+        gramos: peso(100),
+        precioUnitCents: money(45000),
+        subtotalCents: money(4500),
+      },
+    ]);
+    await anularVenta(db, venta, 'admin-1');
+    expect(updateDeCliente()).toBeUndefined();
+  });
+
+  it('venta con cliente: revierte los contadores (increment negativos) sin rebobinar fechas', async () => {
+    const venta: Venta = {
+      ...ventaCompletada([
+        {
+          productoId: 'prod1',
+          nombreProducto: 'Nuez',
+          gramos: peso(100),
+          precioUnitCents: money(45000),
+          subtotalCents: money(4500),
+        },
+      ]),
+      totalCents: money(4500),
+      clienteId: 'cli-1',
+      clienteNombre: 'Marta',
+    };
+    await anularVenta(db, venta, 'admin-1');
+
+    const [ref, update] = updateDeCliente() as [RefFalsa, Record<string, unknown>];
+    expect(ref.path).toBe('clientes/cli-1');
+    expect(incremento(update['stats.cantidadVentas'])).toBe(-1);
+    expect(incremento(update['stats.totalHistoricoCents'])).toBe(-4500);
+    // Cache aproximado: la anulación NO toca las fechas (la verdad son las ventas).
+    expect(update).not.toHaveProperty('stats.primeraCompra');
+    expect(update).not.toHaveProperty('stats.ultimaCompra');
   });
 });

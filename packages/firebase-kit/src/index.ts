@@ -11,13 +11,28 @@ export { ventaConverter } from './converters/venta';
 export { movimientoConverter } from './converters/movimiento';
 export { configuracionConverter } from './converters/configuracion';
 export { categoriaConverter } from './converters/categoria';
+export { clienteConverter } from './converters/cliente';
+export { proveedorConverter } from './converters/proveedor';
 
 export {
   registrarVenta,
   anularVenta,
   type EntradaVenta,
   type ItemEntradaVenta,
+  type ClienteVenta,
 } from './ventas';
+export {
+  crearCliente,
+  actualizarCliente,
+  desactivarCliente,
+  type DatosCliente,
+} from './clientes';
+export {
+  crearProveedor,
+  actualizarProveedor,
+  desactivarProveedor,
+  type DatosProveedor,
+} from './proveedores';
 export {
   ajustarStock,
   ingresarPiezas,
@@ -44,6 +59,10 @@ export {
   ErrorCategoria,
   CategoriaInvalidaError,
   CategoriaDuplicadaError,
+  ErrorCliente,
+  ClienteInvalidoError,
+  ErrorProveedor,
+  ProveedorInvalidoError,
   ErrorInvitacion,
   EmailInvalidoError,
   DatosInvitacionInvalidosError,

@@ -74,6 +74,25 @@ export interface ItemEntradaVenta {
   subtotalCents: Money;
 }
 
+/**
+ * Cliente asociado a una venta (opcional). Lo resuelve la UI, que ya tiene el
+ * cliente elegido cargado en pantalla; `registrarVenta` NO lee Firestore para
+ * saber nada de él (camino de escritura offline-first, sin lecturas).
+ *
+ * `esPrimeraCompra` lo decide el caller a partir del cliente que tiene delante
+ * (p. ej. `stats.primeraCompra === undefined` o `cantidadVentas === 0`): si es su
+ * primera compra, la venta inicializa `stats.primeraCompra`; si no, no la toca (no
+ * se puede recalcular sin leer, y la fecha real ya está guardada).
+ */
+export interface ClienteVenta {
+  /** Id del doc `clientes/{id}` a asociar y cuyos `stats` se incrementan. */
+  id: string;
+  /** Nombre congelado que se denormaliza en la venta (`clienteNombre`). */
+  nombre: string;
+  /** El caller sabe (tiene el cliente en pantalla) si esta es su primera compra. */
+  esPrimeraCompra: boolean;
+}
+
 /** Entrada de `registrarVenta`: cabecera + ítems ya resueltos por la UI. */
 export interface EntradaVenta {
   /** Uid del vendedor que registra (debe coincidir con `request.auth.uid`). */
@@ -82,7 +101,15 @@ export interface EntradaVenta {
   items: ItemEntradaVenta[];
   /** Total de la venta; debe ser la suma exacta de los subtotales. */
   totalCents: Money;
+  /** Cliente a asociar (opcional). Sin él, la venta es anónima (caso por defecto). */
+  cliente?: ClienteVenta;
 }
+
+// Update de `stats` de un cliente por rutas de campo (`stats.x`): los contadores
+// con `increment()` (FieldValue) y las fechas de cache como `Date`. Se usan RUTAS
+// (`'stats.cantidadVentas'`), no un objeto `stats` anidado, para no pisar los
+// otros sub-campos del mapa. Tipado explícito para no caer en `any`.
+type UpdateStatsCliente = Record<string, FieldValue | Date>;
 
 // Efecto de un ítem sobre el stock + su movimiento de auditoría, ya resuelto y
 // validado, pero sin las refs (que se crean dentro del batch).
@@ -100,10 +127,18 @@ interface EfectoVenta {
  *
  * En un solo `writeBatch`:
  * - Crea `ventas/{id}` (`estado: 'completada'`, `numero` = `Date.now()`, `fecha`).
+ *   Si viene `cliente`, denormaliza `clienteId` + `clienteNombre` en la venta.
  * - Por ítem, según `modoStock`, decrementa con `increment()` el peso de la pieza
  *   / el stock granel / las unidades (y marca la pieza `agotada` en `pieza_entera`).
  * - Crea un `movimientos/{id}` tipo `venta` por ítem (delta negativo,
  *   `origenTipo: 'venta'`, `origenId` = id de la venta).
+ * - Si viene `cliente`, actualiza `clientes/{id}.stats` en el MISMO batch con
+ *   `increment(1)` en `cantidadVentas`, `increment(totalCents)` en
+ *   `totalHistoricoCents` y la fecha en `ultimaCompra` (y `primeraCompra` si el
+ *   caller marca `esPrimeraCompra`). Todo con increments/rutas de campo: sin
+ *   lecturas, compatible offline (doc 07, decisión 5). El cache
+ *   `primeraCompra`/`ultimaCompra` es last-write-wins: dos ventas offline
+ *   concurrentes pueden pisarse la fecha, aceptable para un cache aproximado.
  *
  * Valida antes de tocar el batch: ítems no vacíos, `totalCents` == suma de
  * subtotales, y stock/peso suficiente según los datos recibidos.
@@ -117,7 +152,7 @@ export async function registrarVenta(
   db: Firestore,
   entrada: EntradaVenta,
 ): Promise<{ ventaId: string }> {
-  const { usuarioId, medioPago, items, totalCents } = entrada;
+  const { usuarioId, medioPago, items, totalCents, cliente } = entrada;
 
   if (items.length === 0) {
     throw new VentaVaciaError('No se puede registrar una venta sin ítems.');
@@ -149,8 +184,26 @@ export async function registrarVenta(
     totalCents,
     medioPago,
     estado: 'completada',
+    // Denormalizado: solo si hay cliente. El converter omite los `undefined`, así
+    // que una venta anónima queda byte-idéntica a como era antes de la Fase 1.5.
+    clienteId: cliente?.id,
+    clienteNombre: cliente?.nombre,
   };
   batch.set(ventaRef, venta);
+
+  // Cache de estadísticas del cliente en el MISMO batch (ver doc del método). Va
+  // por rutas de campo con `increment()` para no leer ni pisar otros sub-campos.
+  if (cliente !== undefined) {
+    const statsUpdate: UpdateStatsCliente = {
+      'stats.cantidadVentas': increment(1),
+      'stats.totalHistoricoCents': increment(totalCents),
+      'stats.ultimaCompra': ahora,
+    };
+    if (cliente.esPrimeraCompra) {
+      statsUpdate['stats.primeraCompra'] = ahora;
+    }
+    batch.update(doc(db, 'clientes', cliente.id), statsUpdate);
+  }
 
   for (const efecto of efectos) {
     batch.update(doc(db, efecto.coleccion, efecto.refId), efecto.stockUpdate);
@@ -189,6 +242,12 @@ export async function registrarVenta(
  *   `pieza_entera`, que la había dejado `agotada`).
  * - Crea un `movimientos/{id}` tipo `devolucion` por ítem (delta positivo,
  *   `origenTipo: 'venta'`, `origenId` = id de la venta).
+ * - Si la venta tenía `clienteId`, revierte los contadores de `clientes/{id}.stats`
+ *   en el MISMO batch: `increment(-1)` en `cantidadVentas` y `increment(-totalCents)`
+ *   en `totalHistoricoCents`. NO rebobina `primeraCompra`/`ultimaCompra`: son cache
+ *   aproximado y su fuente de verdad son las ventas (doc 04, Fase 1.5). Esta reversa
+ *   la ejecuta el admin (anular es solo-admin), único rol que las reglas dejan
+ *   decrementar `stats`.
  *
  * @throws {AnulacionInvalidaError} si `venta.estado !== 'completada'`.
  * @throws {ItemInvalidoError} si un ítem no tiene gramos ni unidades (dato corrupto).
@@ -205,6 +264,16 @@ export async function anularVenta(db: Firestore, venta: Venta, usuarioId: string
 
   // Update de la venta: SOLO estado (las reglas rechazan cualquier otro cambio).
   batch.update(doc(db, 'ventas', venta.id), { estado: 'anulada' });
+
+  // Reversa del cache de stats del cliente (si la venta lo tenía). Solo los
+  // contadores; las fechas no se rebobinan (cache aproximado, ver doc del método).
+  if (venta.clienteId !== undefined) {
+    const statsReversa: UpdateStatsCliente = {
+      'stats.cantidadVentas': increment(-1),
+      'stats.totalHistoricoCents': increment(-venta.totalCents),
+    };
+    batch.update(doc(db, 'clientes', venta.clienteId), statsReversa);
+  }
 
   for (const item of venta.items) {
     const reversa = resolverReversaVenta(item);
