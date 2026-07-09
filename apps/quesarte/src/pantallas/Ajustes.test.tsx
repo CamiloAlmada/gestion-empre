@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { ProveedorTema } from '@gestion/ui';
 import { Ajustes } from './Ajustes';
+import { ProveedorHeader } from '../componentes/header/ContextoHeader';
 
 const mocks = vi.hoisted(() => ({
   useAuth: vi.fn(),
@@ -39,7 +40,9 @@ function renderizar() {
   return render(
     <MemoryRouter>
       <ProveedorTema>
-        <Ajustes />
+        <ProveedorHeader>
+          <Ajustes />
+        </ProveedorHeader>
       </ProveedorTema>
     </MemoryRouter>,
   );

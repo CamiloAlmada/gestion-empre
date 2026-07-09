@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import { Button, useTema, type Tema } from '@gestion/ui';
 import { useAuth } from '@gestion/firebase-kit';
+import { useHeader } from '../componentes/header/ContextoHeader';
 
 const OPCIONES_TEMA: { valor: Tema; etiqueta: string }[] = [
   { valor: 'light', etiqueta: 'Claro' },
@@ -70,6 +71,7 @@ function SelectorTema() {
  */
 export function Ajustes() {
   const { perfil, salir } = useAuth();
+  useHeader({ titulo: 'Ajustes' });
 
   const nombreRol = perfil !== null ? NOMBRE_ROL[perfil.rol] : '—';
 

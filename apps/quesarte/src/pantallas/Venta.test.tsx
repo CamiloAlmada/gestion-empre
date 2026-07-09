@@ -6,6 +6,7 @@ import { money, peso, type Pieza, type Producto } from '@gestion/core';
 import { StockInsuficienteError, type EntradaVenta } from '@gestion/firebase-kit';
 import { ProveedorToasts } from '@gestion/ui';
 import { Venta } from './Venta';
+import { ProveedorHeader } from '../componentes/header/ContextoHeader';
 
 const mocks = vi.hoisted(() => ({
   useAuth: vi.fn(),
@@ -138,7 +139,9 @@ function renderizar() {
   return render(
     <MemoryRouter>
       <ProveedorToasts>
-        <Venta />
+        <ProveedorHeader>
+          <Venta />
+        </ProveedorHeader>
       </ProveedorToasts>
     </MemoryRouter>,
   );

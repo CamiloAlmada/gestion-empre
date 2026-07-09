@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router';
 import {
   addDoc,
   collection,
@@ -27,6 +26,16 @@ import {
   type DatosProductoFormulario,
 } from './ModalProducto';
 import { ModalCategorias } from './ModalCategorias';
+import { useHeader } from '../componentes/header/ContextoHeader';
+
+// Acciones compactas del header (docs/06-ui-ux.md §2, hasta 2 por pantalla):
+// mismas clases visuales que `Button` de @gestion/ui, pero con `aria-label`
+// propio (Button no lo expone) para que "Agregar" pueda mostrarse como ícono
+// solo en mobile sin perder un nombre accesible descriptivo.
+const CLASE_ACCION_PRIMARIA =
+  'inline-flex min-h-[44px] min-w-[44px] items-center justify-center gap-1.5 rounded-lg bg-primary-600 px-3 font-medium text-white hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2 focus-visible:ring-offset-superficie';
+const CLASE_ACCION_SECUNDARIA =
+  'inline-flex min-h-[44px] items-center justify-center rounded-lg border border-borde bg-superficie px-3 text-sm font-medium text-texto hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600';
 
 type EstadoModal = { tipo: 'cerrado' } | { tipo: 'alta' } | { tipo: 'edicion'; producto: Producto };
 
@@ -137,6 +146,22 @@ export function Productos() {
   // identidad de `query`, no por contenido).
   const [intentoId, setIntentoId] = useState(0);
   const [intentoIdCategorias, setIntentoIdCategorias] = useState(0);
+
+  useHeader({
+    titulo: 'Productos',
+    volverA: { etiqueta: 'Stock', a: '/stock' },
+    acciones: esAdmin ? (
+      <>
+        <button type="button" onClick={() => setModalCategoriasAbierto(true)} className={CLASE_ACCION_SECUNDARIA}>
+          Categorías
+        </button>
+        <button type="button" onClick={abrirAlta} aria-label="Agregar producto" className={CLASE_ACCION_PRIMARIA}>
+          <span aria-hidden="true">＋</span>
+          <span className="hidden md:inline">Agregar</span>
+        </button>
+      </>
+    ) : undefined,
+  });
 
   const consultaProductos = useMemo(
     () => query(coleccionProductos, orderBy('nombre')),
@@ -308,13 +333,6 @@ export function Productos() {
 
   return (
     <div className="flex flex-col gap-4">
-      <Link
-        to="/stock"
-        className="-mx-2 -my-2 flex min-h-[44px] w-fit items-center rounded px-2 py-2 text-sm text-texto-secundario hover:text-texto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
-      >
-        ‹ Stock
-      </Link>
-
       {!enLinea && (
         <div
           role="status"
@@ -325,18 +343,8 @@ export function Productos() {
         </div>
       )}
 
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="w-full max-w-xs">
-          <Input label="Buscar" value={busqueda} onChange={setBusqueda} placeholder="Nombre o categoría" />
-        </div>
-        {esAdmin && (
-          <div className="flex gap-2">
-            <Button variante="secundaria" onClick={() => setModalCategoriasAbierto(true)}>
-              Categorías
-            </Button>
-            <Button onClick={abrirAlta}>Agregar producto</Button>
-          </div>
-        )}
+      <div className="w-full max-w-xs">
+        <Input label="Buscar" value={busqueda} onChange={setBusqueda} placeholder="Nombre o categoría" />
       </div>
 
       {cargando ? (

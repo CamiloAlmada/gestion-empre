@@ -1,6 +1,6 @@
 import { formatearPeso, type MovimientoStock, type Pieza, type Producto } from '@gestion/core';
 import type { EstadoCollection } from '@gestion/firebase-kit';
-import { Button, DataTable, type ColumnaDataTable } from '@gestion/ui';
+import { DataTable, type ColumnaDataTable } from '@gestion/ui';
 import { BadgeStock } from './BadgeStock';
 import {
   estadoVencimiento,
@@ -19,10 +19,6 @@ export interface DetalleProductoProps {
   /** Últimos movimientos del producto. Solo se usa (y solo se pide arriba) para granel/unidad_simple. */
   estadoMovimientos: EstadoCollection<MovimientoStock>;
   esAdmin: boolean;
-  onVolver: () => void;
-  onIngresarPiezas: () => void;
-  onSumarStock: () => void;
-  onAjustarProducto: () => void;
   onAjustarPieza: (pieza: Pieza) => void;
 }
 
@@ -32,10 +28,16 @@ const CLASE_BOTON_FILA =
   'inline-flex min-h-[44px] items-center justify-center rounded-lg border border-borde px-3 text-sm font-medium text-texto hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600';
 
 /**
- * Detalle de stock de UN producto, mostrado en la misma pantalla (sin ruta
- * nueva) al tocar una fila de la lista maestra. Por pieza: tabla de piezas
- * con peso/ingreso/vencimiento. Granel/unidad: total + últimas existencias
- * (movimientos). Acciones de escritura solo para admin.
+ * Detalle de stock de UN producto, montado en su propia ruta
+ * (`/stock/producto/:id`, ver `DetalleProductoPantalla.tsx`). Por pieza:
+ * tabla de piezas con peso/ingreso/vencimiento. Granel/unidad: total +
+ * últimas existencias (movimientos). El nombre del producto y el volver a
+ * Stock viven en el header contextual del shell (`useHeader`), no acá — este
+ * componente no los repite. Las acciones de escritura a nivel producto
+ * (ingresar piezas, sumar stock, ajuste/merma) también viven en el header
+ * (hasta 2 acciones, docs/06-ui-ux.md §2); acá solo queda el ajuste POR
+ * PIEZA (`onAjustarPieza`), una acción de fila que no tiene sentido en el
+ * header.
  */
 export function DetalleProducto({
   producto,
@@ -43,10 +45,6 @@ export function DetalleProducto({
   resumen,
   estadoMovimientos,
   esAdmin,
-  onVolver,
-  onIngresarPiezas,
-  onSumarStock,
-  onAjustarProducto,
   onAjustarPieza,
 }: DetalleProductoProps) {
   const esPorPieza = resumen.tipo === 'piezas';
@@ -176,33 +174,7 @@ export function DetalleProducto({
 
   return (
     <div className="flex flex-col gap-4">
-      <button
-        type="button"
-        onClick={onVolver}
-        className="flex min-h-[44px] w-fit items-center gap-1 rounded text-sm font-medium text-texto-secundario hover:text-texto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
-      >
-        <span aria-hidden="true">‹</span> Volver a Stock
-      </button>
-
-      <div>
-        <h2 className="text-xl font-bold text-texto">{producto.nombre}</h2>
-        <p className="text-texto-secundario">{textoResumen(resumen)}</p>
-      </div>
-
-      {esAdmin && (
-        <div className="flex flex-wrap gap-2">
-          {esPorPieza ? (
-            <Button onClick={onIngresarPiezas}>Ingresar piezas</Button>
-          ) : (
-            <>
-              <Button onClick={onSumarStock}>Sumar stock</Button>
-              <Button variante="secundaria" onClick={onAjustarProducto}>
-                Ajuste / merma
-              </Button>
-            </>
-          )}
-        </div>
-      )}
+      <p className="text-texto-secundario">{textoResumen(resumen)}</p>
 
       {esPorPieza ? (
         <DataTable

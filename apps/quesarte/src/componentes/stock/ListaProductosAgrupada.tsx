@@ -46,7 +46,7 @@ export function ListaProductosAgrupada({ grupos, piezasAgrupadas, onSeleccionar 
           <section key={nombre} aria-labelledby={idEncabezado}>
             <h2
               id={idEncabezado}
-              className="sticky top-[calc(env(safe-area-inset-top)+3.5rem)] z-10 bg-fondo py-2 text-sm font-medium text-texto-secundario"
+              className="sticky top-[var(--altura-header)] z-10 bg-fondo py-2 text-sm font-medium text-texto-secundario"
             >
               {nombre}
             </h2>

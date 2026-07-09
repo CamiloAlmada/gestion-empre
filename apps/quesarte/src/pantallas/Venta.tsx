@@ -35,6 +35,7 @@ import { ModalAgregarGranel } from '../componentes/venta/ModalAgregarGranel';
 import { ModalAgregarPiezaEntera } from '../componentes/venta/ModalAgregarPiezaEntera';
 import { ModalAgregarUnidad } from '../componentes/venta/ModalAgregarUnidad';
 import { ModalCobro } from '../componentes/venta/ModalCobro';
+import { useHeader } from '../componentes/header/ContextoHeader';
 
 function mensajeErrorCobro(error: unknown): string {
   if (error instanceof StockInsuficienteError) {
@@ -81,6 +82,8 @@ export function Venta() {
   const { perfil } = useAuth();
   const enLinea = useOnlineStatus();
   const { mostrarToast } = useToasts();
+
+  useHeader({ titulo: 'Venta' });
 
   const [intento, setIntento] = useState(0);
   const [carrito, setCarrito] = useState<ItemCarrito[]>([]);

@@ -3,6 +3,7 @@ import { Login } from './pantallas/Login';
 import { Venta } from './pantallas/Venta';
 import { Stock } from './pantallas/Stock';
 import { Productos } from './pantallas/Productos';
+import { DetalleProductoPantalla } from './pantallas/DetalleProductoPantalla';
 import { Historial } from './pantallas/Historial';
 import { Reportes } from './pantallas/Reportes';
 import { Ajustes } from './pantallas/Ajustes';
@@ -28,6 +29,7 @@ export function App() {
           <Route path="venta" element={<Venta />} />
           <Route path="stock" element={<Stock />} />
           <Route path="stock/productos" element={<Productos />} />
+          <Route path="stock/producto/:id" element={<DetalleProductoPantalla />} />
           <Route path="historial" element={<Historial />} />
           <Route
             path="reportes"

@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import type { FirestoreError } from 'firebase/firestore';
 import { money, type Venta } from '@gestion/core';
 import { ProveedorToasts } from '@gestion/ui';
+import { ProveedorHeader } from '../componentes/header/ContextoHeader';
 import {
   LIMITE_INICIAL_VENTAS,
   INCREMENTO_LIMITE_VENTAS,
@@ -106,7 +107,9 @@ function configurarVentas(estado: EstadoFalso<Venta>) {
 function renderizar() {
   return render(
     <ProveedorToasts>
-      <Historial />
+      <ProveedorHeader>
+        <Historial />
+      </ProveedorHeader>
     </ProveedorToasts>,
   );
 }

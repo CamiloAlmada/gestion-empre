@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router';
 import { ProveedorTema, ProveedorToasts } from '@gestion/ui';
 import { money, peso, type Categoria, type Producto } from '@gestion/core';
 import { Productos } from './Productos';
+import { ProveedorHeader, useHeaderActual } from '../componentes/header/ContextoHeader';
 
 // `DataTable` con `filaCompacta` (docs/06-ui-ux.md §3) renderiza SIEMPRE la
 // tabla completa Y la lista compacta a la vez — la visibilidad la decide CSS
@@ -165,12 +166,28 @@ const productosFalsos: Producto[] = [
   }),
 ];
 
+/** Expone el header contextual actual como texto, para aserirlo sin montar
+ * `Shell` completo (mismo criterio que `Stock.test.tsx`). */
+function VisorHeader() {
+  const config = useHeaderActual();
+  return (
+    <div>
+      <p data-testid="titulo-header">{config?.titulo}</p>
+      <p data-testid="volver-header">{config?.volverA ? `${config.volverA.etiqueta}:${config.volverA.a}` : ''}</p>
+      <div data-testid="acciones-header">{config?.acciones}</div>
+    </div>
+  );
+}
+
 function renderizar() {
   return render(
     <MemoryRouter>
       <ProveedorTema>
         <ProveedorToasts>
-          <Productos />
+          <ProveedorHeader>
+            <VisorHeader />
+            <Productos />
+          </ProveedorHeader>
         </ProveedorToasts>
       </ProveedorTema>
     </MemoryRouter>,
@@ -192,6 +209,36 @@ describe('Productos', () => {
     // siguiente que no llama a `configurarCategorias`.
     estadoProductos = { datos: [], cargando: false, error: null };
     estadoCategorias = { datos: [], cargando: false, error: null };
+  });
+
+  it('header contextual: título "Productos" (≠ "Stock") y volver a Stock', () => {
+    configurarAuth();
+    configurarCollection({ datos: [] });
+
+    renderizar();
+
+    expect(screen.getByTestId('titulo-header').textContent).toBe('Productos');
+    expect(screen.getByTestId('volver-header').textContent).toBe('Stock:/stock');
+  });
+
+  it('admin: el header contextual expone las acciones "Agregar" y "Categorías"', () => {
+    configurarAuth();
+    configurarCollection({ datos: productosFalsos });
+
+    renderizar();
+
+    expect(screen.getByRole('button', { name: 'Agregar producto' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Categorías' })).toBeTruthy();
+  });
+
+  it('vendedor: el header contextual no expone acciones', () => {
+    configurarAuth({ perfil: { ...authPorDefecto().perfil, rol: 'vendedor' } });
+    configurarCollection({ datos: productosFalsos });
+
+    renderizar();
+
+    expect(screen.queryByRole('button', { name: 'Agregar producto' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Categorías' })).toBeNull();
   });
 
   it('renderiza los productos del listado con modo, precio y estado', () => {

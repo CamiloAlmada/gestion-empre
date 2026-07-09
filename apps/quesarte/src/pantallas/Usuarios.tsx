@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router';
 import { collection, doc, orderBy, query, updateDoc } from 'firebase/firestore';
 import { Button, DataTable, Input, useToasts, type ColumnaDataTable } from '@gestion/ui';
 import {
@@ -17,6 +16,7 @@ import {
 import type { Rol, Usuario } from '@gestion/core';
 import { db, obtenerConfigFirebase } from '../firebase';
 import { ModalInvitarUsuario, type ErroresInvitacion } from './ModalInvitarUsuario';
+import { useHeader } from '../componentes/header/ContextoHeader';
 
 const coleccionUsuarios = collection(db, 'usuarios').withConverter(usuarioConverter);
 
@@ -123,6 +123,12 @@ export function Usuarios() {
   const [modalInvitarAbierto, setModalInvitarAbierto] = useState(false);
   const [invitando, setInvitando] = useState(false);
   const [erroresInvitacion, setErroresInvitacion] = useState<ErroresInvitacion>({});
+
+  useHeader({
+    titulo: 'Usuarios',
+    volverA: { etiqueta: 'Ajustes', a: '/ajustes' },
+    acciones: <Button onClick={abrirModalInvitar}>Invitar usuario</Button>,
+  });
 
   const consultaUsuarios = useMemo(
     () => query(coleccionUsuarios, orderBy('nombre')),
@@ -288,13 +294,6 @@ export function Usuarios() {
 
   return (
     <div className="flex flex-col gap-4">
-      <Link
-        to="/ajustes"
-        className="-mx-2 -my-2 flex min-h-[44px] w-fit items-center rounded px-2 py-2 text-sm text-texto-secundario hover:text-texto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
-      >
-        ‹ Ajustes
-      </Link>
-
       {!enLinea && (
         <div
           role="status"
@@ -305,11 +304,8 @@ export function Usuarios() {
         </div>
       )}
 
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="w-full max-w-xs">
-          <Input label="Buscar" value={busqueda} onChange={setBusqueda} placeholder="Nombre o correo" />
-        </div>
-        <Button onClick={abrirModalInvitar}>Invitar usuario</Button>
+      <div className="w-full max-w-xs">
+        <Input label="Buscar" value={busqueda} onChange={setBusqueda} placeholder="Nombre o correo" />
       </div>
 
       {cargando ? (

@@ -11,6 +11,7 @@ import {
   INCREMENTO_LIMITE_VENTAS,
   LIMITE_INICIAL_VENTAS,
 } from '../componentes/historial/constantes';
+import { useHeader } from '../componentes/header/ContextoHeader';
 
 /**
  * Pantalla Historial: listado de ventas (más recientes primero) con
@@ -25,6 +26,8 @@ export function Historial() {
   const { perfil } = useAuth();
   const enLinea = useOnlineStatus();
   const esAdmin = perfil?.rol === 'admin';
+
+  useHeader({ titulo: 'Historial' });
 
   const [intento, setIntento] = useState(0);
   const [limiteVentas, setLimiteVentas] = useState(LIMITE_INICIAL_VENTAS);

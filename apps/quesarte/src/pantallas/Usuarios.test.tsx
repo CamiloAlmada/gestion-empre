@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router';
 import { ProveedorTema, ProveedorToasts } from '@gestion/ui';
 import type { Usuario } from '@gestion/core';
 import { Usuarios } from './Usuarios';
+import { ProveedorHeader, useHeaderActual } from '../componentes/header/ContextoHeader';
 
 // `DataTable` con `filaCompacta` (docs/06-ui-ux.md §3) renderiza SIEMPRE la
 // tabla completa Y la lista compacta a la vez — la visibilidad la decide CSS
@@ -83,12 +84,28 @@ const usuariosFalsos: Usuario[] = [
   { uid: 'u3', nombre: 'Carla Ruiz', email: 'carla@quesarte.com', rol: 'vendedor', activo: false },
 ];
 
+/** Expone el header contextual actual como texto, para aserirlo sin montar
+ * `Shell` completo (mismo criterio que `Stock.test.tsx`/`Productos.test.tsx`). */
+function VisorHeader() {
+  const config = useHeaderActual();
+  return (
+    <div>
+      <p data-testid="titulo-header">{config?.titulo}</p>
+      <p data-testid="volver-header">{config?.volverA ? `${config.volverA.etiqueta}:${config.volverA.a}` : ''}</p>
+      <div data-testid="acciones-header">{config?.acciones}</div>
+    </div>
+  );
+}
+
 function renderizar() {
   return render(
     <MemoryRouter>
       <ProveedorTema>
         <ProveedorToasts>
-          <Usuarios />
+          <ProveedorHeader>
+            <VisorHeader />
+            <Usuarios />
+          </ProveedorHeader>
         </ProveedorToasts>
       </ProveedorTema>
     </MemoryRouter>,
@@ -100,6 +117,16 @@ describe('Usuarios', () => {
     cleanup();
     vi.clearAllMocks();
     mocks.useOnlineStatus.mockReturnValue(true);
+  });
+
+  it('header contextual: título "Usuarios" y volver a Ajustes', () => {
+    configurarAuth();
+    configurarCollection({ datos: [] });
+
+    renderizar();
+
+    expect(screen.getByTestId('titulo-header').textContent).toBe('Usuarios');
+    expect(screen.getByTestId('volver-header').textContent).toBe('Ajustes:/ajustes');
   });
 
   it('renderiza el listado con nombre, correo, rol y estado', () => {

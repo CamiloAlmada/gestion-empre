@@ -1,38 +1,21 @@
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router';
-import { collection, limit, orderBy, query, where } from 'firebase/firestore';
-import type { Categoria, MovimientoStock, Pieza, Producto } from '@gestion/core';
-import {
-  categoriaConverter,
-  movimientoConverter,
-  piezaConverter,
-  productoConverter,
-  useAuth,
-  useCollection,
-  useOnlineStatus,
-} from '@gestion/firebase-kit';
+import { Link, useNavigate } from 'react-router';
+import { collection, orderBy, query, where } from 'firebase/firestore';
+import type { Categoria, Pieza, Producto } from '@gestion/core';
+import { categoriaConverter, piezaConverter, productoConverter, useCollection } from '@gestion/firebase-kit';
 import { Button } from '@gestion/ui';
 import { db } from '../firebase';
 import { agruparPorCategoria } from '../componentes/stock/agrupacion';
-import { DetalleProducto } from '../componentes/stock/DetalleProducto';
 import { ListaProductosAgrupada } from '../componentes/stock/ListaProductosAgrupada';
-import { ModalAjusteNegativo } from '../componentes/stock/ModalAjusteNegativo';
-import { ModalIngresarPiezas } from '../componentes/stock/ModalIngresarPiezas';
-import { ModalSumarStock } from '../componentes/stock/ModalSumarStock';
-import { agruparPiezasPorProducto, calcularResumen } from '../componentes/stock/resumen';
-
-type Modal = 'ingreso' | 'sumar' | 'ajuste' | null;
-
-/** `modoStock` que se controla por piezas físicas (con peso propio). */
-function esModoStockPorPieza(modoStock: Producto['modoStock']): boolean {
-  return modoStock === 'fraccionado_por_pieza' || modoStock === 'pieza_entera';
-}
+import { agruparPiezasPorProducto } from '../componentes/stock/resumen';
+import { useHeader } from '../componentes/header/ContextoHeader';
 
 /**
  * Pantalla Stock: lista maestra de productos con su resumen de existencias
- * (según `modoStock`) y, al tocar uno, su detalle en la misma pantalla (sin
- * ruta nueva). Admin puede ingresar piezas manualmente, sumar granel/unidades
- * y aplicar ajustes/merma con motivo; vendedor solo mira.
+ * (según `modoStock`), agrupada por categoría. Tocar un producto navega a su
+ * detalle en `/stock/producto/:id` (ruta real, ver `DetalleProductoPantalla`
+ * y App.tsx — antes era estado interno, SH-1 lo mudó para que el back del
+ * sistema funcione siempre, docs/06-ui-ux.md §2).
  *
  * Trae productos activos, piezas disponibles y categorías (ordenadas por
  * `orden`) con UNA sola `useCollection` cada una (memoizadas), y agrupa
@@ -40,14 +23,9 @@ function esModoStockPorPieza(modoStock: Producto['modoStock']): boolean {
  * maestra — nunca una query por producto ni por categoría.
  */
 export function Stock() {
-  const { perfil } = useAuth();
-  const enLinea = useOnlineStatus();
-  const esAdmin = perfil?.rol === 'admin';
+  const navigate = useNavigate();
 
   const [intento, setIntento] = useState(0);
-  const [productoSeleccionadoId, setProductoSeleccionadoId] = useState<string | null>(null);
-  const [modal, setModal] = useState<Modal>(null);
-  const [piezaParaAjustar, setPiezaParaAjustar] = useState<Pieza | null>(null);
 
   // `db` es el import estable de '../firebase' (no cambia entre renders); la
   // única dependencia real de estas queries es `intento`, que fuerza un
@@ -82,41 +60,20 @@ export function Stock() {
     [productos.datos, categorias.datos],
   );
 
-  const productoSeleccionado = productos.datos.find((p) => p.id === productoSeleccionadoId) ?? null;
-
-  // Últimas existencias (movimientos) solo aplican a granel/unidad_simple: los
-  // productos por pieza ya muestran su historial completo vía la tabla de
-  // piezas (peso restante/inicial/vencimiento). `query: null` desactiva el
-  // hook sin romper las reglas de hooks (ver useCollection.ts).
-  const movimientosQuery = useMemo(() => {
-    if (productoSeleccionadoId === null || productoSeleccionado === null) return null;
-    if (esModoStockPorPieza(productoSeleccionado.modoStock)) return null;
-    return query(
-      collection(db, 'movimientos').withConverter(movimientoConverter),
-      where('productoId', '==', productoSeleccionadoId),
-      orderBy('fecha', 'desc'),
-      limit(10),
-    );
-  }, [productoSeleccionadoId, productoSeleccionado?.modoStock]);
-  const movimientos = useCollection<MovimientoStock>(movimientosQuery);
+  useHeader({
+    titulo: 'Stock',
+    acciones: (
+      <Link
+        to="/stock/productos"
+        className="inline-flex min-h-[44px] items-center justify-center rounded-lg border border-borde bg-superficie px-3 text-sm font-medium text-texto hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
+      >
+        Catálogo
+      </Link>
+    ),
+  });
 
   function reintentar() {
     setIntento((n) => n + 1);
-  }
-
-  function cerrarModal() {
-    setModal(null);
-    setPiezaParaAjustar(null);
-  }
-
-  function abrirAjusteProducto() {
-    setPiezaParaAjustar(null);
-    setModal('ajuste');
-  }
-
-  function abrirAjustePieza(pieza: Pieza) {
-    setPiezaParaAjustar(pieza);
-    setModal('ajuste');
   }
 
   const cargando = productos.cargando || piezas.cargando || categorias.cargando;
@@ -146,77 +103,15 @@ export function Stock() {
         </Link>
       </div>
     );
-  } else if (productoSeleccionado === null) {
-    contenido = (
-      <>
-        <div className="flex justify-end">
-          <Link
-            to="/stock/productos"
-            className="inline-flex min-h-[44px] items-center justify-center rounded-lg border border-borde bg-superficie px-4 text-sm font-medium text-texto hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
-          >
-            Gestionar catálogo
-          </Link>
-        </div>
-        <ListaProductosAgrupada
-          grupos={gruposPorCategoria}
-          piezasAgrupadas={piezasAgrupadas}
-          onSeleccionar={(producto) => setProductoSeleccionadoId(producto.id)}
-        />
-      </>
-    );
   } else {
     contenido = (
-      <DetalleProducto
-        producto={productoSeleccionado}
-        piezasDelProducto={piezasAgrupadas.get(productoSeleccionado.id) ?? []}
-        resumen={calcularResumen(productoSeleccionado, piezasAgrupadas.get(productoSeleccionado.id) ?? [])}
-        estadoMovimientos={movimientos}
-        esAdmin={esAdmin}
-        onVolver={() => setProductoSeleccionadoId(null)}
-        onIngresarPiezas={() => setModal('ingreso')}
-        onSumarStock={() => setModal('sumar')}
-        onAjustarProducto={abrirAjusteProducto}
-        onAjustarPieza={abrirAjustePieza}
+      <ListaProductosAgrupada
+        grupos={gruposPorCategoria}
+        piezasAgrupadas={piezasAgrupadas}
+        onSeleccionar={(producto) => navigate(`/stock/producto/${producto.id}`)}
       />
     );
   }
 
-  return (
-    <div className="flex flex-col gap-4">
-      {!enLinea && (
-        <p role="status" className="rounded-xl border border-borde bg-superficie p-3 text-sm text-texto-secundario">
-          Sin conexión: los cambios se guardan localmente y se sincronizan al reconectar.
-        </p>
-      )}
-
-      {contenido}
-
-      {esAdmin && perfil !== null && productoSeleccionado !== null && (
-        <>
-          <ModalIngresarPiezas
-            abierto={modal === 'ingreso'}
-            onCerrar={cerrarModal}
-            db={db}
-            producto={productoSeleccionado}
-            usuarioId={perfil.uid}
-          />
-          <ModalSumarStock
-            abierto={modal === 'sumar'}
-            onCerrar={cerrarModal}
-            db={db}
-            producto={productoSeleccionado}
-            usuarioId={perfil.uid}
-          />
-          <ModalAjusteNegativo
-            abierto={modal === 'ajuste'}
-            onCerrar={cerrarModal}
-            db={db}
-            producto={productoSeleccionado}
-            usuarioId={perfil.uid}
-            pieza={piezaParaAjustar ?? undefined}
-          />
-        </>
-      )}
-    </div>
-  );
+  return <div className="flex flex-col gap-4">{contenido}</div>;
 }

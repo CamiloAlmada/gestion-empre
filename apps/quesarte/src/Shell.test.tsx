@@ -1,7 +1,10 @@
+import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
+import { ProveedorToasts } from '@gestion/ui';
 import { Shell } from './Shell';
+import { useHeader } from './componentes/header/ContextoHeader';
 
 const mocks = vi.hoisted(() => ({
   useAuth: vi.fn(),
@@ -24,16 +27,37 @@ function configurarAuth(rol: 'admin' | 'vendedor') {
   });
 }
 
+/** Pantalla de prueba que setea su propio header contextual, como haría
+ * cualquier pantalla real con `useHeader()`. */
+function PantallaConHeader({
+  titulo,
+  volverA,
+  acciones,
+}: {
+  titulo: string;
+  volverA?: { etiqueta: string; a: string };
+  acciones?: ReactNode;
+}) {
+  useHeader({ titulo, volverA, acciones });
+  return <div>Contenido de {titulo}</div>;
+}
+
 function renderizarEn(ruta: string) {
   return render(
     <MemoryRouter initialEntries={[ruta]}>
-      <Routes>
-        <Route element={<Shell />}>
-          <Route path="venta" element={<div>Contenido de Venta</div>} />
-          <Route path="stock" element={<div>Contenido de Stock</div>} />
-          <Route path="reportes" element={<div>Contenido de Reportes</div>} />
-        </Route>
-      </Routes>
+      <ProveedorToasts>
+        <Routes>
+          <Route element={<Shell />}>
+            <Route path="venta" element={<div>Contenido de Venta</div>} />
+            <Route path="stock" element={<div>Contenido de Stock</div>} />
+            <Route path="reportes" element={<div>Contenido de Reportes</div>} />
+            <Route
+              path="stock/productos"
+              element={<PantallaConHeader titulo="Productos" volverA={{ etiqueta: 'Stock', a: '/stock' }} />}
+            />
+          </Route>
+        </Routes>
+      </ProveedorToasts>
     </MemoryRouter>,
   );
 }
@@ -85,20 +109,66 @@ describe('Shell', () => {
     );
   });
 
-  it('muestra el indicador de conexión "En línea"', () => {
+  it('sin título contextual seteado, usa el fallback por tab', () => {
+    configurarAuth('admin');
+
+    renderizarEn('/reportes');
+
+    expect(screen.getByRole('heading', { name: 'Reportes', level: 1 })).toBeTruthy();
+  });
+
+  it('una subvista con useHeader() reemplaza el título por tab y muestra el volver', () => {
+    configurarAuth('admin');
+
+    renderizarEn('/stock/productos');
+
+    expect(screen.getByRole('heading', { name: 'Productos', level: 1 })).toBeTruthy();
+    const volver = screen.getByRole('link', { name: /Stock/ });
+    expect(volver.getAttribute('href')).toBe('/stock');
+  });
+
+  it('en línea, no muestra ningún indicador de conexión', () => {
     configurarAuth('admin');
 
     renderizarEn('/venta');
 
-    expect(screen.getByText('En línea')).toBeTruthy();
+    expect(screen.queryByText('Sin conexión')).toBeNull();
+    expect(screen.queryByText('En línea')).toBeNull();
   });
 
-  it('sin conexión, muestra "Sin conexión"', () => {
+  it('sin conexión, muestra el chip "Sin conexión"', () => {
     configurarAuth('admin');
     mocks.useOnlineStatus.mockReturnValue(false);
 
     renderizarEn('/venta');
 
-    expect(screen.getByText('Sin conexión')).toBeTruthy();
+    expect(screen.getByRole('status').textContent).toContain('Sin conexión');
+  });
+
+  it('al reconectar (false→true), muestra un toast "Conexión restablecida"', () => {
+    configurarAuth('admin');
+    mocks.useOnlineStatus.mockReturnValue(false);
+
+    renderizarEn('/venta');
+    expect(screen.queryByText('Conexión restablecida')).toBeNull();
+
+    act(() => {
+      mocks.useOnlineStatus.mockReturnValue(true);
+    });
+    // El mock cambia el valor devuelto, pero `Shell` recién lo vuelve a leer
+    // en su próximo render: se lo dispara navegando (cualquier cambio de
+    // ruta re-renderiza `ShellInterior`, que llama a `useOnlineStatus()` de
+    // nuevo).
+    fireEvent.click(screen.getByRole('button', { name: /Stock/ }));
+
+    expect(screen.getByText('Conexión restablecida')).toBeTruthy();
+  });
+
+  it('arrancar en línea NO dispara el toast de reconexión (no es un primer render offline→online)', () => {
+    configurarAuth('admin');
+
+    renderizarEn('/venta');
+
+    expect(screen.queryByText('Conexión restablecida')).toBeNull();
   });
 });

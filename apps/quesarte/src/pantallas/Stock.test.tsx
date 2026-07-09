@@ -1,26 +1,17 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { MemoryRouter } from 'react-router';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { MemoryRouter, Route, Routes, useParams } from 'react-router';
 import type { FirestoreError } from 'firebase/firestore';
 import { money, peso, type Categoria, type Pieza, type Producto } from '@gestion/core';
 import { ProveedorToasts } from '@gestion/ui';
 import { Stock } from './Stock';
+import { ProveedorHeader, useHeaderActual } from '../componentes/header/ContextoHeader';
 
-const mocks = vi.hoisted(() => {
-  class IngresoInvalidoError extends Error {}
-  class AjusteInvalidoError extends Error {}
-  class StockInsuficienteError extends Error {}
-  return {
-    useAuth: vi.fn(),
-    useOnlineStatus: vi.fn(() => true),
-    useCollection: vi.fn(),
-    ingresarPiezas: vi.fn(),
-    ajustarStock: vi.fn(),
-    IngresoInvalidoError,
-    AjusteInvalidoError,
-    StockInsuficienteError,
-  };
-});
+const mocks = vi.hoisted(() => ({
+  useAuth: vi.fn(),
+  useOnlineStatus: vi.fn(() => true),
+  useCollection: vi.fn(),
+}));
 
 vi.mock('@gestion/firebase-kit', () => ({
   useAuth: mocks.useAuth,
@@ -28,13 +19,7 @@ vi.mock('@gestion/firebase-kit', () => ({
   useCollection: mocks.useCollection,
   productoConverter: {},
   piezaConverter: {},
-  movimientoConverter: {},
   categoriaConverter: {},
-  ingresarPiezas: mocks.ingresarPiezas,
-  ajustarStock: mocks.ajustarStock,
-  IngresoInvalidoError: mocks.IngresoInvalidoError,
-  AjusteInvalidoError: mocks.AjusteInvalidoError,
-  StockInsuficienteError: mocks.StockInsuficienteError,
 }));
 
 vi.mock('../firebase', () => ({ db: {} }));
@@ -54,7 +39,6 @@ vi.mock('firebase/firestore', () => ({
   query: (ref: RefFalsa, ...clausulas: unknown[]) => ({ ...ref, __clausulas: clausulas }),
   where: (...args: unknown[]) => ({ __tipo: 'where', args }),
   orderBy: (...args: unknown[]) => ({ __tipo: 'orderBy', args }),
-  limit: (n: number) => ({ __tipo: 'limit', n }),
 }));
 
 interface EstadoFalso<T> {
@@ -108,7 +92,6 @@ function configurarAuth(rol: 'admin' | 'vendedor') {
 function configurarCollections(estados: {
   productos?: EstadoFalso<Producto>;
   piezas?: EstadoFalso<Pieza>;
-  movimientos?: EstadoFalso<unknown>;
   /** Por defecto vacía: sin categorías definidas, la lista queda plana (comportamiento previo a CAT-3). */
   categorias?: EstadoFalso<Categoria>;
 }) {
@@ -116,17 +99,36 @@ function configurarCollections(estados: {
     if (q === null) return { datos: [], cargando: false, error: null };
     if (q.__path === 'productos') return estados.productos ?? estadoOk([]);
     if (q.__path === 'piezas') return estados.piezas ?? estadoOk([]);
-    if (q.__path === 'movimientos') return estados.movimientos ?? estadoOk([]);
     if (q.__path === 'categorias') return estados.categorias ?? estadoOk([]);
     return { datos: [], cargando: false, error: null };
   });
 }
 
+/** Expone el `acciones` del header contextual actual como texto plano, para
+ * poder aserirlo sin montar `Shell` completo (mismo criterio que
+ * `ContextoHeader.test.tsx`). */
+function VisorAcciones() {
+  const config = useHeaderActual();
+  return <div data-testid="acciones">{config?.acciones}</div>;
+}
+
+/** Placeholder de la ruta de detalle: solo confirma a qué `id` navegó. */
+function PlaceholderDetalle() {
+  const { id } = useParams<{ id: string }>();
+  return <div>Detalle de {id}</div>;
+}
+
 function renderizar() {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={['/stock']}>
       <ProveedorToasts>
-        <Stock />
+        <ProveedorHeader>
+          <VisorAcciones />
+          <Routes>
+            <Route path="/stock" element={<Stock />} />
+            <Route path="/stock/producto/:id" element={<PlaceholderDetalle />} />
+          </Routes>
+        </ProveedorHeader>
       </ProveedorToasts>
     </MemoryRouter>,
   );
@@ -169,26 +171,17 @@ describe('Stock - estados', () => {
     expect(screen.getByText('Sin productos — creá el catálogo primero.')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Ir a Productos' }).getAttribute('href')).toBe('/stock/productos');
   });
+});
 
-  it('offline: muestra el banner de sin conexión', () => {
-    configurarAuth('admin');
-    mocks.useOnlineStatus.mockReturnValue(false);
-    configurarCollections({ productos: estadoOk([]), piezas: estadoOk([]) });
-
-    renderizar();
-
-    expect(
-      screen.getByText('Sin conexión: los cambios se guardan localmente y se sincronizan al reconectar.'),
-    ).toBeTruthy();
-  });
-
-  it('en línea: no muestra el banner offline', () => {
+describe('Stock - header contextual', () => {
+  it('setea el título "Stock" y una acción "Catálogo" que linkea a /stock/productos', () => {
     configurarAuth('admin');
     configurarCollections({ productos: estadoOk([]), piezas: estadoOk([]) });
 
     renderizar();
 
-    expect(screen.queryByText(/Sin conexión/)).toBeNull();
+    const link = screen.getByRole('link', { name: 'Catálogo' });
+    expect(link.getAttribute('href')).toBe('/stock/productos');
   });
 });
 
@@ -219,6 +212,17 @@ describe('Stock - lista maestra (agrupación)', () => {
     expect(screen.getByText('1 pieza · 1,2 kg')).toBeTruthy();
     expect(screen.getByText('3 kg')).toBeTruthy();
     expect(screen.getByText('6 unidades')).toBeTruthy();
+  });
+
+  it('tocar un producto navega a /stock/producto/:id (ruta real, no estado interno)', () => {
+    configurarAuth('admin');
+    const prod = producto({ id: 'p1', nombre: 'Queso Colonia', modoStock: 'fraccionado_por_pieza' });
+    configurarCollections({ productos: estadoOk([prod]), piezas: estadoOk([]) });
+
+    renderizar();
+    fireEvent.click(screen.getByRole('button', { name: /Queso Colonia/ }));
+
+    expect(screen.getByText('Detalle de p1')).toBeTruthy();
   });
 });
 
@@ -272,113 +276,5 @@ describe('Stock - agrupación por categoría', () => {
 
     const encabezados = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
     expect(encabezados).toEqual(['Quesos']);
-  });
-});
-
-describe('Stock - detalle y permisos', () => {
-  it('vendedor: al seleccionar un producto no ve botones de acción', () => {
-    configurarAuth('vendedor');
-    const prod = producto({ id: 'p1', nombre: 'Queso Colonia', modoStock: 'fraccionado_por_pieza' });
-    configurarCollections({
-      productos: estadoOk([prod]),
-      piezas: estadoOk([pieza({ id: 'a', productoId: 'p1' })]),
-    });
-
-    renderizar();
-    fireEvent.click(screen.getByRole('button', { name: /Queso Colonia/ }));
-
-    expect(screen.getByRole('heading', { name: 'Queso Colonia' })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Ingresar piezas' })).toBeNull();
-    expect(screen.queryByRole('button', { name: /Ajustar pieza/ })).toBeNull();
-  });
-
-  it('admin: ve "Ingresar piezas" en un producto por pieza y puede abrir el modal', () => {
-    configurarAuth('admin');
-    const prod = producto({ id: 'p1', nombre: 'Queso Colonia', modoStock: 'fraccionado_por_pieza' });
-    configurarCollections({ productos: estadoOk([prod]), piezas: estadoOk([]) });
-
-    renderizar();
-    fireEvent.click(screen.getByRole('button', { name: /Queso Colonia/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Ingresar piezas' }));
-
-    expect(screen.getByText('Ingresar piezas · Queso Colonia')).toBeTruthy();
-  });
-
-  it('admin: producto granel muestra "Sumar stock" y "Ajuste / merma"', () => {
-    configurarAuth('admin');
-    const prod = producto({ id: 'p1', nombre: 'Nuez mariposa', modoStock: 'granel', stockGranelGramos: peso(1000) });
-    configurarCollections({ productos: estadoOk([prod]), piezas: estadoOk([]), movimientos: estadoOk([]) });
-
-    renderizar();
-    fireEvent.click(screen.getByRole('button', { name: /Nuez mariposa/ }));
-
-    expect(screen.getByRole('button', { name: 'Sumar stock' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Ajuste / merma' })).toBeTruthy();
-  });
-
-  it('"Volver a Stock" regresa a la lista maestra', () => {
-    configurarAuth('admin');
-    const prod = producto({ id: 'p1', nombre: 'Queso Colonia', modoStock: 'fraccionado_por_pieza' });
-    configurarCollections({ productos: estadoOk([prod]), piezas: estadoOk([]) });
-
-    renderizar();
-    fireEvent.click(screen.getByRole('button', { name: /Queso Colonia/ }));
-    expect(screen.getByRole('heading', { name: 'Queso Colonia' })).toBeTruthy();
-
-    fireEvent.click(screen.getByRole('button', { name: /Volver a Stock/ }));
-
-    expect(screen.queryByRole('heading', { name: 'Queso Colonia' })).toBeNull();
-  });
-});
-
-describe('Stock - ajuste por pieza desde el detalle', () => {
-  it('admin: el botón "Ajustar" de una fila abre el modal de ajuste para esa pieza', async () => {
-    configurarAuth('admin');
-    const prod = producto({ id: 'p1', nombre: 'Queso Colonia', modoStock: 'fraccionado_por_pieza' });
-    configurarCollections({
-      productos: estadoOk([prod]),
-      piezas: estadoOk([pieza({ id: 'a', productoId: 'p1', pesoRestanteGramos: peso(1500) })]),
-    });
-
-    renderizar();
-    fireEvent.click(screen.getByRole('button', { name: /Queso Colonia/ }));
-    // `DetalleProducto` ahora tiene tabla Y lista compacta a la vez (modo
-    // compacto de `DataTable`, docs/06-ui-ux.md §3): ambas tienen un botón
-    // "Ajustar pieza…" con el mismo aria-label, así que se scopea a la
-    // tabla (fuente de verdad de siempre) para no ambigüar.
-    fireEvent.click(within(screen.getByRole('table')).getByRole('button', { name: /Ajustar pieza/ }));
-
-    expect(screen.getByText('Ajuste / merma · Queso Colonia')).toBeTruthy();
-    await waitFor(() => expect(screen.getByText('Disponible: 1,5 kg')).toBeTruthy());
-  });
-
-  it('admin: la fila compacta de una pieza (mobile) también abre el modal de ajuste, con el mismo handler', async () => {
-    configurarAuth('admin');
-    const prod = producto({ id: 'p1', nombre: 'Queso Colonia', modoStock: 'fraccionado_por_pieza' });
-    configurarCollections({
-      productos: estadoOk([prod]),
-      piezas: estadoOk([pieza({ id: 'a', productoId: 'p1', pesoRestanteGramos: peso(1500) })]),
-    });
-
-    renderizar();
-    fireEvent.click(screen.getByRole('button', { name: /Queso Colonia/ }));
-    fireEvent.click(within(screen.getByRole('list')).getByRole('button', { name: /Ajustar pieza/ }));
-
-    expect(screen.getByText('Ajuste / merma · Queso Colonia')).toBeTruthy();
-    await waitFor(() => expect(screen.getByText('Disponible: 1,5 kg')).toBeTruthy());
-  });
-
-  it('vendedor: la fila compacta de una pieza NO es un botón (sin permiso de ajuste)', () => {
-    configurarAuth('vendedor');
-    const prod = producto({ id: 'p1', nombre: 'Queso Colonia', modoStock: 'fraccionado_por_pieza' });
-    configurarCollections({
-      productos: estadoOk([prod]),
-      piezas: estadoOk([pieza({ id: 'a', productoId: 'p1', pesoRestanteGramos: peso(1500) })]),
-    });
-
-    renderizar();
-    fireEvent.click(screen.getByRole('button', { name: /Queso Colonia/ }));
-
-    expect(within(screen.getByRole('list')).queryByRole('button', { name: /Ajustar pieza/ })).toBeNull();
   });
 });

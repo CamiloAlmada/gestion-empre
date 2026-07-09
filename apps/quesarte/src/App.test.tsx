@@ -76,6 +76,14 @@ vi.mock('./pantallas/Usuarios', () => ({
   Usuarios: () => <div>Contenido de Usuarios</div>,
 }));
 
+// DetalleProductoPantalla (pantalla de /stock/producto/:id) también arma su
+// query de Firestore al importarse, mismo motivo que Productos/Usuarios
+// arriba: se mockea entero (DetalleProductoPantalla.test.tsx cubre su
+// contenido), este suite solo prueba que la ruta existe y llega ahí.
+vi.mock('./pantallas/DetalleProductoPantalla', () => ({
+  DetalleProductoPantalla: () => <div>Contenido de DetalleProductoPantalla</div>,
+}));
+
 function configurarAuth(rol: 'admin' | 'vendedor') {
   mocks.useAuth.mockReturnValue({
     usuario: { uid: 'u1' },
@@ -151,5 +159,21 @@ describe('App - rutas', () => {
     renderizarEn('/ajustes/usuarios');
 
     expect(screen.getByText('Contenido de Usuarios')).toBeTruthy();
+  });
+
+  it('navega a /stock/producto/:id (ruta real de detalle, no estado interno)', () => {
+    configurarAuth('admin');
+
+    renderizarEn('/stock/producto/abc123');
+
+    expect(screen.getByText('Contenido de DetalleProductoPantalla')).toBeTruthy();
+  });
+
+  it('vendedor también puede navegar a /stock/producto/:id (no es solo-admin)', () => {
+    configurarAuth('vendedor');
+
+    renderizarEn('/stock/producto/abc123');
+
+    expect(screen.getByText('Contenido de DetalleProductoPantalla')).toBeTruthy();
   });
 });
