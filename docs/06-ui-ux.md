@@ -47,6 +47,10 @@ tech lead; no se ignora en silencio.
 - **Conexión: se señala solo la ausencia.** Con conexión el header no muestra
   nada; sin conexión, chip "Sin conexión" (ícono + texto, `role="status"`) y
   toast breve al reconectar. Un indicador permanente del estado normal es ruido.
+  El chip es la ÚNICA señal genérica: prohibidos los banners por pantalla que
+  solo repiten "sin conexión". Un banner offline local se justifica únicamente
+  cuando explica una acción deshabilitada de esa pantalla (p. ej. "Necesitás
+  conexión para gestionar categorías").
 
 ## 3. Lenguaje visual (One UI-like, translucidez contenida)
 
