@@ -20,13 +20,14 @@ type ModoEfectivo = 'light' | 'dark';
  *   oklch(0.965 0.006 75) → #f6f3ef   (neutral-100, minimalista-light)
  *   oklch(0.1   0.006 75) → #040302   (neutral-950, minimalista-dark)
  *
- * - `calido.*`: PROVISORIOS. El bloque `[data-estilo='calido']` que
- *   redefine los tokens de color en `tailwind.css` todavía no existe (la
- *   paleta Cálido se diseña y verifica AA en otra tarea, ver
- *   docs/06-ui-ux.md §4/§7) — estos hex son una aproximación visual al
- *   crema/marrón descriptos ahí, NO un valor derivado de un token real.
- *   TODO(paleta-calido): reemplazar por el hex real de `--fondo` una vez
- *   que esa tarea defina y verifique los tokens de Cálido.
+ * - `calido.*`: calculados con la misma conversión OKLCH → OKLab → linear
+ *   sRGB → sRGB (Björn Ottosson, gamma sRGB estándar) desde los tokens
+ *   `--fondo-light`/`--fondo-dark` reales del bloque `[data-estilo='calido']`
+ *   en `packages/config/tailwind.css` (verificados AA en docs/06-ui-ux.md
+ *   §7, tarea TH-E):
+ *
+ *   oklch(0.955 0.03 85)  → #f9efda   (--fondo-light, calido-light)
+ *   oklch(0.15  0.015 55) → #100906   (--fondo-dark, calido-dark)
  */
 export const MAPA_THEME_COLOR: Record<Estilo, Record<ModoEfectivo, string>> = {
   minimalista: {
@@ -34,8 +35,8 @@ export const MAPA_THEME_COLOR: Record<Estilo, Record<ModoEfectivo, string>> = {
     dark: '#040302',
   },
   calido: {
-    light: '#f6ecdc',
-    dark: '#241a12',
+    light: '#f9efda',
+    dark: '#100906',
   },
 };
 

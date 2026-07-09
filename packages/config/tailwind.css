@@ -19,13 +19,15 @@
  *   - Estilo: Minimalista (default) / Cálido → data-estilo="calido" en <html>
  *
  * Los tokens semánticos se arman en DOS capas ortogonales:
- *   Capa 1 (más abajo, primer :root): pares crudos "--token-light" /
- *     "--token-dark" con los valores del estilo Minimalista. Un futuro
- *     bloque `[data-estilo='calido']` redefine estos mismos pares con los
- *     valores del estilo Cálido — DEBE declararse DESPUÉS de este :root en
- *     el archivo: `:root` y `[data-estilo='calido']` empatan en
- *     especificidad (0,1,0), así que gana el que aparece último en la
- *     cascada. El orden es load-bearing.
+ *   Capa 1 (más abajo, primer :root + :root de tokens de forma): pares
+ *     crudos "--token-light" / "--token-dark" y tokens de radio/sombra con
+ *     los valores del estilo Minimalista. El bloque `[data-estilo='calido']`
+ *     (más abajo, después de ambos :root) redefine estos mismos pares y
+ *     tokens, además de la escala --color-primary-*, con los valores del
+ *     estilo Cálido — DEBE declararse DESPUÉS de esos :root en el archivo:
+ *     `:root` y `[data-estilo='calido']` empatan en especificidad (0,1,0),
+ *     así que gana el que aparece último en la cascada. El orden es
+ *     load-bearing.
  *   Capa 2 (segundo :root + [data-theme='dark'] + media query): elige,
  *     para cada token semántico final (--fondo, --texto, etc.), cuál de los
  *     dos pares (-light/-dark) usar según el modo activo. Esta capa NO
@@ -76,10 +78,11 @@
 /* ---------------------------------------------------------------------
  * Capa 1 — pares crudos por estilo (Minimalista).
  *
- * IMPORTANTE: un futuro bloque `[data-estilo='calido']` que redefina estos
- * mismos custom properties debe declararse DESPUÉS de este :root: ambos
- * selectores tienen especificidad (0,1,0), y en un empate gana la última
- * regla en la cascada. No reordenar sin mover ese bloque también.
+ * IMPORTANTE: el bloque `[data-estilo='calido']` que redefine estos mismos
+ * custom properties (ver más abajo, después del :root de tokens de forma)
+ * debe declararse DESPUÉS de este :root: ambos selectores tienen
+ * especificidad (0,1,0), y en un empate gana la última regla en la
+ * cascada. No reordenar sin mover ese bloque también.
  *
  * --superficie-translucida NO tiene par acá: se deriva una sola vez por
  * modo en la Capa 2, a partir de --superficie ya resuelto (ver abajo).
@@ -111,10 +114,14 @@
 }
 
 /* ---------------------------------------------------------------------
- * Tokens de forma (radios y sombras). Sin variación por modo ni estilo en
- * esta capa fundacional: valores por defecto = look actual (Minimalista).
- * Un futuro bloque `[data-estilo='calido']` puede redefinir estos mismos
- * custom properties (misma regla de orden que arriba).
+ * Tokens de forma (radios y sombras). Sin variación por modo en esta capa
+ * fundacional; el bloque `[data-estilo='calido']` de más abajo SÍ redefine
+ * --radio-card/--radio-elemento/--radio-control/--radio-flotante/
+ * --sombra-card/--sombra-flotante (misma regla de orden que arriba: debe
+ * declararse después de este :root, no antes — por eso el bloque Cálido
+ * vive después de este bloque y no pegado al :root de Capa 1). No redefine
+ * --sombra-hoja/--sombra-hoja-expandida (sin valores de Cálido definidos
+ * todavía).
  *
  * Ninguna utilidad generada por estos tokens (rounded-card, shadow-hoja,
  * etc.) está en uso todavía — quedan como no-op hasta que otra tarea migre
@@ -136,6 +143,99 @@
   --sombra-flotante: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1); /* = shadow-lg */
   --sombra-hoja: 0 -4px 16px rgb(0 0 0 / 0.08);
   --sombra-hoja-expandida: 0 -12px 32px rgb(0 0 0 / 0.16);
+}
+
+/* ---------------------------------------------------------------------
+ * Estilo "Cálido" (data-estilo="calido" en <html>, docs/06-ui-ux.md §4):
+ * redefine, en un único bloque, los pares crudos de Capa 1 (a), la escala
+ * --color-primary-* de @theme (b) y los tokens de forma fundacionales (c).
+ *
+ * POR QUÉ ACÁ Y NO "inmediatamente después" del primer :root de Capa 1:
+ * este bloque necesita ganarle, en la cascada, a DOS :root distintos (el de
+ * pares crudos y el de tokens de forma), ambos con especificidad (0,1,0)
+ * igual a la suya — en un empate de especificidad gana la última regla en
+ * el archivo. Si este bloque fuera a continuación del primer :root (antes
+ * del de tokens de forma), ese segundo :root — que viene después —
+ * volvería a pisar los radios/sombras de Cálido con los de Minimalista. La
+ * única posición correcta es después de AMBOS :root fundacionales, que es
+ * donde está. (La escala --color-primary-* no tiene este problema: Tailwind
+ * v4 emite las variables de `@theme` dentro de `@layer theme`, y una regla
+ * sin layer —como esta— le gana siempre a una con layer, sin importar
+ * orden ni especificidad; se redefine acá junto con lo demás por
+ * legibilidad, no por necesidad de orden.)
+ *
+ * Todos los pares de abajo están verificados AA (≥4.5:1 texto normal,
+ * ≥3:1 UI/bordes/rings) en las dos combinaciones light/dark de este
+ * estilo — ver docs/06-ui-ux.md §7 para la tabla completa.
+ * --------------------------------------------------------------------- */
+[data-estilo='calido'] {
+  /* a) Pares semánticos crudos (mismos nombres que la Capa 1 de arriba). */
+  --fondo-light: oklch(0.955 0.03 85);
+  --fondo-dark: oklch(0.15 0.015 55);
+
+  /* L 0.99→0.985 respecto del punto de partida: a 0.99 con chroma 0.012 el
+     par quedaba FUERA DE GAMUT sRGB (máx. de chroma en gamut a L=0.99 es
+     ~0.0105); a L=0.985 el máximo sube a ~0.0157, con margen cómodo para la
+     misma chroma. Diferencia de L imperceptible a la vista. */
+  --superficie-light: oklch(0.985 0.012 85);
+  --superficie-dark: oklch(0.22 0.02 55);
+
+  --texto-light: oklch(0.24 0.03 60);
+  --texto-dark: oklch(0.96 0.02 85);
+
+  --texto-secundario-light: oklch(0.44 0.045 58);
+  --texto-secundario-dark: oklch(0.72 0.045 70);
+
+  /* L 0.64→0.62 respecto del punto de partida: a 0.64, el par NUEVO
+     borde/fondo (borde de la tab bar flotante, ≥3:1) daba 2.98:1, por
+     debajo del umbral UI. A 0.62 da 3.23:1 (margen ~7-8%, ya no al borde
+     ante redondeos). borde/superficie no estaba comprometido (3.30:1 con
+     el valor original) y con el ajuste mejora a 3.52:1. */
+  --borde-light: oklch(0.62 0.06 70);
+  --borde-dark: oklch(0.52 0.035 65);
+
+  --exito-light: oklch(0.47 0.13 145);
+  --exito-dark: oklch(0.72 0.17 145);
+
+  --peligro-light: oklch(0.54 0.19 30);
+  --peligro-dark: oklch(0.7 0.18 28);
+
+  --advertencia-light: oklch(0.49 0.11 60);
+  --advertencia-dark: oklch(0.72 0.15 60);
+
+  /* b) Escala primary naranja. Chroma recortada, a igual L y H, en 7 de 11
+     escalones (50/100/200/300/500/600/700) respecto del pedido original:
+     ese pedido quedaba FUERA DE GAMUT sRGB en esos escalones (confirmado
+     por bisección canal-a-canal antes del clamp). Mismo criterio que ya
+     usa la escala primary de Minimalista (ver comentario de @theme,
+     arriba: "chroma ajustada por escalón para quedar dentro de gamut").
+     Margen ~4-5% por debajo del máximo en gamut en todos los escalones
+     (incluidos los que ya venían en gamut: 400/800/900/950), para no
+     quedar al borde ante diferencias de redondeo entre motores de render. */
+  --color-primary-50: oklch(0.975 0.017 70);
+  --color-primary-100: oklch(0.94 0.04 68);
+  --color-primary-200: oklch(0.88 0.083 66);
+  --color-primary-300: oklch(0.81 0.13 62);
+  --color-primary-400: oklch(0.73 0.165 58);
+  --color-primary-500: oklch(0.65 0.155 55);
+  --color-primary-600: oklch(0.56 0.138 52);
+  --color-primary-700: oklch(0.47 0.119 50);
+  --color-primary-800: oklch(0.385 0.097 50);
+  --color-primary-900: oklch(0.315 0.079 50);
+  --color-primary-950: oklch(0.215 0.054 50);
+
+  /* c) Tokens de forma: radios píldora, sombras suaves (look "One UI"
+     cálido, docs/06-ui-ux.md §3-4). --altura-zona-inferior NO se redefine
+     acá — la tab bar flotante despegada es de la tarea TH-F. */
+  --radio-card: 1.5rem;
+  --radio-elemento: 1rem;
+  --radio-control: 0.875rem;
+  --radio-flotante: 9999px;
+
+  --sombra-card: 0 2px 8px -2px oklch(0.35 0.06 55 / 0.12);
+  --sombra-flotante:
+    0 12px 32px -8px oklch(0.35 0.06 55 / 0.25),
+    0 4px 12px -4px oklch(0.35 0.06 55 / 0.15);
 }
 
 /* ---------------------------------------------------------------------

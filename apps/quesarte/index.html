@@ -35,12 +35,12 @@
 
         // Mismo mapa que MAPA_THEME_COLOR en
         // apps/quesarte/src/componentes/MetaThemeColor.tsx, duplicado a
-        // propósito (ver comentario de ahí sobre cómo se calcularon los
-        // valores de "minimalista"; los de "calido" son PROVISORIOS,
-        // TODO(paleta-calido)).
+        // propósito (ver comentario de ahí sobre cómo se calcularon ambos
+        // estilos desde los --fondo-light/--fondo-dark reales de
+        // packages/config/tailwind.css).
         var MAPA_THEME_COLOR = {
           minimalista: { light: '#f6f3ef', dark: '#040302' },
-          calido: { light: '#f6ecdc', dark: '#241a12' },
+          calido: { light: '#f9efda', dark: '#100906' },
         };
         var estiloEfectivo = estiloGuardado === 'calido' ? 'calido' : 'minimalista';
         var prefiereOscuro = window.matchMedia('(prefers-color-scheme: dark)').matches;
