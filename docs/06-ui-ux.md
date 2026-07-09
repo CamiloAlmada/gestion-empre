@@ -40,8 +40,13 @@ tech lead; no se ignora en silencio.
     dice "Productos"). Conciso (~15 caracteres).
   - Subvistas muestran a la izquierda el volver `‹ {Padre}` (ese link ES el
     breadcrumb en mobile; no hay breadcrumbs multi-nivel).
-  - A la derecha, hasta **2 acciones contextuales** de la pantalla (las de más
-    frecuencia); más que eso → menú "⋮". Acciones fuera de contexto: prohibidas.
+  - Hasta **2 acciones contextuales** por pantalla (las de más frecuencia);
+    más que eso → menú "⋮". Acciones fuera de contexto: prohibidas.
+  - **Dónde se renderizan** (ergonomía de pulgar, decidido 2026-07-09): en
+    pantalla angosta van como **píldoras flotantes sobre la tab bar** (zona del
+    pulgar, una mano); en `md:`+ van a la derecha del header (mouse). La
+    pantalla declara sus acciones UNA vez (`useHeader`); el Shell decide dónde
+    mostrarlas. Venta no declara acciones (su zona inferior es del carrito).
   - Las subvistas con contenido propio (detalle de producto) viven en **rutas
     reales**, no en estado interno: el back del sistema debe funcionar siempre.
 - **Conexión: se señala solo la ausencia.** Con conexión el header no muestra
@@ -75,6 +80,16 @@ tech lead; no se ignora en silencio.
 
 ## 4. Sistema de temas
 
+- Dos ejes independientes, elegibles en Ajustes → Apariencia:
+  - **Modo**: light / dark / system (como siempre).
+  - **Estilo** (2026-07-09): **Minimalista** (default, el actual) y **Cálido**
+    (crema/naranja inspirado en `docs/inspiraciones/inspiracion_1.webp`: radios
+    píldora, sombras suaves, tab bar flotante despegada, dark en marrones
+    cálidos). Se aplica como `data-estilo="calido"` en `<html>` (Minimalista no
+    fija atributo), persiste en `localStorage['estilo']`, anti-FOUC en el
+    `index.html`. Los ejes componen: 2 estilos × light/dark, todos verificados
+    en §7. Los estilos difieren SOLO por tokens (color + forma); el variant
+    `calido:` queda reservado a diferencias estructurales (tab bar).
 - Modos: **light / dark / system**, elegibles en Ajustes → Apariencia.
 - Persistencia en `localStorage`; se aplica como `data-theme="light|dark"` en
   `<html>`. En modo system no se fija `data-theme` y rige
