@@ -157,4 +157,112 @@ describe('Carrito', () => {
     expect(resumen.getAttribute('aria-expanded')).toBe('false');
     expect(screen.queryByTestId('scrim-carrito')).toBeNull();
   });
+
+  describe('agarre y arrastre para cerrar (docs/06-ui-ux.md §6)', () => {
+    /**
+     * jsdom no implementa `matchMedia` (ver MetaThemeColor.test.tsx): mismo
+     * doble mínimo, acá solo hace falta leer `matches`.
+     */
+    function instalarMatchMediaFalso(matches: boolean) {
+      vi.stubGlobal(
+        'matchMedia',
+        vi.fn().mockReturnValue({ matches, media: '(prefers-reduced-motion: reduce)' } as MediaQueryList),
+      );
+    }
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    function itemUnico() {
+      const producto = productoDe({ id: 'p1', modoStock: 'unidad_simple', modoPrecio: 'por_unidad' });
+      return crearItemUnidad(producto, 1, 'a');
+    }
+
+    it('colapsado: no hay agarre en el DOM', () => {
+      render(<Carrito items={[itemUnico()]} onQuitar={vi.fn()} onCobrar={vi.fn()} procesando={false} />);
+
+      expect(screen.queryByTestId('agarre-carrito')).toBeNull();
+    });
+
+    it('expandido: el agarre está presente y es decorativo (aria-hidden)', () => {
+      render(<Carrito items={[itemUnico()]} onQuitar={vi.fn()} onCobrar={vi.fn()} procesando={false} />);
+
+      fireEvent.click(screen.getByRole('button', { name: /1 ítem/ }));
+
+      const agarre = screen.getByTestId('agarre-carrito');
+      expect(agarre.getAttribute('aria-hidden')).toBe('true');
+    });
+
+    it('arrastre que supera el umbral (>90px) colapsa el carrito', () => {
+      instalarMatchMediaFalso(false);
+      render(<Carrito items={[itemUnico()]} onQuitar={vi.fn()} onCobrar={vi.fn()} procesando={false} />);
+      fireEvent.click(screen.getByRole('button', { name: /1 ítem/ }));
+
+      const agarre = screen.getByTestId('agarre-carrito');
+      fireEvent.pointerDown(agarre, { pointerId: 1, clientY: 0 });
+      fireEvent.pointerMove(agarre, { pointerId: 1, clientY: 60 });
+      fireEvent.pointerUp(agarre, { pointerId: 1, clientY: 120 });
+
+      const resumen = screen.getByRole('button', { name: /1 ítem/ });
+      expect(resumen.getAttribute('aria-expanded')).toBe('false');
+      expect(screen.queryByTestId('scrim-carrito')).toBeNull();
+    });
+
+    it('arrastre corto (bajo el umbral) NO colapsa: la hoja sigue expandida', () => {
+      instalarMatchMediaFalso(false);
+      render(<Carrito items={[itemUnico()]} onQuitar={vi.fn()} onCobrar={vi.fn()} procesando={false} />);
+      fireEvent.click(screen.getByRole('button', { name: /1 ítem/ }));
+
+      const agarre = screen.getByTestId('agarre-carrito');
+      fireEvent.pointerDown(agarre, { pointerId: 1, clientY: 0 });
+      fireEvent.pointerMove(agarre, { pointerId: 1, clientY: 30 });
+      fireEvent.pointerUp(agarre, { pointerId: 1, clientY: 40 });
+
+      const resumen = screen.getByRole('button', { name: /1 ítem/ });
+      expect(resumen.getAttribute('aria-expanded')).toBe('true');
+    });
+
+    it('arrastre hacia arriba se ignora (clamp a 0): no colapsa', () => {
+      instalarMatchMediaFalso(false);
+      render(<Carrito items={[itemUnico()]} onQuitar={vi.fn()} onCobrar={vi.fn()} procesando={false} />);
+      fireEvent.click(screen.getByRole('button', { name: /1 ítem/ }));
+
+      const agarre = screen.getByTestId('agarre-carrito');
+      fireEvent.pointerDown(agarre, { pointerId: 1, clientY: 100 });
+      fireEvent.pointerMove(agarre, { pointerId: 1, clientY: 0 });
+      fireEvent.pointerUp(agarre, { pointerId: 1, clientY: 0 });
+
+      const resumen = screen.getByRole('button', { name: /1 ítem/ });
+      expect(resumen.getAttribute('aria-expanded')).toBe('true');
+    });
+
+    it('prefers-reduced-motion: el arrastre que supera el umbral igual cierra al soltar', () => {
+      instalarMatchMediaFalso(true);
+      render(<Carrito items={[itemUnico()]} onQuitar={vi.fn()} onCobrar={vi.fn()} procesando={false} />);
+      fireEvent.click(screen.getByRole('button', { name: /1 ítem/ }));
+
+      const agarre = screen.getByTestId('agarre-carrito');
+      fireEvent.pointerDown(agarre, { pointerId: 1, clientY: 0 });
+      fireEvent.pointerMove(agarre, { pointerId: 1, clientY: 60 });
+      fireEvent.pointerUp(agarre, { pointerId: 1, clientY: 120 });
+
+      const resumen = screen.getByRole('button', { name: /1 ítem/ });
+      expect(resumen.getAttribute('aria-expanded')).toBe('false');
+    });
+
+    it('pointercancel resetea el arrastre sin colapsar', () => {
+      instalarMatchMediaFalso(false);
+      render(<Carrito items={[itemUnico()]} onQuitar={vi.fn()} onCobrar={vi.fn()} procesando={false} />);
+      fireEvent.click(screen.getByRole('button', { name: /1 ítem/ }));
+
+      const agarre = screen.getByTestId('agarre-carrito');
+      fireEvent.pointerDown(agarre, { pointerId: 1, clientY: 0 });
+      fireEvent.pointerMove(agarre, { pointerId: 1, clientY: 150 });
+      fireEvent.pointerCancel(agarre, { pointerId: 1 });
+
+      const resumen = screen.getByRole('button', { name: /1 ítem/ });
+      expect(resumen.getAttribute('aria-expanded')).toBe('true');
+    });
+  });
 });
