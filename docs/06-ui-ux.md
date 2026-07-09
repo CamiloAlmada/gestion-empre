@@ -35,7 +35,18 @@ tech lead; no se ignora en silencio.
 - **Visibilidad por rol**: `vendedor` no ve Reportes; dentro de Stock no ve
   costos ni edición de precios (además del bloqueo real por reglas). `admin` ve
   todo. Los tabs se filtran por rol, nunca se muestran deshabilitados.
-- El header de cada pantalla muestra título + indicador de conexión.
+- **Header contextual** (patrón Material 3 / Apple HIG): `[‹ Padre] Título [1–2 acciones]`.
+  - El título es el de la **vista actual**, no el del tab (en Stock → Productos
+    dice "Productos"). Conciso (~15 caracteres).
+  - Subvistas muestran a la izquierda el volver `‹ {Padre}` (ese link ES el
+    breadcrumb en mobile; no hay breadcrumbs multi-nivel).
+  - A la derecha, hasta **2 acciones contextuales** de la pantalla (las de más
+    frecuencia); más que eso → menú "⋮". Acciones fuera de contexto: prohibidas.
+  - Las subvistas con contenido propio (detalle de producto) viven en **rutas
+    reales**, no en estado interno: el back del sistema debe funcionar siempre.
+- **Conexión: se señala solo la ausencia.** Con conexión el header no muestra
+  nada; sin conexión, chip "Sin conexión" (ícono + texto, `role="status"`) y
+  toast breve al reconectar. Un indicador permanente del estado normal es ruido.
 
 ## 3. Lenguaje visual (One UI-like, translucidez contenida)
 
