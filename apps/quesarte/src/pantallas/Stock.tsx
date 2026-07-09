@@ -105,10 +105,12 @@ export function Stock() {
 
   useHeader({
     titulo: 'Stock',
+    // min-h-[48px]: esta acción ahora también flota sobre la tab bar en
+    // mobile (zona del pulgar, docs/06-ui-ux.md §2 y §5 — targets ≥48px).
     acciones: (
       <Link
         to="/stock/productos"
-        className="inline-flex min-h-[44px] items-center justify-center rounded-lg border border-borde bg-superficie px-3 text-sm font-medium text-texto hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
+        className="inline-flex min-h-[48px] items-center justify-center rounded-lg border border-borde bg-superficie px-3 text-sm font-medium text-texto hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
       >
         Catálogo
       </Link>

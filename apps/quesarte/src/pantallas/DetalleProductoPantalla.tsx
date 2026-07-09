@@ -92,14 +92,21 @@ export function DetalleProductoPantalla() {
   useHeader({
     titulo: tituloHeader,
     volverA: { etiqueta: 'Stock', a: '/stock' },
+    // min-h-[48px] en las tres: en mobile flotan sobre la tab bar
+    // (docs/06-ui-ux.md §2 y §5 — targets ≥48px ahí; `Button` no fuerza una
+    // altura mínima propia).
     acciones:
       esAdmin && producto !== null ? (
         esModoStockPorPieza(producto.modoStock) ? (
-          <Button onClick={() => setModal('ingreso')}>Ingresar piezas</Button>
+          <Button onClick={() => setModal('ingreso')} className="min-h-[48px]">
+            Ingresar piezas
+          </Button>
         ) : (
           <>
-            <Button onClick={() => setModal('sumar')}>Sumar stock</Button>
-            <Button variante="secundaria" onClick={() => setModal('ajuste')}>
+            <Button onClick={() => setModal('sumar')} className="min-h-[48px]">
+              Sumar stock
+            </Button>
+            <Button variante="secundaria" onClick={() => setModal('ajuste')} className="min-h-[48px]">
               Ajuste / merma
             </Button>
           </>
