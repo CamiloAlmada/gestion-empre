@@ -218,6 +218,10 @@ export function Usuarios() {
     }
   }
 
+  function estaDeshabilitado(u: Usuario): boolean {
+    return u.uid === perfil?.uid || actualizandoUid === u.uid;
+  }
+
   const columnas: ColumnaDataTable<Usuario>[] = [
     {
       clave: 'nombre',
@@ -236,11 +240,7 @@ export function Usuarios() {
       clave: 'rol',
       titulo: 'Rol',
       render: (u) => (
-        <SelectorRolFila
-          usuario={u}
-          disabled={u.uid === perfil?.uid || actualizandoUid === u.uid}
-          onCambiarRol={(rol) => handleCambiarRol(u, rol)}
-        />
+        <SelectorRolFila usuario={u} disabled={estaDeshabilitado(u)} onCambiarRol={(rol) => handleCambiarRol(u, rol)} />
       ),
     },
     {
@@ -249,12 +249,42 @@ export function Usuarios() {
       render: (u) => (
         <ToggleActivoFila
           usuario={u}
-          disabled={u.uid === perfil?.uid || actualizandoUid === u.uid}
+          disabled={estaDeshabilitado(u)}
           onCambiar={(activo) => handleCambiarActivo(u, activo)}
         />
       ),
     },
   ];
+
+  /**
+   * Fila compacta para mobile (`< md`, docs/06-ui-ux.md §3): nombre + correo
+   * chico debajo, y los mismos controles de rol/estado que la tabla en
+   * desktop (mismos componentes, mismos handlers) apilados abajo — a
+   * diferencia de Productos, acá no hay una única "acción de fila" que
+   * navegue a otro lado, son controles inline, así que no tiene sentido
+   * envolver todo en un botón tappable.
+   */
+  function filaCompactaUsuario(u: Usuario) {
+    return (
+      <div className="flex min-h-[56px] flex-col gap-2 p-4">
+        <div className="flex flex-col gap-0.5">
+          <span className="font-medium text-texto">{u.nombre}</span>
+          <span className="text-sm text-texto-secundario">{u.email}</span>
+          {u.uid === perfil?.uid && (
+            <span className="text-xs text-texto-secundario">No podés modificar tu propia cuenta.</span>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <SelectorRolFila usuario={u} disabled={estaDeshabilitado(u)} onCambiarRol={(rol) => handleCambiarRol(u, rol)} />
+          <ToggleActivoFila
+            usuario={u}
+            disabled={estaDeshabilitado(u)}
+            onCambiar={(activo) => handleCambiarActivo(u, activo)}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -303,6 +333,7 @@ export function Usuarios() {
           filas={usuariosFiltrados}
           claveFila={(u) => u.uid}
           etiqueta="Usuarios"
+          filaCompacta={filaCompactaUsuario}
           vacio={
             usuarios.length === 0 ? (
               <p>No hay usuarios todavía.</p>

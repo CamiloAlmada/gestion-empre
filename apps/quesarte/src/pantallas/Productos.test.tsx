@@ -1,9 +1,20 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { ProveedorTema, ProveedorToasts } from '@gestion/ui';
 import { money, peso, type Categoria, type Producto } from '@gestion/core';
 import { Productos } from './Productos';
+
+// `DataTable` con `filaCompacta` (docs/06-ui-ux.md §3) renderiza SIEMPRE la
+// tabla completa Y la lista compacta a la vez — la visibilidad la decide CSS
+// responsive que jsdom no evalúa (ver DataTable.tsx). Por eso el contenido
+// de cada fila aparece dos veces en el DOM de test; las aserciones que solo
+// verifican "el dato está en la pantalla" se scopean a la tabla (fuente de
+// verdad de siempre) para no ambigüar con `getByText`/`getByRole`. La lista
+// compacta se testea aparte, explícitamente, más abajo.
+function tabla() {
+  return within(screen.getByRole('table'));
+}
 
 const mocks = vi.hoisted(() => ({
   useAuth: vi.fn(),
@@ -189,16 +200,16 @@ describe('Productos', () => {
 
     renderizar();
 
-    expect(screen.getByText('Queso Añejo')).toBeTruthy();
-    expect(screen.getByText('Quesos')).toBeTruthy();
-    expect(screen.getByText('Por kg · Fraccionado por pieza')).toBeTruthy();
-    expect(screen.getByText('$ 899,00 /kg')).toBeTruthy();
-    expect(screen.getByText('Activo')).toBeTruthy();
+    expect(tabla().getByText('Queso Añejo')).toBeTruthy();
+    expect(tabla().getByText('Quesos')).toBeTruthy();
+    expect(tabla().getByText('Por kg · Fraccionado por pieza')).toBeTruthy();
+    expect(tabla().getByText('$ 899,00 /kg')).toBeTruthy();
+    expect(tabla().getByText('Activo')).toBeTruthy();
 
-    expect(screen.getByText('Miel 500g')).toBeTruthy();
-    expect(screen.getByText('Por unidad · Unidad simple')).toBeTruthy();
-    expect(screen.getByText('$ 450,00 /u')).toBeTruthy();
-    expect(screen.getByText('Inactivo')).toBeTruthy();
+    expect(tabla().getByText('Miel 500g')).toBeTruthy();
+    expect(tabla().getByText('Por unidad · Unidad simple')).toBeTruthy();
+    expect(tabla().getByText('$ 450,00 /u')).toBeTruthy();
+    expect(tabla().getByText('Inactivo')).toBeTruthy();
   });
 
   it('la búsqueda filtra por nombre o categoría ignorando acentos', () => {
@@ -209,8 +220,8 @@ describe('Productos', () => {
 
     fireEvent.change(screen.getByLabelText('Buscar'), { target: { value: 'anejo' } });
 
-    expect(screen.getByText('Queso Añejo')).toBeTruthy();
-    expect(screen.queryByText('Miel 500g')).toBeNull();
+    expect(tabla().getByText('Queso Añejo')).toBeTruthy();
+    expect(tabla().queryByText('Miel 500g')).toBeNull();
   });
 
   it('la búsqueda por categoría también filtra', () => {
@@ -221,8 +232,8 @@ describe('Productos', () => {
 
     fireEvent.change(screen.getByLabelText('Buscar'), { target: { value: 'miel' } });
 
-    expect(screen.getByText('Miel 500g')).toBeTruthy();
-    expect(screen.queryByText('Queso Añejo')).toBeNull();
+    expect(tabla().getByText('Miel 500g')).toBeTruthy();
+    expect(tabla().queryByText('Queso Añejo')).toBeNull();
   });
 
   it('estado cargando', () => {
@@ -272,8 +283,12 @@ describe('Productos', () => {
 
     expect(screen.queryByRole('button', { name: 'Agregar producto' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Editar' })).toBeNull();
+    // la fila compacta de un vendedor tampoco es tappable (sin edición, ver
+    // `filaCompactaProducto` en Productos.tsx: sin permiso, es un <div>, no
+    // hay botón "Editar {nombre}").
+    expect(screen.queryByRole('button', { name: /^Editar / })).toBeNull();
     // el catálogo sigue siendo visible
-    expect(screen.getByText('Queso Añejo')).toBeTruthy();
+    expect(tabla().getByText('Queso Añejo')).toBeTruthy();
   });
 
   it('alta: valida requeridos y no llama a addDoc', () => {
@@ -568,5 +583,45 @@ describe('Productos', () => {
     );
     const queryDespues = llamadasProductosDespues[llamadasProductosDespues.length - 1]![0];
     expect(queryDespues).not.toBe(queryAntes);
+  });
+
+  describe('fila compacta (mobile, docs/06-ui-ux.md §3)', () => {
+    it('muestra nombre, categoría y precio de cada producto en la lista compacta', () => {
+      configurarAuth();
+      configurarCollection({ datos: productosFalsos });
+
+      renderizar();
+
+      const lista = within(screen.getByRole('list'));
+      expect(lista.getByText('Queso Añejo')).toBeTruthy();
+      expect(lista.getByText('Quesos')).toBeTruthy();
+      expect(lista.getByText('$ 899,00 /kg')).toBeTruthy();
+      expect(lista.getByText('Miel 500g')).toBeTruthy();
+      expect(lista.getByText('$ 450,00 /u')).toBeTruthy();
+    });
+
+    it('admin: tocar la fila compacta abre la edición (mismo handler que "Editar")', () => {
+      configurarAuth();
+      configurarCollection({ datos: productosFalsos });
+
+      renderizar();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Editar Queso Añejo' }));
+
+      expect(screen.getByText('No se puede cambiar después del alta.')).toBeTruthy();
+      const dialog = document.querySelector('dialog') as HTMLDialogElement;
+      expect(dialog.open).toBe(true);
+    });
+
+    it('vendedor: la fila compacta no es un botón (sin permiso de edición)', () => {
+      configurarAuth({ perfil: { ...authPorDefecto().perfil, rol: 'vendedor' } });
+      configurarCollection({ datos: productosFalsos });
+
+      renderizar();
+
+      expect(screen.queryByRole('button', { name: 'Editar Queso Añejo' })).toBeNull();
+      const lista = within(screen.getByRole('list'));
+      expect(lista.getByText('Queso Añejo')).toBeTruthy();
+    });
   });
 });

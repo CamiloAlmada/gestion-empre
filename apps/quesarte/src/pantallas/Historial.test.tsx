@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { FirestoreError } from 'firebase/firestore';
 import { money, type Venta } from '@gestion/core';
 import { ProveedorToasts } from '@gestion/ui';
@@ -227,7 +227,10 @@ describe('Historial - detalle y permisos de anulación', () => {
     fireEvent.click(screen.getByRole('button', { name: /Venta #1001/ }));
 
     expect(screen.getByRole('heading', { name: 'Venta #1001' })).toBeTruthy();
-    expect(screen.getByText('Queso Colonia')).toBeTruthy();
+    // `DetalleVenta` ahora tiene tabla Y lista compacta a la vez (modo
+    // compacto de `DataTable`, docs/06-ui-ux.md §3): se scopea a la tabla
+    // para no ambigüar con la lista.
+    expect(within(screen.getByRole('table')).getByText('Queso Colonia')).toBeTruthy();
   });
 
   it('vendedor: en el detalle no ve el botón Anular venta', () => {

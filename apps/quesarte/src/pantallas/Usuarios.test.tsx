@@ -1,9 +1,20 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { ProveedorTema, ProveedorToasts } from '@gestion/ui';
 import type { Usuario } from '@gestion/core';
 import { Usuarios } from './Usuarios';
+
+// `DataTable` con `filaCompacta` (docs/06-ui-ux.md §3) renderiza SIEMPRE la
+// tabla completa Y la lista compacta a la vez — la visibilidad la decide CSS
+// responsive que jsdom no evalúa (ver DataTable.tsx). Por eso los controles
+// (switch, grupo de rol) y el texto de cada fila aparecen dos veces en el
+// DOM de test; las aserciones/interacciones que necesitan UNA instancia
+// puntual se scopean a la tabla (fuente de verdad de siempre). La lista
+// compacta se testea aparte, explícitamente, más abajo.
+function tabla() {
+  return within(screen.getByRole('table'));
+}
 
 const mocks = vi.hoisted(() => ({
   useAuth: vi.fn(),
@@ -97,12 +108,12 @@ describe('Usuarios', () => {
 
     renderizar();
 
-    expect(screen.getByText('Ana Pérez')).toBeTruthy();
-    expect(screen.getByText('beto@quesarte.com')).toBeTruthy();
-    expect(screen.getByText('carla@quesarte.com')).toBeTruthy();
+    expect(tabla().getByText('Ana Pérez')).toBeTruthy();
+    expect(tabla().getByText('beto@quesarte.com')).toBeTruthy();
+    expect(tabla().getByText('carla@quesarte.com')).toBeTruthy();
     // switches de estado: 2 activos, 1 inactivo.
-    expect(screen.getAllByRole('switch', { name: /Desactivar a/ }).length).toBe(2);
-    expect(screen.getByRole('switch', { name: 'Activar a Carla Ruiz' })).toBeTruthy();
+    expect(tabla().getAllByRole('switch', { name: /Desactivar a/ }).length).toBe(2);
+    expect(tabla().getByRole('switch', { name: 'Activar a Carla Ruiz' })).toBeTruthy();
   });
 
   it('la fila del propio usuario tiene los controles deshabilitados y muestra la nota', () => {
@@ -111,10 +122,10 @@ describe('Usuarios', () => {
 
     renderizar();
 
-    expect(screen.getByText('No podés modificar tu propia cuenta.')).toBeTruthy();
-    const switchPropio = screen.getByRole('switch', { name: 'Desactivar a Ana Pérez' });
+    expect(tabla().getByText('No podés modificar tu propia cuenta.')).toBeTruthy();
+    const switchPropio = tabla().getByRole('switch', { name: 'Desactivar a Ana Pérez' });
     expect(switchPropio.hasAttribute('disabled')).toBe(true);
-    const grupoRolPropio = screen.getByRole('group', { name: 'Rol de Ana Pérez' });
+    const grupoRolPropio = tabla().getByRole('group', { name: 'Rol de Ana Pérez' });
     for (const boton of grupoRolPropio.querySelectorAll('button')) {
       expect(boton.hasAttribute('disabled')).toBe(true);
     }
@@ -126,7 +137,7 @@ describe('Usuarios', () => {
 
     renderizar();
 
-    const switchAjeno = screen.getByRole('switch', { name: 'Desactivar a Beto Gómez' });
+    const switchAjeno = tabla().getByRole('switch', { name: 'Desactivar a Beto Gómez' });
     expect(switchAjeno.hasAttribute('disabled')).toBe(false);
   });
 
@@ -136,7 +147,7 @@ describe('Usuarios', () => {
     mocks.updateDoc.mockResolvedValue(undefined);
 
     renderizar();
-    fireEvent.click(screen.getByRole('switch', { name: 'Desactivar a Beto Gómez' }));
+    fireEvent.click(tabla().getByRole('switch', { name: 'Desactivar a Beto Gómez' }));
 
     await waitFor(() => expect(mocks.updateDoc).toHaveBeenCalledTimes(1));
     const [ref, cambios] = mocks.updateDoc.mock.calls[0] as [{ path?: string }, Record<string, unknown>];
@@ -151,7 +162,7 @@ describe('Usuarios', () => {
     mocks.updateDoc.mockResolvedValue(undefined);
 
     renderizar();
-    const grupoRol = screen.getByRole('group', { name: 'Rol de Beto Gómez' });
+    const grupoRol = tabla().getByRole('group', { name: 'Rol de Beto Gómez' });
     fireEvent.click(
       Array.from(grupoRol.querySelectorAll('button')).find((b) => b.textContent === 'Administrador')!,
     );
@@ -169,7 +180,7 @@ describe('Usuarios', () => {
     mocks.updateDoc.mockResolvedValue(undefined);
 
     renderizar();
-    fireEvent.click(screen.getByRole('switch', { name: 'Desactivar a Beto Gómez' }));
+    fireEvent.click(tabla().getByRole('switch', { name: 'Desactivar a Beto Gómez' }));
 
     expect(mocks.updateDoc).toHaveBeenCalledTimes(1);
     expect(
@@ -368,6 +379,48 @@ describe('Usuarios', () => {
       expect(screen.getByText('Necesitás conexión para invitar usuarios.')).toBeTruthy();
       expect(screen.getByRole('button', { name: 'Invitar' }).hasAttribute('disabled')).toBe(true);
       expect(mocks.invitarUsuario).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('fila compacta (mobile, docs/06-ui-ux.md §3)', () => {
+    function lista() {
+      return within(screen.getByRole('list'));
+    }
+
+    it('muestra nombre y correo de cada usuario, con los mismos controles de rol/estado que la tabla', () => {
+      configurarAuth();
+      configurarCollection({ datos: usuariosFalsos });
+
+      renderizar();
+
+      expect(lista().getByText('Beto Gómez')).toBeTruthy();
+      expect(lista().getByText('beto@quesarte.com')).toBeTruthy();
+      expect(lista().getByRole('switch', { name: 'Desactivar a Beto Gómez' })).toBeTruthy();
+      expect(lista().getByRole('group', { name: 'Rol de Beto Gómez' })).toBeTruthy();
+    });
+
+    it('togglear el switch de la fila compacta llama a updateDoc igual que en la tabla', async () => {
+      configurarAuth();
+      configurarCollection({ datos: usuariosFalsos });
+      mocks.updateDoc.mockResolvedValue(undefined);
+
+      renderizar();
+      fireEvent.click(lista().getByRole('switch', { name: 'Desactivar a Beto Gómez' }));
+
+      await waitFor(() => expect(mocks.updateDoc).toHaveBeenCalledTimes(1));
+      const [ref, cambios] = mocks.updateDoc.mock.calls[0] as [{ path?: string }, Record<string, unknown>];
+      expect(ref.path).toBe('usuarios/u2');
+      expect(cambios).toEqual({ activo: false });
+    });
+
+    it('la fila compacta del propio usuario también tiene los controles deshabilitados', () => {
+      configurarAuth();
+      configurarCollection({ datos: usuariosFalsos });
+
+      renderizar();
+
+      const switchPropio = lista().getByRole('switch', { name: 'Desactivar a Ana Pérez' });
+      expect(switchPropio.hasAttribute('disabled')).toBe(true);
     });
   });
 });

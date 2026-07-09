@@ -81,6 +81,27 @@ export function DetalleVenta({ venta, esAdmin, db, onVolver, onAnular }: Detalle
     },
   ];
 
+  // Con 4 columnas (nombre + 3 numéricas) y nombres de producto reales que no
+  // son cortos ("Queso Colonia", "Salame tandilero"...), esta tabla desborda
+  // en 360px — modo compacto obligatorio (docs/06-ui-ux.md §3). Fila
+  // estática (los ítems de una venta ya cerrada no se editan).
+  function filaCompactaItem(f: FilaItem) {
+    return (
+      <div className="flex min-h-[56px] flex-col gap-1 p-4">
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="font-medium text-texto">{f.item.nombreProducto}</span>
+          <span className="tabular-nums font-semibold text-texto">
+            {formatearMoney(f.item.subtotalCents)}
+          </span>
+        </div>
+        <div className="flex items-center justify-between gap-2 text-sm text-texto-secundario">
+          <span className="tabular-nums">{textoCantidadItem(f.item)}</span>
+          <span className="tabular-nums">{textoPrecioUnitario(f.item)}</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <button
@@ -108,6 +129,7 @@ export function DetalleVenta({ venta, esAdmin, db, onVolver, onAnular }: Detalle
         filas={filasItems}
         claveFila={(f) => f.clave}
         etiqueta={`Ítems de la venta #${venta.numero}`}
+        filaCompacta={filaCompactaItem}
         vacio="Esta venta no tiene ítems."
       />
 

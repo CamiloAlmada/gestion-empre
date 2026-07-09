@@ -52,6 +52,11 @@ tech lead; no se ignora en silencio.
 - Sombras suaves y bordes sutiles (`--color-borde`); elevación con moderación.
 - **Movimiento**: transiciones 150-200ms ease-out; nada que bloquee al usuario;
   `prefers-reduced-motion: reduce` desactiva animaciones no esenciales.
+- **Tablas en mobile: sin scroll horizontal.** Una tabla de gestión que no entra
+  a lo ancho en pantalla angosta se compacta a lista apilada (dato principal +
+  secundarios chicos debajo, valor numérico a la derecha), vía el modo compacto
+  de `DataTable` (`filaCompacta`). El scroll horizontal queda solo como fallback
+  de tablas sin modo compacto definido.
 
 ## 4. Sistema de temas
 

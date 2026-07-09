@@ -45,6 +45,22 @@ function etiquetaModo(producto: Producto): string {
   return `${ETIQUETAS_MODO_PRECIO[producto.modoPrecio]} · ${ETIQUETAS_MODO_STOCK[producto.modoStock]}`;
 }
 
+function textoPrecio(producto: Producto): string {
+  return `${formatearMoney(producto.precioVentaCents)}${producto.modoPrecio === 'por_kg' ? ' /kg' : ' /u'}`;
+}
+
+/** Punto de color + texto ("Activo"/"Inactivo"): nada se comunica solo por
+ * color (docs/06-ui-ux.md §5). Compartido entre la columna "Estado" de la
+ * tabla y la fila compacta. */
+function IndicadorEstado({ activo }: { activo: boolean }) {
+  return (
+    <span className="flex items-center gap-2 text-sm text-texto">
+      <span aria-hidden="true" className={`h-2 w-2 rounded-full ${activo ? 'bg-exito' : 'bg-texto-secundario'}`} />
+      {activo ? 'Activo' : 'Inactivo'}
+    </span>
+  );
+}
+
 /**
  * Crea un producto nuevo. Campos fijados por regla de negocio
  * (docs/02-dominio-quesarte.md): costo promedio en cero (todavía no hay
@@ -228,20 +244,12 @@ export function Productos() {
       clave: 'precio',
       titulo: 'Precio',
       alinear: 'derecha',
-      render: (p) => `${formatearMoney(p.precioVentaCents)}${p.modoPrecio === 'por_kg' ? ' /kg' : ' /u'}`,
+      render: textoPrecio,
     },
     {
       clave: 'estado',
       titulo: 'Estado',
-      render: (p) => (
-        <span className="flex items-center gap-2 text-sm text-texto">
-          <span
-            aria-hidden="true"
-            className={`h-2 w-2 rounded-full ${p.activo ? 'bg-exito' : 'bg-texto-secundario'}`}
-          />
-          {p.activo ? 'Activo' : 'Inactivo'}
-        </span>
-      ),
+      render: (p) => <IndicadorEstado activo={p.activo} />,
     },
   ];
   if (esAdmin) {
@@ -255,6 +263,47 @@ export function Productos() {
         </Button>
       ),
     });
+  }
+
+  /**
+   * Fila compacta para mobile (`< md`, docs/06-ui-ux.md §3): nombre + precio
+   * arriba, categoría + estado en el medio, modo abajo. Para `esAdmin`, toda
+   * la fila es tappable y dispara el mismo handler que "Editar" en desktop
+   * (`abrirEdicion`); para `vendedor` (sin permiso de edición, igual que en
+   * la tabla) es una fila estática.
+   */
+  function filaCompactaProducto(p: Producto) {
+    const contenido = (
+      <div className="flex flex-1 flex-col gap-1">
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="font-medium text-texto">{p.nombre}</span>
+          <span className="tabular-nums font-semibold text-texto">{textoPrecio(p)}</span>
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-sm text-texto-secundario">{p.categoria}</span>
+          <IndicadorEstado activo={p.activo} />
+        </div>
+        <p className="text-sm text-texto-secundario">{etiquetaModo(p)}</p>
+      </div>
+    );
+
+    if (!esAdmin) {
+      return <div className="flex min-h-[56px] flex-col justify-center gap-1 p-4">{contenido}</div>;
+    }
+
+    return (
+      <button
+        type="button"
+        onClick={() => abrirEdicion(p)}
+        aria-label={`Editar ${p.nombre}`}
+        className="flex min-h-[56px] w-full items-center gap-2 p-4 text-left transition-colors hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
+      >
+        {contenido}
+        <span aria-hidden="true" className="text-texto-secundario">
+          ›
+        </span>
+      </button>
+    );
   }
 
   return (
@@ -311,6 +360,7 @@ export function Productos() {
           filas={productosFiltrados}
           claveFila={(p) => p.id}
           etiqueta="Productos"
+          filaCompacta={filaCompactaProducto}
           vacio={
             productos.length === 0 ? (
               <div className="flex flex-col items-center gap-3">

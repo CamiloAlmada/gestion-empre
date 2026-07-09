@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import type { FirestoreError } from 'firebase/firestore';
 import { money, peso, type Categoria, type Pieza, type Producto } from '@gestion/core';
@@ -342,9 +342,43 @@ describe('Stock - ajuste por pieza desde el detalle', () => {
 
     renderizar();
     fireEvent.click(screen.getByRole('button', { name: /Queso Colonia/ }));
-    fireEvent.click(screen.getByRole('button', { name: /Ajustar pieza/ }));
+    // `DetalleProducto` ahora tiene tabla Y lista compacta a la vez (modo
+    // compacto de `DataTable`, docs/06-ui-ux.md §3): ambas tienen un botón
+    // "Ajustar pieza…" con el mismo aria-label, así que se scopea a la
+    // tabla (fuente de verdad de siempre) para no ambigüar.
+    fireEvent.click(within(screen.getByRole('table')).getByRole('button', { name: /Ajustar pieza/ }));
 
     expect(screen.getByText('Ajuste / merma · Queso Colonia')).toBeTruthy();
     await waitFor(() => expect(screen.getByText('Disponible: 1,5 kg')).toBeTruthy());
+  });
+
+  it('admin: la fila compacta de una pieza (mobile) también abre el modal de ajuste, con el mismo handler', async () => {
+    configurarAuth('admin');
+    const prod = producto({ id: 'p1', nombre: 'Queso Colonia', modoStock: 'fraccionado_por_pieza' });
+    configurarCollections({
+      productos: estadoOk([prod]),
+      piezas: estadoOk([pieza({ id: 'a', productoId: 'p1', pesoRestanteGramos: peso(1500) })]),
+    });
+
+    renderizar();
+    fireEvent.click(screen.getByRole('button', { name: /Queso Colonia/ }));
+    fireEvent.click(within(screen.getByRole('list')).getByRole('button', { name: /Ajustar pieza/ }));
+
+    expect(screen.getByText('Ajuste / merma · Queso Colonia')).toBeTruthy();
+    await waitFor(() => expect(screen.getByText('Disponible: 1,5 kg')).toBeTruthy());
+  });
+
+  it('vendedor: la fila compacta de una pieza NO es un botón (sin permiso de ajuste)', () => {
+    configurarAuth('vendedor');
+    const prod = producto({ id: 'p1', nombre: 'Queso Colonia', modoStock: 'fraccionado_por_pieza' });
+    configurarCollections({
+      productos: estadoOk([prod]),
+      piezas: estadoOk([pieza({ id: 'a', productoId: 'p1', pesoRestanteGramos: peso(1500) })]),
+    });
+
+    renderizar();
+    fireEvent.click(screen.getByRole('button', { name: /Queso Colonia/ }));
+
+    expect(within(screen.getByRole('list')).queryByRole('button', { name: /Ajustar pieza/ })).toBeNull();
   });
 });

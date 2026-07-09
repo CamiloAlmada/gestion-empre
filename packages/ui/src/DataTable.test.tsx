@@ -79,4 +79,50 @@ describe('DataTable', () => {
     expect(screen.getByRole('table', { name: 'Stock de quesos' })).toBeInTheDocument();
     expect(screen.queryByRole('table', { name: 'Tabla de datos' })).not.toBeInTheDocument();
   });
+
+  describe('modo compacto (`filaCompacta`)', () => {
+    it('sin `filaCompacta` no se renderiza ninguna lista (comportamiento actual intacto)', () => {
+      render(<DataTable columnas={columnas} filas={filas} claveFila={(f) => f.id} />);
+      expect(screen.queryByRole('list')).not.toBeInTheDocument();
+      expect(screen.getByRole('table')).toBeInTheDocument();
+    });
+
+    it('con `filaCompacta` existen ambos renders: la tabla completa y la lista apilada', () => {
+      render(
+        <DataTable
+          columnas={columnas}
+          filas={filas}
+          claveFila={(f) => f.id}
+          filaCompacta={(f) => <span>Compacta: {f.nombre}</span>}
+        />,
+      );
+
+      // La tabla sigue ahí (con sus columnas y filas de siempre) — la CSS
+      // que la oculta en mobile no se evalúa en jsdom, ver docs/06 §3.
+      expect(screen.getByRole('table')).toBeInTheDocument();
+      expect(screen.getByRole('columnheader', { name: 'Nombre' })).toBeInTheDocument();
+
+      // La lista compacta también, con un <li> por fila y el contenido de
+      // `filaCompacta`.
+      const lista = screen.getByRole('list');
+      expect(lista.querySelectorAll('li')).toHaveLength(2);
+      expect(screen.getByText('Compacta: Queso Colonia')).toBeInTheDocument();
+      expect(screen.getByText('Compacta: Dulce de leche')).toBeInTheDocument();
+    });
+
+    it('estado vacío es igual con o sin `filaCompacta` (no hay lista ni tabla)', () => {
+      render(
+        <DataTable
+          columnas={columnas}
+          filas={[]}
+          claveFila={(f) => f.id}
+          filaCompacta={(f) => f.nombre}
+          vacio="Nada por acá."
+        />,
+      );
+      expect(screen.getByText('Nada por acá.')).toBeInTheDocument();
+      expect(screen.queryByRole('table')).not.toBeInTheDocument();
+      expect(screen.queryByRole('list')).not.toBeInTheDocument();
+    });
+  });
 });

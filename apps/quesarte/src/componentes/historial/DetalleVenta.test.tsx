@@ -1,7 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { money, peso, type Usuario, type Venta } from '@gestion/core';
 import { DetalleVenta } from './DetalleVenta';
+
+// `DataTable` con `filaCompacta` (docs/06-ui-ux.md §3) renderiza SIEMPRE la
+// tabla completa Y la lista compacta a la vez (visibilidad por CSS, no
+// evaluado en jsdom). Las aserciones de contenido se scopean a la tabla; la
+// lista compacta se testea aparte, más abajo.
+function tabla() {
+  return within(screen.getByRole('table'));
+}
 
 const mocks = vi.hoisted(() => ({ useDoc: vi.fn() }));
 
@@ -86,10 +94,10 @@ describe('DetalleVenta - cabecera e ítems', () => {
     expect(screen.getByRole('heading', { name: 'Venta #1001' })).toBeTruthy();
     expect(screen.getByText('05/01/2026 14:30')).toBeTruthy();
     expect(screen.getByText('Medio de pago: Débito')).toBeTruthy();
-    expect(screen.getByText('Queso Colonia')).toBeTruthy();
-    expect(screen.getByText('500 g')).toBeTruthy();
-    expect(screen.getByText('Miel 500g')).toBeTruthy();
-    expect(screen.getByText('2 unidades')).toBeTruthy();
+    expect(tabla().getByText('Queso Colonia')).toBeTruthy();
+    expect(tabla().getByText('500 g')).toBeTruthy();
+    expect(tabla().getByText('Miel 500g')).toBeTruthy();
+    expect(tabla().getByText('2 unidades')).toBeTruthy();
     expect(screen.getByText('Total: $ 800,00')).toBeTruthy();
   });
 
@@ -220,5 +228,29 @@ describe('DetalleVenta - botón Anular (permisos)', () => {
 
     expect(screen.queryByRole('button', { name: 'Anular venta' })).toBeNull();
     expect(screen.getByText('Anulada')).toBeTruthy();
+  });
+});
+
+describe('DetalleVenta - fila compacta (mobile, docs/06-ui-ux.md §3)', () => {
+  it('muestra nombre, cantidad, precio unitario y subtotal de cada ítem en la lista compacta', () => {
+    mocks.useDoc.mockReturnValue({ datos: null, cargando: false, error: null });
+
+    render(
+      <DetalleVenta
+        venta={venta()}
+        esAdmin={false}
+        db={{} as never}
+        onVolver={() => {}}
+        onAnular={() => {}}
+      />,
+    );
+
+    const lista = within(screen.getByRole('list'));
+    expect(lista.getByText('Queso Colonia')).toBeTruthy();
+    expect(lista.getByText('500 g')).toBeTruthy();
+    expect(lista.getByText('$ 1.000,00 /kg')).toBeTruthy();
+    expect(lista.getByText('$ 500,00')).toBeTruthy();
+    expect(lista.getByText('Miel 500g')).toBeTruthy();
+    expect(lista.getByText('2 unidades')).toBeTruthy();
   });
 });
