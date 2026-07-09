@@ -133,6 +133,11 @@ Notas arrastradas del cierre de Fase 1 (reviews):
   (solo piezas tienen monotonía). Revisar al definir el flujo de compras.
 - **Emulador de Auth**: no está configurado; si se quiere test de integración
   del flujo de invitación, agregarlo a `firebase.json` y al script de tests.
+- **Granel sin reserva cruzada en el carrito** (detectado en POS-3, preexistente):
+  dos ítems `granel` del mismo producto validan cada uno contra el stock de
+  catálogo sin descontar lo que el otro ya reservó — se puede sobrevender
+  localmente hasta que `registrarVenta` lo rechace al cobrar. Candidato a
+  `granelAjustadoPorCarrito` espejo de `piezasAjustadasPorCarrito`.
 - **Categorías (review post-Fase 1, deuda consciente)**: (1) el seed de
   categorías trimea nombres pero la agrupación/renombre comparan sin trim — un
   producto legacy con espacios en `categoria` cae en "Sin categoría" hasta
