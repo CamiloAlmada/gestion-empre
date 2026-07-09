@@ -25,6 +25,7 @@ export type {
   EstadoVenta,
   TipoMovimiento,
   Rol,
+  Categoria,
   Producto,
   Pieza,
   ItemVenta,

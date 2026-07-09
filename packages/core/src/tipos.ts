@@ -41,6 +41,23 @@ export type Rol = 'admin' | 'vendedor';
 // ── Entidades ───────────────────────────────────────────────────────────────
 
 /**
+ * Vocabulario controlado para agrupar productos (Quesos, Embutidos, Miel…). La
+ * define el admin (crear, renombrar, reordenar) y **no se borra** (evita productos
+ * huérfanos: una categoría en desuso simplemente no se elige más).
+ *
+ * El producto guarda el **nombre** de la categoría, no su `id` (denormalizado):
+ * renombrar una categoría actualiza su doc y todos sus productos en un batch
+ * atómico (ver `renombrarCategoria` en `firebase-kit`). `orden` (entero ≥ 0)
+ * controla cómo se agrupan las listas de Stock.
+ */
+export interface Categoria {
+  id: string;
+  nombre: string;
+  /** Posición en las listas agrupadas de Stock. Entero ≥ 0. */
+  orden: number;
+}
+
+/**
  * Catálogo. Combina dos dimensiones independientes: `modoPrecio` (cómo se cobra) y
  * `modoStock` (cómo se controla la existencia).
  */

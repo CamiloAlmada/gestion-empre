@@ -89,6 +89,40 @@ export class IngresoInvalidoError extends ErrorEscrituraPOS {
 }
 
 /**
+ * Errores de la gestión del vocabulario de categorías (`categorias.ts`).
+ *
+ * Mismo patrón que las otras familias: una raíz abstracta para el `catch` genérico
+ * en la pantalla que administra categorías y clases concretas para discriminar el
+ * mensaje. No comparten jerarquía con los del POS ni con las invitaciones: son
+ * operaciones de catálogo (solo admin), no escrituras del mostrador.
+ */
+export abstract class ErrorCategoria extends Error {}
+
+/**
+ * El nombre de la categoría es inválido por una razón que no es duplicación:
+ * vacío tras `trim()`, o (en un renombre) la categoría a renombrar no existe.
+ * Validación previa local, fail fast antes de tocar Firestore.
+ */
+export class CategoriaInvalidaError extends ErrorCategoria {
+  constructor(message: string) {
+    super(message);
+    this.name = 'CategoriaInvalidaError';
+  }
+}
+
+/**
+ * Ya existe una categoría con ese nombre (comparación case-insensitive). El
+ * vocabulario no admite duplicados: dos "Quesos" harían ambiguo el nombre
+ * denormalizado que guardan los productos.
+ */
+export class CategoriaDuplicadaError extends ErrorCategoria {
+  constructor(message: string) {
+    super(message);
+    this.name = 'CategoriaDuplicadaError';
+  }
+}
+
+/**
  * Errores del alta de usuarios por invitación (`invitaciones.ts`).
  *
  * Mismo patrón que `ErrorEscrituraPOS`: una raíz abstracta para el `catch`

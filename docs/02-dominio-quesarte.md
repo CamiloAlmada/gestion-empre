@@ -62,6 +62,17 @@ ser: buscar producto → ingresar peso (o cantidad) → agregar al ticket. Rápi
   con su peso para que el vendedor confirme cuál se lleva el cliente (acá sí suele
   importar cuál, porque el cliente elige "ese salame").
 
+### Categoría
+
+Vocabulario controlado para agrupar productos (Quesos, Embutidos, Miel, Frutos
+secos, Especias…). Las define el admin (crear, renombrar, reordenar); **no se
+borran** (evita productos huérfanos — una categoría en desuso simplemente no se
+elige más). El producto guarda el **nombre** de la categoría (denormalizado, no
+el id): renombrar una categoría actualiza su doc y todos sus productos en un
+**batch atómico**. `orden` (entero) controla cómo se agrupan las listas (Stock).
+Un producto cuya categoría no coincida con ninguna definida se muestra al final
+bajo "Sin categoría". La grilla del POS no agrupa (velocidad primero).
+
 ### Movimiento de stock
 
 Todo cambio de stock genera un movimiento inmutable (auditoría). Tipos:
@@ -93,6 +104,7 @@ movimientos debe hacerse en una transacción o batch de Firestore.
 
 ```
 usuarios/{uid}             → { nombre, email, rol: 'admin'|'vendedor', activo }
+categorias/{id}            → { nombre, orden }   // vocabulario; producto referencia por nombre
 productos/{id}             → { nombre, categoria, modoPrecio, modoStock,
                                precioVentaCents (por kg o por unidad según modoPrecio),
                                costoPromedioCents, margenObjetivoPct?,
@@ -126,6 +138,8 @@ Notas:
   con `activo == true`.
 - `rol == 'vendedor'`: puede crear ventas y leer productos/piezas. No puede editar
   precios, compras ni ajustes.
+- `categorias`: lectura para todo usuario activo; create/update solo admin; sin
+  delete (regla dura, ver "Categoría").
 - `rol == 'admin'`: todo.
 - `movimientos` y `ventas`: prohibido update/delete (solo create; anulación vía
   campo estado con regla que valida transición).

@@ -10,6 +10,7 @@ export { piezaConverter } from './converters/pieza';
 export { ventaConverter } from './converters/venta';
 export { movimientoConverter } from './converters/movimiento';
 export { configuracionConverter } from './converters/configuracion';
+export { categoriaConverter } from './converters/categoria';
 
 export {
   registrarVenta,
@@ -27,6 +28,11 @@ export {
 } from './stock';
 export { invitarUsuario, type EntradaInvitacion } from './invitaciones';
 export {
+  crearCategoria,
+  renombrarCategoria,
+  intercambiarOrdenCategorias,
+} from './categorias';
+export {
   ErrorEscrituraPOS,
   StockInsuficienteError,
   VentaVaciaError,
@@ -35,6 +41,9 @@ export {
   AnulacionInvalidaError,
   AjusteInvalidoError,
   IngresoInvalidoError,
+  ErrorCategoria,
+  CategoriaInvalidaError,
+  CategoriaDuplicadaError,
   ErrorInvitacion,
   EmailInvalidoError,
   DatosInvitacionInvalidosError,

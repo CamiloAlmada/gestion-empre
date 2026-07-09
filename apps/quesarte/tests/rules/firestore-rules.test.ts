@@ -119,6 +119,7 @@ beforeEach(async () => {
       rol: 'vendedor',
       activo: false,
     });
+    await setDoc(doc(seed, 'categorias', 'cat-quesos'), { nombre: 'Quesos', orden: 0 });
     await setDoc(doc(seed, 'productos', 'prod-nuez'), {
       nombre: 'Nuez mariposa',
       categoria: 'frutos_secos',
@@ -241,6 +242,80 @@ describe('usuarios', () => {
         activo: true,
       }),
     );
+  });
+});
+
+describe('categorias', () => {
+  it('vendedor lee categorías', async () => {
+    await assertSucceeds(getDoc(doc(db(VENDEDOR), 'categorias', 'cat-quesos')));
+  });
+
+  it('vendedor NO crea categorías', async () => {
+    await assertFails(
+      setDoc(doc(db(VENDEDOR), 'categorias', 'cat-x'), { nombre: 'Miel', orden: 1 }),
+    );
+  });
+
+  it('vendedor NO edita categorías', async () => {
+    await assertFails(
+      updateDoc(doc(db(VENDEDOR), 'categorias', 'cat-quesos'), { nombre: 'Otros' }),
+    );
+  });
+
+  it('admin crea categoría con shape válido', async () => {
+    await assertSucceeds(
+      setDoc(doc(db(ADMIN), 'categorias', 'cat-miel'), { nombre: 'Miel', orden: 1 }),
+    );
+  });
+
+  it('admin renombra (update solo nombre)', async () => {
+    await assertSucceeds(
+      updateDoc(doc(db(ADMIN), 'categorias', 'cat-quesos'), { nombre: 'Quesos artesanales' }),
+    );
+  });
+
+  it('admin reordena (update solo orden)', async () => {
+    await assertSucceeds(
+      updateDoc(doc(db(ADMIN), 'categorias', 'cat-quesos'), { orden: 5 }),
+    );
+  });
+
+  it('nadie borra categorías (ni el admin)', async () => {
+    await assertFails(deleteDoc(doc(db(ADMIN), 'categorias', 'cat-quesos')));
+  });
+
+  it('admin NO crea con nombre vacío', async () => {
+    await assertFails(
+      setDoc(doc(db(ADMIN), 'categorias', 'cat-x'), { nombre: '', orden: 1 }),
+    );
+  });
+
+  it('admin NO crea con orden negativo', async () => {
+    await assertFails(
+      setDoc(doc(db(ADMIN), 'categorias', 'cat-x'), { nombre: 'Miel', orden: -1 }),
+    );
+  });
+
+  it('admin NO crea con orden float', async () => {
+    await assertFails(
+      setDoc(doc(db(ADMIN), 'categorias', 'cat-x'), { nombre: 'Miel', orden: 1.5 }),
+    );
+  });
+
+  it('admin NO crea con clave extra', async () => {
+    await assertFails(
+      setDoc(doc(db(ADMIN), 'categorias', 'cat-x'), { nombre: 'Miel', orden: 1, color: 'rojo' }),
+    );
+  });
+
+  it('admin NO agrega una clave extra en un update', async () => {
+    await assertFails(
+      updateDoc(doc(db(ADMIN), 'categorias', 'cat-quesos'), { color: 'rojo' }),
+    );
+  });
+
+  it('admin NO deja el nombre vacío en un update', async () => {
+    await assertFails(updateDoc(doc(db(ADMIN), 'categorias', 'cat-quesos'), { nombre: '' }));
   });
 });
 
