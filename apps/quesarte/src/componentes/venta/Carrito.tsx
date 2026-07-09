@@ -232,33 +232,60 @@ export function Carrito({
     if (inicioArrastreRef.current === null) return;
     const delta = Math.max(0, evento.clientY - inicioArrastreRef.current);
     inicioArrastreRef.current = null;
+    // Capturado ANTES de resetear `arrastreY`: dice si hubo encogimiento
+    // visual real que revertir (ver el `else` de abajo).
+    const huboEncogimientoVisual = arrastreY > 0;
     setArrastreY(0);
     if (delta > UMBRAL_CIERRE_ARRASTRE_PX) {
       // Se cierra la hoja entera: el `<ul>` se desmonta con ella, no hace
       // falta animar la lista de vuelta.
       setExpandidoMobile(false);
       setFaseArrastreLista('ninguna');
-    } else {
-      // Bajo el umbral: la lista vuelve a su altura con transición corta
-      // (docs/06-ui-ux.md §6). El estilo inline recién se limpia cuando esa
-      // transición termina, ver `alTerminarTransicionLista`.
+    } else if (huboEncogimientoVisual) {
+      // Bajo el umbral, con encogimiento visual real que revertir: la lista
+      // vuelve a su altura con transición corta (docs/06-ui-ux.md §6). El
+      // estilo inline recién se limpia cuando esa transición termina, ver
+      // `alTerminarTransicionLista`.
       setFaseArrastreLista('volviendo');
+    } else {
+      // `arrastreY === 0` sin haber cerrado: no hay nada que animar de
+      // vuelta, así que se salta directo a `ninguna` en vez de `volviendo`.
+      // Esto NO es un caso degenerado: lo produce (a) un tap seco en el
+      // agarre — pointerdown+pointerup sin mover el dedo, gesto normal de
+      // quien espera que la barrita solo haga toggle — y (b) un arrastre
+      // hacia ARRIBA, que `alMoverPuntero` clampea a 0. En ambos casos
+      // `height` no cambia de valor, por lo que el navegador NUNCA dispara
+      // `transitionend` sobre ese estilo — si entrara a `volviendo` acá, el
+      // estilo inline (con `overflow: hidden`) quedaría pegado para
+      // siempre: la lista perdería el scroll y quedaría clavada en la
+      // altura medida al iniciar el arrastre ante futuros cambios de
+      // contenido, hasta el próximo drag real. En reduced-motion también
+      // cae siempre acá (`arrastreY` nunca se actualiza), consistente con
+      // "sin estilo inline en la lista".
+      setFaseArrastreLista('ninguna');
     }
   }
 
   function cancelarArrastre() {
     inicioArrastreRef.current = null;
+    // Mismo criterio que en `soltarArrastre`: sin encogimiento visual real
+    // que revertir, no hay nada que animar de vuelta.
+    const huboEncogimientoVisual = arrastreY > 0;
     setArrastreY(0);
-    setFaseArrastreLista('volviendo');
+    setFaseArrastreLista(huboEncogimientoVisual ? 'volviendo' : 'ninguna');
   }
 
   // Limpia el estilo inline de altura al terminar la transición de "vuelta"
   // para que vuelva a regir el `max-h-[40vh]` + `overflow-y-auto` de reposo
   // (docs/06-ui-ux.md §6) — así la lista responde a cambios posteriores de
   // contenido (agregar/quitar ítems) en vez de quedar clavada en la altura
-  // medida al iniciar el arrastre. Se filtra por `propertyName` porque
-  // `onTransitionEnd` burbujea cualquier transición del elemento.
+  // medida al iniciar el arrastre. Doble filtro porque `onTransitionEnd`
+  // burbujea: `propertyName` (solo nos importa la transición de `height`) y
+  // `target === currentTarget` (que la transición sea del propio `<ul>`, no
+  // de un descendiente — hoy no hay ninguno con transición, pero evita que
+  // el día de mañana uno limpie la fase a mitad de gesto).
   function alTerminarTransicionLista(evento: ReactTransitionEvent<HTMLUListElement>) {
+    if (evento.target !== evento.currentTarget) return;
     if (evento.propertyName !== 'height') return;
     setFaseArrastreLista('ninguna');
   }

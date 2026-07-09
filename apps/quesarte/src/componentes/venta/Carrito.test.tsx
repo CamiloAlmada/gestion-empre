@@ -395,18 +395,79 @@ describe('Carrito', () => {
       expect(lista.style.transition).toBe('none');
     });
 
-    it('arrastre hacia arriba se ignora (clamp a 0): no colapsa', () => {
+    it('arrastre real bajo el umbral: al soltar pasa por "volviendo" (con transición) antes de limpiarse', () => {
       instalarMatchMediaFalso(false);
       renderCarrito({ items: [itemUnico()] });
       fireEvent.click(screen.getByRole('button', { name: /1 ítem/ }));
 
+      const hoja = screen.getByTestId('hoja-carrito-mobil');
       const agarre = screen.getByTestId('agarre-carrito');
+      const lista = hoja.querySelector('ul');
+      if (!lista) throw new Error('no se encontró el <ul> de ítems dentro de la hoja mobile');
+
+      fireEvent.pointerDown(agarre, { pointerId: 1, clientY: 0 });
+      fireEvent.pointerMove(agarre, { pointerId: 1, clientY: 40 });
+      fireEvent.pointerUp(agarre, { pointerId: 1, clientY: 40 });
+
+      // Hubo encogimiento real (arrastreY llegó a valer 40 > 0): entra a
+      // "volviendo", CON transición activa, antes de que dispare
+      // `transitionend` (docs/06-ui-ux.md §6).
+      expect(lista.style.height).toBe('0px');
+      expect(lista.style.overflow).toBe('hidden');
+      expect(lista.style.transition).toBe('height 180ms ease-out');
+
+      // Al terminar la transición (simulada acá; jsdom no la corre de
+      // verdad) recién ahí se limpia el estilo inline.
+      fireEvent.transitionEnd(lista, { propertyName: 'height' });
+      expect(lista.style.height).toBe('');
+    });
+
+    it('tap seco en el agarre (pointerdown+pointerup sin mover el dedo): el <ul> no queda con estilo inline pegado', () => {
+      instalarMatchMediaFalso(false);
+      renderCarrito({ items: [itemUnico()] });
+      fireEvent.click(screen.getByRole('button', { name: /1 ítem/ }));
+
+      const hoja = screen.getByTestId('hoja-carrito-mobil');
+      const agarre = screen.getByTestId('agarre-carrito');
+      const lista = hoja.querySelector('ul');
+      if (!lista) throw new Error('no se encontró el <ul> de ítems dentro de la hoja mobile');
+
+      fireEvent.pointerDown(agarre, { pointerId: 1, clientY: 0 });
+      fireEvent.pointerUp(agarre, { pointerId: 1, clientY: 0 });
+
+      // Sin `pointermove` no hubo encogimiento visual que revertir: pasa
+      // directo a "ninguna" en vez de quedar en "volviendo" esperando un
+      // `transitionend` que nunca va a llegar (la altura no cambió de
+      // valor). Si quedara en "volviendo", el `overflow: hidden` pegado le
+      // rompería el scroll a la lista hasta el próximo drag real.
+      expect(lista.style.height).toBe('');
+      expect(lista.style.overflow).toBe('');
+
+      const resumen = screen.getByRole('button', { name: /1 ítem/ });
+      expect(resumen.getAttribute('aria-expanded')).toBe('true');
+    });
+
+    it('arrastre hacia arriba se ignora (clamp a 0): no colapsa ni deja estilo inline pegado en la lista', () => {
+      instalarMatchMediaFalso(false);
+      renderCarrito({ items: [itemUnico()] });
+      fireEvent.click(screen.getByRole('button', { name: /1 ítem/ }));
+
+      const hoja = screen.getByTestId('hoja-carrito-mobil');
+      const agarre = screen.getByTestId('agarre-carrito');
+      const lista = hoja.querySelector('ul');
+      if (!lista) throw new Error('no se encontró el <ul> de ítems dentro de la hoja mobile');
+
       fireEvent.pointerDown(agarre, { pointerId: 1, clientY: 100 });
       fireEvent.pointerMove(agarre, { pointerId: 1, clientY: 0 });
       fireEvent.pointerUp(agarre, { pointerId: 1, clientY: 0 });
 
       const resumen = screen.getByRole('button', { name: /1 ítem/ });
       expect(resumen.getAttribute('aria-expanded')).toBe('true');
+
+      // `alMoverPuntero` clampea el delta hacia arriba a 0: mismo caso que
+      // el tap seco, sin `height` real que animar de vuelta.
+      expect(lista.style.height).toBe('');
+      expect(lista.style.overflow).toBe('');
     });
 
     it('prefers-reduced-motion: sin estilo inline en la lista durante el arrastre, pero el cierre por umbral igual funciona', () => {
