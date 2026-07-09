@@ -4,25 +4,62 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/icons/icon-source.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#976b19" />
+    <!-- Fallback estático para cuando JS está deshabilitado (el script de
+         abajo lo sobreescribe en el caso normal): color de --fondo del
+         estado por defecto (Minimalista, light). Mismo valor que
+         MAPA_THEME_COLOR.minimalista.light en
+         apps/quesarte/src/componentes/MetaThemeColor.tsx. -->
+    <meta name="theme-color" content="#f6f3ef" />
     <title>Quesarte</title>
     <script>
-      // Anti-FOUC (docs/06-ui-ux.md §4): aplica el tema guardado ANTES de que
-      // cargue el bundle, para no parpadear con el tema del SO cuando el
-      // usuario eligió explícitamente "light" u "oscuro". Duplica la lectura
-      // que hace ProveedorTema al montar (packages/ui/src/ProveedorTema.tsx),
-      // a propósito: ese componente no puede correr a tiempo para evitar el
-      // primer paint. En modo "system" (o sin nada guardado) no se fija nada
-      // acá: rige `prefers-color-scheme` vía CSS, sin necesidad de JS.
+      // Anti-FOUC (docs/06-ui-ux.md §4): aplica tema + estilo guardados, y el
+      // theme-color inicial que les corresponde, ANTES de que cargue el
+      // bundle, para no parpadear con el tema del SO ni con un theme-color
+      // desactualizado. Duplica la lectura que hacen ProveedorTema al montar
+      // (packages/ui/src/ProveedorTema.tsx) y MetaThemeColor al montar
+      // (apps/quesarte/src/componentes/MetaThemeColor.tsx), a propósito: esos
+      // componentes no pueden correr a tiempo para evitar el primer paint. En
+      // modo "system"/sin nada guardado no se fija data-theme (rige
+      // `prefers-color-scheme` vía CSS); en estilo "minimalista"/sin nada
+      // guardado tampoco se fija data-estilo.
       try {
         var temaGuardado = window.localStorage.getItem('tema');
         if (temaGuardado === 'light' || temaGuardado === 'dark') {
           document.documentElement.setAttribute('data-theme', temaGuardado);
         }
+
+        var estiloGuardado = window.localStorage.getItem('estilo');
+        if (estiloGuardado === 'calido') {
+          document.documentElement.setAttribute('data-estilo', 'calido');
+        }
+
+        // Mismo mapa que MAPA_THEME_COLOR en
+        // apps/quesarte/src/componentes/MetaThemeColor.tsx, duplicado a
+        // propósito (ver comentario de ahí sobre cómo se calcularon los
+        // valores de "minimalista"; los de "calido" son PROVISORIOS,
+        // TODO(paleta-calido)).
+        var MAPA_THEME_COLOR = {
+          minimalista: { light: '#f6f3ef', dark: '#040302' },
+          calido: { light: '#f6ecdc', dark: '#241a12' },
+        };
+        var estiloEfectivo = estiloGuardado === 'calido' ? 'calido' : 'minimalista';
+        var prefiereOscuro = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var modoEfectivo =
+          temaGuardado === 'light' || temaGuardado === 'dark'
+            ? temaGuardado
+            : prefiereOscuro
+              ? 'dark'
+              : 'light';
+
+        var metaThemeColor = document.querySelector('meta[name="theme-color"]');
+        if (metaThemeColor) {
+          metaThemeColor.setAttribute('content', MAPA_THEME_COLOR[estiloEfectivo][modoEfectivo]);
+        }
       } catch (error) {
-        // localStorage no disponible (modo privado, contexto restringido):
-        // se pierde el anti-FOUC en este caso, pero ProveedorTema sigue
-        // aplicando el tema por defecto ("system") una vez que React monte.
+        // localStorage/matchMedia no disponible (modo privado, contexto
+        // restringido): se pierde el anti-FOUC en este caso, pero
+        // ProveedorTema y MetaThemeColor siguen aplicando los valores por
+        // defecto una vez que React monte.
       }
     </script>
   </head>

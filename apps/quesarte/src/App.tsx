@@ -12,10 +12,12 @@ import { RutaProtegida } from './rutas/RutaProtegida';
 import { RutaSoloAdmin } from './rutas/RutaSoloAdmin';
 import { Shell } from './Shell';
 import { AvisoPwa } from './componentes/AvisoPwa';
+import { MetaThemeColor } from './componentes/MetaThemeColor';
 
 export function App() {
   return (
     <>
+      <MetaThemeColor />
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route
