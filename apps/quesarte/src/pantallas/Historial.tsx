@@ -110,16 +110,6 @@ export function Historial() {
 
   return (
     <div className="flex flex-col gap-4">
-      {!enLinea && (
-        <p
-          role="status"
-          className="rounded-xl border border-borde bg-superficie p-3 text-sm text-texto-secundario"
-        >
-          Sin conexión: se muestran las últimas ventas sincronizadas. Los cambios se sincronizan al
-          reconectar.
-        </p>
-      )}
-
       {contenido}
 
       {esAdmin && perfil !== null && ventaSeleccionada !== null && (

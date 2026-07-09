@@ -243,14 +243,16 @@ describe('Usuarios', () => {
     expect(screen.getByText('No hay usuarios todavía.')).toBeTruthy();
   });
 
-  it('banner de offline', () => {
+  it('banner de offline explica que no se pueden invitar usuarios', () => {
     configurarAuth();
     mocks.useOnlineStatus.mockReturnValue(false);
     configurarCollection({ datos: usuariosFalsos });
 
     renderizar();
 
-    expect(screen.getByRole('status').textContent).toContain('sin conexión');
+    expect(screen.getByRole('status').textContent).toContain(
+      'no se pueden invitar usuarios hasta reconectar',
+    );
   });
 
   describe('invitar usuario', () => {

@@ -339,7 +339,7 @@ export function Productos() {
           className="flex items-center gap-2 rounded-xl border border-borde bg-superficie px-4 py-3 text-sm text-advertencia"
         >
           <span aria-hidden="true">⚠</span>
-          <span>Estás sin conexión. Los cambios se guardan localmente y se sincronizan al reconectar.</span>
+          <span>Sin conexión: no se pueden gestionar categorías hasta reconectar.</span>
         </div>
       )}
 

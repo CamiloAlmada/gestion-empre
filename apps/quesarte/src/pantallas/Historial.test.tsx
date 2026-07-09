@@ -154,24 +154,6 @@ describe('Historial - estados', () => {
     expect(screen.getByText('Todavía no hay ventas.')).toBeTruthy();
   });
 
-  it('offline: muestra el banner de sin conexión', () => {
-    configurarAuth('admin');
-    mocks.useOnlineStatus.mockReturnValue(false);
-    configurarVentas(estadoOk([]));
-
-    renderizar();
-
-    expect(screen.getByText(/Sin conexión/)).toBeTruthy();
-  });
-
-  it('en línea: no muestra el banner offline', () => {
-    configurarAuth('admin');
-    configurarVentas(estadoOk([]));
-
-    renderizar();
-
-    expect(screen.queryByText(/Sin conexión/)).toBeNull();
-  });
 });
 
 describe('Historial - listado', () => {

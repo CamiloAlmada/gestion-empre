@@ -312,14 +312,16 @@ describe('Productos', () => {
     expect(screen.getAllByRole('button', { name: 'Agregar producto' }).length).toBeGreaterThan(0);
   });
 
-  it('banner de offline cuando useOnlineStatus() es false', () => {
+  it('banner de offline explica que no se pueden gestionar categorías', () => {
     configurarAuth();
     mocks.useOnlineStatus.mockReturnValue(false);
     configurarCollection({ datos: productosFalsos });
 
     renderizar();
 
-    expect(screen.getByRole('status').textContent).toContain('sin conexión');
+    expect(screen.getByRole('status').textContent).toContain(
+      'no se pueden gestionar categorías hasta reconectar',
+    );
   });
 
   it('vendedor no ve botones de alta ni edición', () => {

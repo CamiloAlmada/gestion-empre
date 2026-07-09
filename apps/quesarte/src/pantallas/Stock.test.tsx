@@ -118,8 +118,8 @@ function PlaceholderDetalle() {
   return <div>Detalle de {id}</div>;
 }
 
-function renderizar() {
-  return render(
+function arbolStock() {
+  return (
     <MemoryRouter initialEntries={['/stock']}>
       <ProveedorToasts>
         <ProveedorHeader>
@@ -130,8 +130,16 @@ function renderizar() {
           </Routes>
         </ProveedorHeader>
       </ProveedorToasts>
-    </MemoryRouter>,
+    </MemoryRouter>
   );
+}
+
+/** `rerender` (además del resultado normal de `render`) para simular una
+ * actualización en vivo de Firestore: reconfigurar `configurarCollections` y
+ * volver a renderizar el mismo árbol hace que `useCollection` devuelva los
+ * datos nuevos sin desmontar el componente, igual que un snapshot en vivo. */
+function renderizar() {
+  return render(arbolStock());
 }
 
 afterEach(() => {
@@ -308,6 +316,45 @@ describe('Stock - franja de alertas', () => {
 
     expect(screen.getByText('Nuez mariposa')).toBeTruthy();
     expect(screen.queryByText('Queso Colonia')).toBeNull();
+  });
+
+  it('filtro activo sin salida: si una actualización en vivo lleva el conteo de la alerta activa a 0, el filtro se resetea solo', () => {
+    configurarAuth('admin');
+    const prodBajo = producto({
+      id: 'p1',
+      nombre: 'Nuez mariposa',
+      modoStock: 'granel',
+      stockGranelGramos: peso(100),
+      umbralAlertaStock: 500,
+    });
+    const prodOk = producto({ id: 'p2', nombre: 'Queso Colonia', modoStock: 'granel', stockGranelGramos: peso(5000) });
+    configurarCollections({ productos: estadoOk([prodBajo, prodOk]) });
+
+    const { rerender } = renderizar();
+    fireEvent.click(screen.getByRole('button', { name: '1 stock bajo' }));
+
+    expect(screen.getByText('Nuez mariposa')).toBeTruthy();
+    expect(screen.queryByText('Queso Colonia')).toBeNull();
+
+    // Actualización en vivo: "Nuez mariposa" sube de stock y deja de estar
+    // bajo el umbral — el conteo de "stock bajo" cae a 0 con el chip todavía
+    // "activo" en el estado previo a este render.
+    const prodYaNoBajo = producto({
+      id: 'p1',
+      nombre: 'Nuez mariposa',
+      modoStock: 'granel',
+      stockGranelGramos: peso(5000),
+      umbralAlertaStock: 500,
+    });
+    configurarCollections({ productos: estadoOk([prodYaNoBajo, prodOk]) });
+    rerender(arbolStock());
+
+    expect(screen.getByText('Nuez mariposa')).toBeTruthy();
+    expect(screen.getByText('Queso Colonia')).toBeTruthy();
+    expect(screen.queryByRole('group', { name: 'Alertas de stock' })).toBeNull();
+    for (const boton of screen.queryAllByRole('button')) {
+      expect(boton.getAttribute('aria-pressed')).not.toBe('true');
+    }
   });
 });
 

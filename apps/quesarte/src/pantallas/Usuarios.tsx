@@ -300,7 +300,7 @@ export function Usuarios() {
           className="flex items-center gap-2 rounded-xl border border-borde bg-superficie px-4 py-3 text-sm text-advertencia"
         >
           <span aria-hidden="true">⚠</span>
-          <span>Estás sin conexión. Los cambios de rol/estado se sincronizan al reconectar.</span>
+          <span>Sin conexión: no se pueden invitar usuarios hasta reconectar.</span>
         </div>
       )}
 

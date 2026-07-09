@@ -187,13 +187,6 @@ describe('Venta - estados', () => {
     expect(screen.getByRole('link', { name: 'Ir a Productos' }).getAttribute('href')).toBe('/stock/productos');
   });
 
-  it('offline: banner discreto en el carrito', () => {
-    configurarAuth();
-    mocks.useOnlineStatus.mockReturnValue(false);
-    configurarCollections({ productos: estadoOk([quesoColonia]), piezas: estadoOk([]) });
-    renderizar();
-    expect(screen.getByText('Sin conexión: la venta se guarda localmente y se sincroniza al reconectar.')).toBeTruthy();
-  });
 });
 
 describe('Venta - agregar al carrito por modo', () => {

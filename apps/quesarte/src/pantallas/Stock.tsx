@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { collection, orderBy, query, where } from 'firebase/firestore';
 import type { Categoria, Pieza, Producto } from '@gestion/core';
@@ -78,6 +78,20 @@ export function Stock() {
   function alternarAlerta(alerta: TipoAlerta) {
     setAlertaActiva((actual) => (actual === alerta ? null : alerta));
   }
+
+  // Auto-reset: si el filtro activo queda sin productos (p.ej. una
+  // actualización en vivo de Firestore hace que el conteo de esa alerta
+  // llegue a 0), el chip correspondiente desaparece de `FranjaAlertas` — sin
+  // este efecto, `alertaActiva` quedaría apuntando a una alerta sin chip
+  // visible para des-togglearla, y la lista se vería vacía sin salida
+  // (docs/06-ui-ux.md §1, "todo estado existe"). Se compara contra el
+  // conteo ya recalculado, así que vuelve a `null` apenas ese conteo cae a 0;
+  // no hay riesgo de loop: una vez en `null` la condición de guarda corta acá.
+  useEffect(() => {
+    if (alertaActiva === null) return;
+    const cantidad = alertaActiva === 'por_vencer' ? conteoAlertas.porVencer : conteoAlertas.stockBajo;
+    if (cantidad === 0) setAlertaActiva(null);
+  }, [alertaActiva, conteoAlertas]);
 
   const productosFiltrados = useMemo(
     () => filtrarPorAlerta(productos.datos, resumenesPorProducto, alertaActiva),

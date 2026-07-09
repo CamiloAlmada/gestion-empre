@@ -227,14 +227,6 @@ export function Venta() {
   return (
     <div className="flex flex-col gap-4 pb-24 lg:grid lg:grid-cols-[2fr_1fr] lg:items-start lg:gap-6 lg:pb-0">
       <div className="flex flex-col gap-4">
-        {!enLinea && (
-          <p
-            role="status"
-            className="rounded-xl border border-borde bg-superficie p-3 text-sm text-texto-secundario"
-          >
-            Sin conexión: la venta se guarda localmente y se sincroniza al reconectar.
-          </p>
-        )}
         {contenido}
       </div>
 

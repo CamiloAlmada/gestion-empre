@@ -36,7 +36,12 @@ const CLASES_HEADER =
 // `var(--altura-header)` en vez de repetir el número mágico (docs/04, deuda
 // cerrada por SH-1). Single source of truth: si el header cambia de altura,
 // se ajusta acá una sola vez.
-const ESTILO_RAIZ = { '--altura-header': 'calc(env(safe-area-inset-top) + 3.5rem)' } as CSSProperties;
+//
+// 4.25rem = pt-[...+0.75rem] + fila de acciones min-h-[44px] (2.75rem) +
+// pb-3 (0.75rem), los tres tomados de `CLASES_HEADER` y de `CLASE_VOLVER`
+// más abajo. Si cambia cualquiera de esos tres valores (paddings del header o
+// min-height de las acciones), este número hay que recalcularlo a mano.
+const ESTILO_RAIZ = { '--altura-header': 'calc(env(safe-area-inset-top) + 4.25rem)' } as CSSProperties;
 
 const CLASE_VOLVER =
   'flex min-h-[44px] shrink-0 items-center gap-1 rounded px-1 text-sm font-medium text-texto-secundario ' +
