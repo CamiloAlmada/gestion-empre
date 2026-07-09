@@ -9,7 +9,11 @@ márgenes no sean ficción.
 
 ```
 compras/{id} → {
-  fecha, proveedorNombre, usuarioId, estado: 'borrador'|'confirmada',
+  fecha, usuarioId, estado: 'borrador'|'confirmada',
+  proveedorId?, proveedorNombre,   // selector con alta inline (doc 07); nombre
+                                   // denormalizado. proveedorId opcional solo
+                                   // como retrocompatibilidad — las compras
+                                   // nuevas siempre lo llevan.
   items: [ {
     productoId, nombreProducto,
     // según modoStock del producto:

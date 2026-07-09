@@ -116,6 +116,48 @@ genérico — se poblaron los 3 índices compuestos prescritos en doc 02 y los h
 de firebase-kit ahora loguean el `FirestoreError` a consola (trae el link de
 creación del índice faltante).
 
+## Fase 1.5 — Clientes y proveedores (modelo + CRUD + cliente en POS)
+
+Objetivo: conocer a quién se le vende y a quién se le compra (ver doc 07, que
+es el contrato de este tramo). Va ANTES de Fase 2 a propósito: si `proveedores`
+existe primero, el módulo de compras NACE con selector de proveedor
+(`proveedorId` + nombre denormalizado) y nunca existe el texto libre — la
+cláusula de retrocompatibilidad del doc 07 queda como red de seguridad, no como
+migración a ejecutar.
+
+Alcance del tramo (la inteligencia — frecuencias, preferencias, compras
+estimadas — NO va acá: extiende Fase 3):
+1. Modelo + reglas: colecciones `clientes` y `proveedores`, campos nuevos
+   opcionales en `ventas` (`clienteId?`, `clienteNombre?`) y `productos`
+   (`proveedorPrincipalId?`), índice `ventas (clienteId, fecha desc)`.
+   Reglas del doc 07: `proveedores` solo admin; `clientes` con create de
+   vendedor (alta rápida) y update de vendedor restringido a `stats` con
+   deltas coherentes con una venta.
+2. `registrarVenta`/`anularVenta`: cliente opcional; `stats` del cliente con
+   `FieldValue.increment()` en el MISMO `writeBatch` (compatible offline,
+   doc 06 §8 — verificado 2026-07-09: el cobro ya es batch puro, sin
+   transacciones). La anulación revierte los increments. `primeraCompra`/
+   `ultimaCompra` son cache aproximado (se escriben desde el cliente con la
+   fecha de la venta; la anulación no las rebobina): la fuente de verdad son
+   las ventas.
+3. Pantalla Clientes como sección interna de Historial (patrón Productos
+   dentro de Stock): listado con búsqueda, ficha con datos + stats + historial.
+4. Cliente opcional en el POS, dentro del carrito: buscar o alta rápida
+   (solo nombre), sin tocar el presupuesto de ≤3 toques de la venta anónima.
+5. Pantalla Proveedores como sección interna de Stock (solo admin): listado y
+   ficha con datos de pago; el historial de compras de la ficha se completa
+   solo cuando Fase 2 exista.
+
+Criterios de aceptación (los 6 primeros del doc 07; los de inteligencia y
+"próximo viaje" quedan para Fase 3):
+- [ ] Venta sin cliente idéntica a hoy (≤3 toques, cero fricción nueva).
+- [ ] Asociar cliente existente: un toque + búsqueda desde el carrito.
+- [ ] Alta rápida offline con solo nombre (patrón doc 06 §8).
+- [ ] Vender y anular actualizan `stats` vía increments en el mismo batch,
+      incluso offline.
+- [ ] Ficha de cliente con historial, ticket promedio y días desde la última compra.
+- [ ] Un `vendedor` no puede leer `proveedores` (verificado por reglas).
+
 ## Fase 2 — Compras, costeo y precios
 
 Objetivo: costo real con gastos de viaje prorrateados y gestión de márgenes
@@ -160,7 +202,9 @@ Tareas:
    por kg, `precioDesdeMargen`, `margenDesdePrecio`, redondeo comercial.
 2. Pantalla de compra: borrador → ítems (con detalle de piezas) → gastos del
    viaje → confirmación con efectos atómicos (piezas, stock, movimientos,
-   costo promedio).
+   costo promedio). El proveedor es selector con alta inline desde el día uno
+   (`proveedorId` + `proveedorNombre` denormalizado, doc 07) — Fase 1.5 deja
+   la colección lista antes.
 3. Pantalla Precios y márgenes: tabla, edición bidireccional precio↔margen,
    margen objetivo por producto.
 4. Alerta de margen post-compra con precios sugeridos y aplicación masiva.
@@ -184,6 +228,12 @@ Tareas:
 4. Reporte "rendimiento de compra/viaje": ganancia generada por la mercadería de
    una compra vs. sus gastos.
 5. Registro y reporte de merma (¿cuánto queso se pierde por mes?).
+6. Inteligencia de clientes y proveedores (doc 07, sección "Inteligencia"):
+   frecuencia y clientes inactivos, preferencias por cliente, ranking de
+   mejores clientes; historial de costo por proveedor, sugerencia de próxima
+   compra con cobertura estimada en días y vista "próximo viaje a <proveedor>",
+   comparativa entre proveedores. Requiere datos de Fase 1.5 (clienteId en
+   ventas) y Fase 2 (compras con proveedorId).
 
 Criterios de aceptación:
 - [ ] El dueño puede ver cuánto ganó (no solo cuánto vendió) el mes pasado.
