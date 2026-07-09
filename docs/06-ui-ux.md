@@ -127,6 +127,11 @@ comunicar información por sí solos — la información va por otra vía):
   `BarraPestanas` (el estado activo lo comunican `aria-current` y el color del
   label, ya verificados).
 - Scrim `primary-950/60` como backdrop del `Modal`.
+- Scrim `primary-950/25` detrás del carrito expandido del POS en layout angosto
+  (más liviano que el del Modal: el carrito no bloquea, solo se destaca). Tocarlo
+  colapsa el carrito; el estado lo comunica `aria-expanded`, no el scrim. La
+  hoja expandida además lleva sombra de elevación hacia arriba y esquinas
+  superiores redondeadas para leerse como bottom sheet.
 
 ## 8. Patrón de escrituras offline (estándar de proyecto)
 

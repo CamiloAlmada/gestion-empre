@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { formatearMoney } from '@gestion/core';
 import { Button } from '@gestion/ui';
 import { detalleItem, totalCarrito, type ItemCarrito } from './itemsCarrito';
@@ -52,6 +52,16 @@ export function Carrito({ items, onQuitar, onCobrar, procesando }: CarritoProps)
   const cantidad = items.length;
   const carritoVacio = cantidad === 0;
 
+  // Cerrar con Escape mientras la hoja mobile está expandida (docs/06-ui-ux.md §5).
+  useEffect(() => {
+    if (!expandidoMobile) return;
+    function alPresionarTecla(evento: KeyboardEvent) {
+      if (evento.key === 'Escape') setExpandidoMobile(false);
+    }
+    document.addEventListener('keydown', alPresionarTecla);
+    return () => document.removeEventListener('keydown', alPresionarTecla);
+  }, [expandidoMobile]);
+
   return (
     <>
       {/* Ancho: panel lateral siempre visible. */}
@@ -78,7 +88,24 @@ export function Carrito({ items, onQuitar, onCobrar, procesando }: CarritoProps)
       </aside>
 
       {/* Angosto (mostrador): resumen fijo sobre la tab bar, expandible. */}
-      <div className="fixed inset-x-0 bottom-16 z-20 border-t border-borde bg-superficie lg:hidden">
+      {expandidoMobile && (
+        // Scrim decorativo (docs/06-ui-ux.md §7): separa la hoja expandida de la
+        // grilla de productos, que comparte tono de superficie. El estado lo
+        // comunica `aria-expanded` del botón, no este overlay.
+        <div
+          className="fixed inset-0 z-10 bg-primary-950/25 lg:hidden"
+          aria-hidden="true"
+          data-testid="scrim-carrito"
+          onClick={() => setExpandidoMobile(false)}
+        />
+      )}
+      <div
+        className={`fixed inset-x-0 bottom-16 z-20 border-t border-borde bg-superficie lg:hidden ${
+          expandidoMobile
+            ? 'rounded-t-2xl shadow-[0_-12px_32px_rgb(0_0_0/0.16)]'
+            : 'shadow-[0_-4px_16px_rgb(0_0_0/0.08)]'
+        }`}
+      >
         {expandidoMobile && (
           <ul className="flex max-h-[40vh] flex-col gap-2 overflow-y-auto p-3">
             {carritoVacio ? (

@@ -93,4 +93,46 @@ describe('Carrito', () => {
 
     expect(resumen.getAttribute('aria-expanded')).toBe('true');
   });
+
+  it('carrito colapsado: no hay scrim en el DOM', () => {
+    const producto = productoDe({ id: 'p1', modoStock: 'unidad_simple', modoPrecio: 'por_unidad' });
+    const item = crearItemUnidad(producto, 1, 'a');
+
+    render(<Carrito items={[item]} onQuitar={vi.fn()} onCobrar={vi.fn()} procesando={false} />);
+
+    expect(screen.queryByTestId('scrim-carrito')).toBeNull();
+  });
+
+  it('expandido: el scrim está presente; tocarlo colapsa el carrito', () => {
+    const producto = productoDe({ id: 'p1', modoStock: 'unidad_simple', modoPrecio: 'por_unidad' });
+    const item = crearItemUnidad(producto, 1, 'a');
+
+    render(<Carrito items={[item]} onQuitar={vi.fn()} onCobrar={vi.fn()} procesando={false} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /1 ítem/ }));
+    const scrim = screen.getByTestId('scrim-carrito');
+    expect(scrim.getAttribute('aria-hidden')).toBe('true');
+
+    fireEvent.click(scrim);
+
+    const resumen = screen.getByRole('button', { name: /1 ítem/ });
+    expect(resumen.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByTestId('scrim-carrito')).toBeNull();
+  });
+
+  it('expandido: keydown Escape colapsa el carrito', () => {
+    const producto = productoDe({ id: 'p1', modoStock: 'unidad_simple', modoPrecio: 'por_unidad' });
+    const item = crearItemUnidad(producto, 1, 'a');
+
+    render(<Carrito items={[item]} onQuitar={vi.fn()} onCobrar={vi.fn()} procesando={false} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /1 ítem/ }));
+    expect(screen.getByTestId('scrim-carrito')).not.toBeNull();
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    const resumen = screen.getByRole('button', { name: /1 ítem/ });
+    expect(resumen.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByTestId('scrim-carrito')).toBeNull();
+  });
 });
