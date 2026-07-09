@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { collection, query, where } from 'firebase/firestore';
 import type { MedioPago, Pieza, Producto } from '@gestion/core';
@@ -19,6 +19,7 @@ import { Button, useToasts } from '@gestion/ui';
 import { db } from '../firebase';
 import { agruparPiezasPorProducto } from '../componentes/stock/resumen';
 import { Carrito } from '../componentes/venta/Carrito';
+import { useCarrito } from '../componentes/venta/ContextoCarrito';
 import { GrillaProductos } from '../componentes/venta/GrillaProductos';
 import {
   crearItemFraccionado,
@@ -85,12 +86,21 @@ export function Venta() {
 
   useHeader({ titulo: 'Venta' });
 
+  // La venta en curso vive en `ProveedorCarrito` (docs/06-ui-ux.md §6,
+  // montado en Shell.tsx por encima del Outlet), no en estado local: así
+  // sobrevive a la navegación entre tabs.
+  const {
+    items: carrito,
+    agregar: agregarItemAlCarrito,
+    quitar: quitarDelCarrito,
+    vaciar: vaciarCarrito,
+    proximaClave,
+  } = useCarrito();
+
   const [intento, setIntento] = useState(0);
-  const [carrito, setCarrito] = useState<ItemCarrito[]>([]);
   const [productoParaAgregar, setProductoParaAgregar] = useState<Producto | null>(null);
   const [modalCobroAbierto, setModalCobroAbierto] = useState(false);
   const [cobrando, setCobrando] = useState(false);
-  const proximaClaveRef = useRef(0);
 
   const productosQuery = useMemo(
     () =>
@@ -115,23 +125,13 @@ export function Venta() {
     setIntento((n) => n + 1);
   }
 
-  function proximaClave(): string {
-    const clave = `item-${proximaClaveRef.current}`;
-    proximaClaveRef.current += 1;
-    return clave;
-  }
-
   function cerrarModalProducto() {
     setProductoParaAgregar(null);
   }
 
   function agregarAlCarrito(item: ItemCarrito) {
-    setCarrito((actual) => [...actual, item]);
+    agregarItemAlCarrito(item);
     cerrarModalProducto();
-  }
-
-  function quitarDelCarrito(clave: string) {
-    setCarrito((actual) => actual.filter((item) => item.clave !== clave));
   }
 
   async function confirmarCobro(medioPago: MedioPago) {
@@ -158,7 +158,7 @@ export function Venta() {
 
     if (!enLinea) {
       setModalCobroAbierto(false);
-      setCarrito([]);
+      vaciarCarrito();
       mostrarToast('Venta guardada sin conexión. Se sincronizará al reconectar.', 'info');
       escritura.catch((error: unknown) => {
         // Si `registrarVenta` rechaza (p. ej. por validación), la venta
@@ -178,7 +178,7 @@ export function Venta() {
     try {
       await escritura;
       mostrarToast('Venta registrada.', 'exito');
-      setCarrito([]);
+      vaciarCarrito();
       setModalCobroAbierto(false);
     } catch (error) {
       mostrarToast(mensajeErrorCobro(error), 'error');

@@ -10,6 +10,7 @@ import {
   IconoVenta,
 } from './componentes/iconos';
 import { ProveedorHeader, useHeaderActual } from './componentes/header/ContextoHeader';
+import { ProveedorCarrito } from './componentes/venta/ContextoCarrito';
 
 const TITULOS_POR_TAB: Record<string, string> = {
   venta: 'Venta',
@@ -80,11 +81,18 @@ function ChipSinConexion() {
  * garantizado no nulo y activo) y provee `ProveedorHeader` a sus rutas hijas
  * (las pantallas setean el header con `useHeader()`, ver
  * componentes/header/ContextoHeader.tsx). Ver docs/06-ui-ux.md §2.
+ *
+ * También provee `ProveedorCarrito` (docs/06-ui-ux.md §6, 2026-07-09): mismo
+ * criterio que `ProveedorHeader` — por encima del `Outlet` para que navegar
+ * entre tabs no desmonte la venta en curso, pero dentro de la sesión (se
+ * pierde al desloguear, correcto). Hoy solo lo consume `pantallas/Venta.tsx`.
  */
 export function Shell() {
   return (
     <ProveedorHeader>
-      <ShellInterior />
+      <ProveedorCarrito>
+        <ShellInterior />
+      </ProveedorCarrito>
     </ProveedorHeader>
   );
 }

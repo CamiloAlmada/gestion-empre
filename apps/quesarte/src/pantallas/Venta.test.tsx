@@ -1,12 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router';
+import { MemoryRouter, Route, Routes, useNavigate } from 'react-router';
 import type { FirestoreError } from 'firebase/firestore';
 import { money, peso, type Pieza, type Producto } from '@gestion/core';
 import { StockInsuficienteError, type EntradaVenta } from '@gestion/firebase-kit';
 import { ProveedorToasts } from '@gestion/ui';
 import { Venta } from './Venta';
 import { ProveedorHeader } from '../componentes/header/ContextoHeader';
+import { ProveedorCarrito } from '../componentes/venta/ContextoCarrito';
 
 const mocks = vi.hoisted(() => ({
   useAuth: vi.fn(),
@@ -140,7 +141,48 @@ function renderizar() {
     <MemoryRouter>
       <ProveedorToasts>
         <ProveedorHeader>
-          <Venta />
+          <ProveedorCarrito>
+            <Venta />
+          </ProveedorCarrito>
+        </ProveedorHeader>
+      </ProveedorToasts>
+    </MemoryRouter>,
+  );
+}
+
+/** Botones mínimos para navegar entre "/venta" y "/stock" en las pruebas de
+ * persistencia de abajo (ver `describe('Venta - persistencia entre
+ * navegación')`): el carrito vive en `ProveedorCarrito`, montado por encima
+ * de las rutas, así que navegar desmonta/remonta `Venta` sin tocarlo. */
+function BotonesDeNavegacion() {
+  const navigate = useNavigate();
+  return (
+    <div>
+      <button type="button" onClick={() => navigate('/venta')}>
+        Ir a Venta
+      </button>
+      <button type="button" onClick={() => navigate('/stock')}>
+        Ir a Stock
+      </button>
+    </div>
+  );
+}
+
+/** Igual composición que `Shell.tsx` (`ProveedorCarrito` por encima del
+ * `Outlet`/rutas), pero sin montar `Shell` entero: alcanza con un `Routes`
+ * mínimo entre "/venta" y una pantalla cualquiera de otro tab. */
+function renderizarConNavegacion(rutaInicial: string) {
+  return render(
+    <MemoryRouter initialEntries={[rutaInicial]}>
+      <ProveedorToasts>
+        <ProveedorHeader>
+          <ProveedorCarrito>
+            <BotonesDeNavegacion />
+            <Routes>
+              <Route path="/venta" element={<Venta />} />
+              <Route path="/stock" element={<div>Contenido de Stock</div>} />
+            </Routes>
+          </ProveedorCarrito>
         </ProveedorHeader>
       </ProveedorToasts>
     </MemoryRouter>,
@@ -357,5 +399,110 @@ describe('Venta - cobro', () => {
     // El carrito sigue teniendo el ítem: no se vació.
     expect(screen.getAllByText('Miel 500g').length).toBeGreaterThan(0);
     expect(screen.queryAllByText('Todavía no agregaste productos.').length).toBe(0);
+  });
+});
+
+describe('Venta - persistencia entre navegación (docs/06-ui-ux.md §6)', () => {
+  it('agregar un ítem, navegar a otro tab (Venta se desmonta) y volver: el carrito sigue', async () => {
+    configurarAuth();
+    configurarCollections({ productos: estadoOk([mielFrasco]), piezas: estadoOk([]) });
+    renderizarConNavegacion('/venta');
+
+    fireEvent.click(screen.getByText('Miel 500g'));
+    fireEvent.click(screen.getByRole('button', { name: 'Agregar' }));
+    expect(screen.getAllByText('Miel 500g').length).toBeGreaterThan(0);
+
+    // Navegar a otro tab desmonta por completo la pantalla Venta.
+    fireEvent.click(screen.getByRole('button', { name: 'Ir a Stock' }));
+    expect(screen.getByText('Contenido de Stock')).toBeTruthy();
+    expect(screen.queryByText('Todavía no agregaste productos.')).toBeNull();
+
+    // Volver a Venta: el ítem sigue en el carrito, no hubo que rehacerlo.
+    fireEvent.click(screen.getByRole('button', { name: 'Ir a Venta' }));
+    expect(screen.getAllByText('Miel 500g').length).toBeGreaterThan(0);
+    // 1 unidad de Miel 500g a $ 450,00.
+    expect(screen.getAllByText('$ 450,00').length).toBeGreaterThan(0);
+  });
+
+  it('agregar ítems antes y después de navegar no colisiona claves de lista (quitar solo afecta al ítem tocado)', async () => {
+    configurarAuth();
+    configurarCollections({ productos: estadoOk([mielFrasco]), piezas: estadoOk([]) });
+    renderizarConNavegacion('/venta');
+
+    // Un ítem antes de navegar.
+    fireEvent.click(screen.getByText('Miel 500g'));
+    fireEvent.click(screen.getByRole('button', { name: 'Agregar' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ir a Stock' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Ir a Venta' }));
+
+    // Un segundo ítem después de volver a montar Venta (proximaClave, que
+    // vive en el contexto, no puede reiniciar en 'item-0' y pisar la clave
+    // del primero). El ítem ya en el carrito hace que 'Miel 500g' matchee
+    // más de un nodo (grilla + fila del carrito); se toca la card de la
+    // grilla, que es siempre el primer match (mismo patrón que el resto de
+    // este archivo, p.ej. la prueba de `pieza_entera` arriba).
+    fireEvent.click(screen.getAllByText('Miel 500g')[0]!);
+    fireEvent.click(screen.getByRole('button', { name: 'Agregar' }));
+
+    const filasCarrito = screen.getAllByLabelText('Quitar Miel 500g del carrito');
+    expect(filasCarrito).toHaveLength(2);
+
+    fireEvent.click(filasCarrito[0]!);
+    // Solo se quitó uno: queda un único botón "Quitar", no cero ni ambos.
+    expect(screen.getAllByLabelText('Quitar Miel 500g del carrito')).toHaveLength(1);
+  });
+
+  it('cobrar vacía el carrito también cuando se consume vía contexto', async () => {
+    configurarAuth();
+    mocks.registrarVenta.mockResolvedValue({ ventaId: 'v1' });
+    configurarCollections({ productos: estadoOk([mielFrasco]), piezas: estadoOk([]) });
+    renderizarConNavegacion('/venta');
+
+    fireEvent.click(screen.getByText('Miel 500g'));
+    fireEvent.click(screen.getByRole('button', { name: 'Agregar' }));
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Cobrar' })[0]!);
+    fireEvent.click(screen.getByRole('button', { name: 'Efectivo' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }));
+
+    await waitFor(() => expect(mocks.registrarVenta).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getAllByText('Todavía no agregaste productos.').length).toBeGreaterThan(0));
+  });
+
+  it('desmontar el proveedor (equivalente a desloguear) descarta el carrito', () => {
+    configurarAuth();
+    configurarCollections({ productos: estadoOk([mielFrasco]), piezas: estadoOk([]) });
+
+    function Envoltorio({ sesionActiva }: { sesionActiva: boolean }) {
+      return (
+        <MemoryRouter>
+          <ProveedorToasts>
+            <ProveedorHeader>
+              {sesionActiva ? (
+                <ProveedorCarrito>
+                  <Venta />
+                </ProveedorCarrito>
+              ) : (
+                <p>Sesión cerrada</p>
+              )}
+            </ProveedorHeader>
+          </ProveedorToasts>
+        </MemoryRouter>
+      );
+    }
+
+    const { rerender } = render(<Envoltorio sesionActiva={true} />);
+    fireEvent.click(screen.getByText('Miel 500g'));
+    fireEvent.click(screen.getByRole('button', { name: 'Agregar' }));
+    expect(screen.getAllByText('Miel 500g').length).toBeGreaterThan(0);
+
+    // "Desloguear": se desmonta ProveedorCarrito.
+    rerender(<Envoltorio sesionActiva={false} />);
+    expect(screen.getByText('Sesión cerrada')).toBeTruthy();
+
+    // "Volver a loguearse": nuevo ProveedorCarrito, arranca vacío.
+    rerender(<Envoltorio sesionActiva={true} />);
+    expect(screen.getAllByText('Todavía no agregaste productos.').length).toBeGreaterThan(0);
   });
 });
