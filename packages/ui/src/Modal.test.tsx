@@ -30,9 +30,21 @@ function ModalDeCasoDePrueba({
   );
 }
 
+/** Devuelve el `<dialog>` cuyo contenido incluye `texto` (para distinguir entre varios montados a la vez). */
+function dialogConTexto(texto: string): HTMLDialogElement {
+  const dialog = Array.from(document.querySelectorAll('dialog')).find((d) => d.textContent?.includes(texto));
+  if (dialog === undefined) {
+    throw new Error(`No se encontró un <dialog> con texto "${texto}"`);
+  }
+  return dialog;
+}
+
 describe('Modal', () => {
   afterEach(() => {
     cleanup();
+    // Los tests de scroll lock tocan un estado global (document.body): se
+    // resetea acá para no filtrar entre tests.
+    document.body.style.overflow = '';
   });
 
   it('no está abierto (sin atributo open) hasta que abierto=true', () => {
@@ -161,5 +173,85 @@ describe('Modal', () => {
     fireEvent.keyDown(dialog, { key: 'Escape' });
 
     expect(onCerrar).toHaveBeenCalledTimes(1);
+  });
+
+  it('bloquea el scroll del body mientras está abierto', () => {
+    render(<ModalDeCasoDePrueba />);
+    expect(document.body.style.overflow).toBe('');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Abrir modal' }));
+
+    expect(document.body.style.overflow).toBe('hidden');
+  });
+
+  it('al cerrar restaura el valor previo del body (no asume que era vacío)', () => {
+    document.body.style.overflow = 'scroll';
+    render(<ModalDeCasoDePrueba />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Abrir modal' }));
+    expect(document.body.style.overflow).toBe('hidden');
+
+    const dialog = document.querySelector('dialog') as HTMLDialogElement;
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+
+    expect(document.body.style.overflow).toBe('scroll');
+  });
+
+  it('al desmontar con el modal abierto restaura el overflow previo del body', () => {
+    document.body.style.overflow = '';
+    const { unmount } = render(
+      <Modal abierto={true} onCerrar={vi.fn()} titulo="T">
+        contenido
+      </Modal>,
+    );
+
+    expect(document.body.style.overflow).toBe('hidden');
+
+    unmount();
+
+    expect(document.body.style.overflow).toBe('');
+  });
+
+  it('modales encadenados (A abre → B abre → B cierra → A cierra) no rompen la restauración', () => {
+    function DosModales() {
+      const [aAbierto, setAAbierto] = useState(false);
+      const [bAbierto, setBAbierto] = useState(false);
+
+      return (
+        <div>
+          <button type="button" onClick={() => setAAbierto(true)}>
+            Abrir A
+          </button>
+          <Modal abierto={aAbierto} onCerrar={() => setAAbierto(false)} titulo="A">
+            <button type="button" onClick={() => setBAbierto(true)}>
+              Abrir B
+            </button>
+          </Modal>
+          <Modal abierto={bAbierto} onCerrar={() => setBAbierto(false)} titulo="B">
+            contenido B
+          </Modal>
+        </div>
+      );
+    }
+
+    render(<DosModales />);
+    expect(document.body.style.overflow).toBe('');
+
+    // A abre: guarda el overflow original ('') y bloquea.
+    fireEvent.click(screen.getByRole('button', { name: 'Abrir A' }));
+    expect(document.body.style.overflow).toBe('hidden');
+
+    // B abre encima de A: guarda el 'hidden' que dejó A, sigue bloqueado.
+    fireEvent.click(screen.getByRole('button', { name: 'Abrir B' }));
+    expect(document.body.style.overflow).toBe('hidden');
+
+    // B cierra: restaura lo que B guardó ('hidden') — A sigue abierto, el
+    // body NO debe desbloquearse todavía.
+    fireEvent.keyDown(dialogConTexto('contenido B'), { key: 'Escape' });
+    expect(document.body.style.overflow).toBe('hidden');
+
+    // A cierra: restaura el valor original ('').
+    fireEvent.keyDown(dialogConTexto('Abrir B'), { key: 'Escape' });
+    expect(document.body.style.overflow).toBe('');
   });
 });

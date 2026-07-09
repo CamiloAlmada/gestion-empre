@@ -82,6 +82,29 @@ export function Modal({ abierto, onCerrar, titulo, children, acciones }: ModalPr
     return () => dialog.removeEventListener('close', manejarClose);
   }, [onCerrar]);
 
+  // Bloquea el scroll del body mientras el modal está abierto: sin esto, el
+  // contenido de atrás sigue scrolleando bajo el modal (scroll chaining),
+  // sobre todo notorio en mobile/PWA. Guarda el `overflow` que el body TENÍA
+  // antes de este modal y lo restaura al cerrar/desmontar, en vez de asumir
+  // que era `''` — necesario para modales encadenados (p. ej. "Agregar
+  // stock" abre "Categorías" encima): si A abre (guarda su `overflow`
+  // original, pone `hidden`) y luego B abre (guarda el `hidden` que dejó A,
+  // lo deja en `hidden`), cerrar B restaura lo que B guardó (`hidden`: A
+  // sigue abierto, el body debe seguir bloqueado) y recién cerrar A restaura
+  // el valor original. Cada instancia solo conoce y toca el valor que ELLA
+  // encontró al abrir, así que el body nunca queda desbloqueado con un
+  // modal todavía abierto, ni bloqueado de más tras cerrar el último.
+  useEffect(() => {
+    if (!abierto) {
+      return;
+    }
+    const overflowPrevio = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = overflowPrevio;
+    };
+  }, [abierto]);
+
   function manejarClickBackdrop(evento: MouseEvent<HTMLDialogElement>) {
     // El backdrop nativo (::backdrop) no es descendiente del <dialog>: un
     // click ahí llega con target === el propio <dialog> (el contenido visual

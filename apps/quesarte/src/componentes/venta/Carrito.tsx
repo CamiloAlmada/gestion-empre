@@ -99,24 +99,39 @@ export function Carrito({ items, onQuitar, onCobrar, procesando }: CarritoProps)
           onClick={() => setExpandidoMobile(false)}
         />
       )}
-      {/* Estilo Cálido (docs/06-ui-ux.md §4, tarea TH-F): la hoja se apoya
-          justo encima de la tab bar-píldora (bottom-(--altura-zona-inferior)
-          ya crece solo, ver tailwind.css). Sin retoque, una hoja a todo el
-          ancho (inset-x-0) con esquina recta quedaría más ancha que la
-          píldora de abajo (que tiene inset-x-3 + rounded-flotante, en Cálido
-          píldora completa: 9999px) — se ve como una tapa recta "flotando" sobre
-          un borde que se curva hacia adentro debajo de ella. Con
-          calido:inset-x-3 la hoja iguala el ancho de la píldora (el
-          desajuste de curvatura que queda en los 2 extremos es el
-          mismo que tiene cualquier tapa recta sobre un borde redondeado, y
-          es sutil comparado con el desborde de 12px por lado sin el ajuste).
-          calido:rounded-t-card + border perimetral sin el lado de abajo
-          (calido:border-b-0) la hacen leer como card flotante propia en vez
-          de una franja pegada al viewport, consistente con el resto de
-          Cálido. Ver diagrama en el reporte de la tarea. */}
+      {/* Estilo Cálido (docs/06-ui-ux.md §4, feedback del dueño en producción):
+          la hoja pasó de "tapa apoyada sobre la píldora" (calido:rounded-t-card
+          + border-b-0 + bottom-(--altura-zona-inferior) directo) a CARD
+          FLOTANTE completamente despegada, como en
+          docs/inspiraciones/inspiracion_1.webp: esquinas redondeadas en los 4
+          lados, hueco visible antes de la píldora, sombra propia.
+          - Posición: calido:bottom-[calc(var(--altura-zona-inferior)+0.75rem)]
+            suma un hueco fijo de 0.75rem al offset base (que ya mide hasta el
+            borde SUPERIOR de la píldora en cada estilo, ver --altura-zona-inferior
+            en tailwind.css) — la hoja queda flotando arriba de la píldora, no
+            apoyada en ella.
+          - Forma: calido:rounded-card (4 esquinas, no solo las superiores) +
+            calido:border calido:border-borde SIN calido:border-b-0 (perímetro
+            completo: una card despegada no tiene "abajo" apoyado en nada) +
+            calido:shadow-flotante (sombra propia de card, no la sombra "hoja"
+            pensada para algo pegado al viewport).
+          - calido:rounded-card se aplica SIEMPRE (colapsada y expandida): al
+            ser un custom variant, sus reglas se emiten DESPUÉS que las
+            utilidades sin variant en el CSS compilado (misma mecánica que
+            `md:`, documentada en BarraPestanas.tsx) — le gana en cascada al
+            `rounded-t-card` condicional de abajo (que además comparte el
+            mismo token --radio-card, así que en Cálido ambas reglas ya
+            coinciden en valor para las esquinas superiores; rounded-card
+            redondea además las inferiores, que rounded-t-card ni toca). Mismo
+            razonamiento para calido:shadow-flotante contra shadow-hoja /
+            shadow-hoja-expandida: gana siempre en Cálido, así que la card
+            mantiene su sombra propia colapsada y expandida.
+          - calido:inset-x-3 (sin cambios) iguala el ancho de la píldora.
+          Minimalista: cero cambios (bottom-(--altura-zona-inferior),
+          rounded-t-card condicional, shadow-hoja/-expandida, border-t solo). */}
       <div
         data-testid="hoja-carrito-mobil"
-        className={`fixed inset-x-0 bottom-(--altura-zona-inferior) z-20 border-t border-borde bg-superficie lg:hidden calido:inset-x-3 calido:rounded-t-card calido:border calido:border-b-0 ${
+        className={`fixed inset-x-0 bottom-(--altura-zona-inferior) z-20 border-t border-borde bg-superficie lg:hidden calido:inset-x-3 calido:bottom-[calc(var(--altura-zona-inferior)+0.75rem)] calido:rounded-card calido:border calido:border-borde calido:shadow-flotante ${
           expandidoMobile
             ? 'rounded-t-card shadow-hoja-expandida'
             : 'shadow-hoja'

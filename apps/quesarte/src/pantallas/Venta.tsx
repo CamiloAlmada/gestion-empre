@@ -225,7 +225,14 @@ export function Venta() {
   }
 
   return (
-    <div className="flex flex-col gap-4 pb-24 lg:grid lg:grid-cols-[2fr_1fr] lg:items-start lg:gap-6 lg:pb-0">
+    // pb-24 reserva espacio para que la hoja fija del carrito mobile
+    // (Carrito.tsx) no tape el final de la grilla. En Cálido esa hoja flota
+    // 0.75rem más arriba que en Minimalista (mismo delta que
+    // calido:bottom-[calc(var(--altura-zona-inferior)+0.75rem)] en
+    // Carrito.tsx) — se suma el mismo hueco acá para que el clearance siga
+    // alcanzando. lg:pb-0 anula todo esto en desktop (el carrito pasa a ser
+    // el <aside> lateral, no la hoja fija).
+    <div className="flex flex-col gap-4 pb-24 calido:pb-27 lg:grid lg:grid-cols-[2fr_1fr] lg:items-start lg:gap-6 lg:pb-0">
       <div className="flex flex-col gap-4">
         {contenido}
       </div>

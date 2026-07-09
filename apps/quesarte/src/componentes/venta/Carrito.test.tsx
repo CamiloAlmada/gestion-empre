@@ -120,7 +120,7 @@ describe('Carrito', () => {
     expect(screen.queryByTestId('scrim-carrito')).toBeNull();
   });
 
-  it('la hoja mobile trae los overrides `calido:` para acompañar la píldora flotante (docs/06-ui-ux.md §4, TH-F)', () => {
+  it('la hoja mobile trae los overrides `calido:` de card flotante despegada (docs/06-ui-ux.md §4)', () => {
     const producto = productoDe({ id: 'p1', modoStock: 'unidad_simple', modoPrecio: 'por_unidad' });
     const item = crearItemUnidad(producto, 1, 'a');
 
@@ -130,11 +130,16 @@ describe('Carrito', () => {
     // Mismo inset lateral que la píldora de BarraPestanas (packages/ui), en
     // vez de tocar los bordes del viewport.
     expect(hoja.className).toContain('calido:inset-x-3');
-    // Se lee como card flotante propia: esquinas superiores redondeadas y
-    // borde perimetral sin el lado de abajo (apoya directo sobre la píldora).
-    expect(hoja.className).toContain('calido:rounded-t-card');
+    // Flota con un hueco de 0.75rem por encima de la píldora, en vez de
+    // apoyarse directo en ella.
+    expect(hoja.className).toContain('calido:bottom-[calc(var(--altura-zona-inferior)+0.75rem)]');
+    // Se lee como card flotante propia y completa: esquinas redondeadas en
+    // los 4 lados y borde perimetral (sin el `border-b-0` de la vieja "tapa").
+    expect(hoja.className).toContain('calido:rounded-card');
     expect(hoja.className).toContain('calido:border');
-    expect(hoja.className).toContain('calido:border-b-0');
+    expect(hoja.className).toContain('calido:border-borde');
+    expect(hoja.className).not.toContain('calido:border-b-0');
+    expect(hoja.className).toContain('calido:shadow-flotante');
   });
 
   it('expandido: keydown Escape colapsa el carrito', () => {
