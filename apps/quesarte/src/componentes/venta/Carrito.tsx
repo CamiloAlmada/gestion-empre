@@ -100,7 +100,7 @@ export function Carrito({ items, onQuitar, onCobrar, procesando }: CarritoProps)
         />
       )}
       <div
-        className={`fixed inset-x-0 bottom-16 z-20 border-t border-borde bg-superficie lg:hidden ${
+        className={`fixed inset-x-0 bottom-(--altura-zona-inferior) z-20 border-t border-borde bg-superficie lg:hidden ${
           expandidoMobile
             ? 'rounded-t-2xl shadow-[0_-12px_32px_rgb(0_0_0/0.16)]'
             : 'shadow-[0_-4px_16px_rgb(0_0_0/0.08)]'
