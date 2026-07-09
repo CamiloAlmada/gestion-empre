@@ -199,6 +199,15 @@ function tipearPeso(texto: string) {
   }
 }
 
+/**
+ * El readout de `TecladoPeso` (`role="textbox"`) no es el único textbox en
+ * pantalla: el buscador de `GrillaProductos` (`<input type="text">`) también
+ * lo es. Se distingue por `aria-live="polite"` (el buscador no lo tiene).
+ */
+function lecturaPeso(): string | null {
+  return screen.getAllByRole('textbox').find((el) => el.getAttribute('aria-live') === 'polite')?.textContent ?? null;
+}
+
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
@@ -316,6 +325,104 @@ describe('Venta - agregar al carrito por modo', () => {
     expect(screen.getAllByText('2 unidades').length).toBeGreaterThan(0);
     // 45000 * 2 = 90000 -> $ 900,00
     expect(screen.getAllByText('$ 900,00').length).toBeGreaterThan(0);
+  });
+});
+
+describe('Venta - editar carrito en el lugar (docs/06-ui-ux.md §6, POS-3)', () => {
+  it('unidad_simple: el stepper del carrito suma, resta, y quitar la última unidad elimina el ítem', () => {
+    configurarAuth();
+    configurarCollections({ productos: estadoOk([mielFrasco]), piezas: estadoOk([]) });
+    renderizar();
+
+    fireEvent.click(screen.getByText('Miel 500g'));
+    fireEvent.click(screen.getByRole('button', { name: 'Agregar' }));
+    expect(screen.getAllByText('1 unidad').length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Agregar una unidad de Miel 500g' })[0]!);
+    expect(screen.getAllByText('2 unidades').length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Quitar una unidad de Miel 500g' })[0]!);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Quitar una unidad de Miel 500g' })[0]!);
+
+    expect(screen.getAllByText('Todavía no agregaste productos.').length).toBeGreaterThan(0);
+  });
+
+  it('fraccionado_por_pieza: tocar el ítem reabre el modal precargado; "Guardar" reemplaza el ítem (caso clave: pieza justa)', () => {
+    configurarAuth();
+    const pieza = piezaDe({ id: 'pz1', productoId: 'p1', pesoRestanteGramos: peso(900) });
+    configurarCollections({ productos: estadoOk([quesoColonia]), piezas: estadoOk([pieza]) });
+    renderizar();
+
+    fireEvent.click(screen.getByText('Queso Colonia'));
+    tipearPeso('0,3');
+    fireEvent.click(screen.getByRole('button', { name: 'Agregar' }));
+    expect(screen.getAllByText(/300 g · pieza del/).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Editar Queso Colonia en el carrito' })[0]!);
+
+    expect(screen.getByText('Editar · Queso Colonia')).toBeTruthy();
+    // Precarga el peso actual del ítem.
+    expect(lecturaPeso()).toBe('0,3kg');
+
+    // Sube a 900 g: la pieza tiene 900 g restantes de catálogo y este ítem
+    // ya tenía 300 g reservados de ella — `piezasParaEditar` los devuelve,
+    // así que pedir el total de la pieza al editar es válido.
+    fireEvent.click(screen.getByRole('button', { name: 'Borrar último dígito' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Borrar último dígito' }));
+    tipearPeso('0,9');
+    expect(screen.queryByRole('alert')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+    // REEMPLAZO, no agregado: un solo ítem en el carrito, con el peso nuevo.
+    expect(screen.getAllByText(/900 g · pieza del/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/300 g · pieza del/)).toBeNull();
+  });
+
+  it('granel: tocar el ítem reabre el modal precargado; "Guardar" reemplaza el ítem', () => {
+    configurarAuth();
+    configurarCollections({ productos: estadoOk([nuezMariposa]), piezas: estadoOk([]) });
+    renderizar();
+
+    fireEvent.click(screen.getByText('Nuez mariposa'));
+    tipearPeso('0,2');
+    fireEvent.click(screen.getByRole('button', { name: 'Agregar' }));
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Editar Nuez mariposa en el carrito' })[0]!);
+
+    expect(screen.getByText('Editar · Nuez mariposa')).toBeTruthy();
+    expect(lecturaPeso()).toBe('0,2kg');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Borrar último dígito' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Borrar último dígito' }));
+    tipearPeso('0,5'); // stockGranelGramos de nuezMariposa: 500 g.
+    expect(screen.queryByRole('alert')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+    // 45000 * 500 / 1000 = 22500 -> $ 225,00 (reemplazo: un solo ítem).
+    expect(screen.getAllByText('$ 225,00').length).toBeGreaterThan(0);
+  });
+
+  it('pieza_entera: "+" del carrito abre el selector excluyendo la pieza ya carriteada', () => {
+    configurarAuth();
+    const pieza1 = piezaDe({ id: 'pz1', productoId: 'p2', pesoRestanteGramos: peso(850) });
+    const pieza2 = piezaDe({ id: 'pz2', productoId: 'p2', pesoRestanteGramos: peso(700) });
+    configurarCollections({ productos: estadoOk([salame]), piezas: estadoOk([pieza1, pieza2]) });
+    renderizar();
+
+    fireEvent.click(screen.getByText('Salame tandilero'));
+    fireEvent.click(screen.getByText('850 g'));
+    expect(screen.getAllByText('Pieza entera · 850 g').length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Agregar otra pieza de Salame tandilero' })[0]!);
+
+    // La pieza ya carriteada no vuelve a ofrecerse; solo queda la otra.
+    expect(screen.queryByText('850 g')).toBeNull();
+    fireEvent.click(screen.getByText('700 g'));
+
+    expect(screen.getAllByText('Pieza entera · 850 g').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Pieza entera · 700 g').length).toBeGreaterThan(0);
   });
 });
 

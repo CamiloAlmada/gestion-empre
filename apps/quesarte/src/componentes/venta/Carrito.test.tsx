@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { money, peso, type Producto } from '@gestion/core';
-import { Carrito } from './Carrito';
-import { crearItemGranel, crearItemUnidad } from './itemsCarrito';
+import { Carrito, type CarritoProps } from './Carrito';
+import { crearItemFraccionado, crearItemGranel, crearItemPiezaEntera, crearItemUnidad } from './itemsCarrito';
 
 afterEach(cleanup);
 
@@ -18,9 +18,27 @@ function productoDe(over: Partial<Producto> & Pick<Producto, 'id' | 'modoStock' 
   };
 }
 
+/** Renderiza `Carrito` con callbacks `vi.fn()` de relleno para los props que
+ * no le importan a un test puntual — evita repetir las tres callbacks nuevas
+ * (stepper, editar al peso, agregar otra pieza) en cada `render()` de este
+ * archivo. */
+function renderCarrito(props: Partial<CarritoProps> & Pick<CarritoProps, 'items'>) {
+  return render(
+    <Carrito
+      onQuitar={vi.fn()}
+      onCobrar={vi.fn()}
+      procesando={false}
+      onCambiarUnidades={vi.fn()}
+      onEditarAlPeso={vi.fn()}
+      onAgregarOtraPieza={vi.fn()}
+      {...props}
+    />,
+  );
+}
+
 describe('Carrito', () => {
   it('carrito vacío: sin ítems, "Cobrar" deshabilitado', () => {
-    render(<Carrito items={[]} onQuitar={vi.fn()} onCobrar={vi.fn()} procesando={false} />);
+    renderCarrito({ items: [] });
 
     expect(screen.getAllByText('Todavía no agregaste productos.').length).toBeGreaterThan(0);
     const botonesCobrar = screen.getAllByRole('button', { name: 'Cobrar' });
@@ -33,7 +51,7 @@ describe('Carrito', () => {
     const producto = productoDe({ id: 'p1', modoStock: 'granel', modoPrecio: 'por_kg', precioVentaCents: money(45000) });
     const item = crearItemGranel(producto, peso(300), 'a');
 
-    render(<Carrito items={[item]} onQuitar={vi.fn()} onCobrar={vi.fn()} procesando={false} />);
+    renderCarrito({ items: [item] });
 
     expect(screen.getAllByText('Producto').length).toBeGreaterThan(0);
     // 45000 * 300 / 1000 = 13500 -> $ 135,00
@@ -50,7 +68,7 @@ describe('Carrito', () => {
     const producto = productoDe({ id: 'p1', modoStock: 'unidad_simple', modoPrecio: 'por_unidad' });
     const item = crearItemUnidad(producto, 2, 'clave-x');
 
-    render(<Carrito items={[item]} onQuitar={onQuitar} onCobrar={vi.fn()} procesando={false} />);
+    renderCarrito({ items: [item], onQuitar });
 
     fireEvent.click(screen.getAllByRole('button', { name: 'Quitar Producto del carrito' })[0]!);
 
@@ -62,7 +80,7 @@ describe('Carrito', () => {
     const producto = productoDe({ id: 'p1', modoStock: 'unidad_simple', modoPrecio: 'por_unidad' });
     const item = crearItemUnidad(producto, 1, 'a');
 
-    render(<Carrito items={[item]} onQuitar={vi.fn()} onCobrar={onCobrar} procesando={false} />);
+    renderCarrito({ items: [item], onCobrar });
 
     fireEvent.click(screen.getAllByRole('button', { name: 'Cobrar' })[0]!);
 
@@ -73,7 +91,7 @@ describe('Carrito', () => {
     const producto = productoDe({ id: 'p1', modoStock: 'unidad_simple', modoPrecio: 'por_unidad' });
     const item = crearItemUnidad(producto, 1, 'a');
 
-    render(<Carrito items={[item]} onQuitar={vi.fn()} onCobrar={vi.fn()} procesando />);
+    renderCarrito({ items: [item], procesando: true });
 
     for (const boton of screen.getAllByRole('button', { name: 'Cobrar' })) {
       expect((boton as HTMLButtonElement).disabled).toBe(true);
@@ -84,7 +102,7 @@ describe('Carrito', () => {
     const producto = productoDe({ id: 'p1', modoStock: 'unidad_simple', modoPrecio: 'por_unidad' });
     const item = crearItemUnidad(producto, 1, 'a');
 
-    render(<Carrito items={[item]} onQuitar={vi.fn()} onCobrar={vi.fn()} procesando={false} />);
+    renderCarrito({ items: [item] });
 
     const resumen = screen.getByRole('button', { name: /1 ítem/ });
     expect(resumen.getAttribute('aria-expanded')).toBe('false');
@@ -98,7 +116,7 @@ describe('Carrito', () => {
     const producto = productoDe({ id: 'p1', modoStock: 'unidad_simple', modoPrecio: 'por_unidad' });
     const item = crearItemUnidad(producto, 1, 'a');
 
-    render(<Carrito items={[item]} onQuitar={vi.fn()} onCobrar={vi.fn()} procesando={false} />);
+    renderCarrito({ items: [item] });
 
     expect(screen.queryByTestId('scrim-carrito')).toBeNull();
   });
@@ -107,7 +125,7 @@ describe('Carrito', () => {
     const producto = productoDe({ id: 'p1', modoStock: 'unidad_simple', modoPrecio: 'por_unidad' });
     const item = crearItemUnidad(producto, 1, 'a');
 
-    render(<Carrito items={[item]} onQuitar={vi.fn()} onCobrar={vi.fn()} procesando={false} />);
+    renderCarrito({ items: [item] });
 
     fireEvent.click(screen.getByRole('button', { name: /1 ítem/ }));
     const scrim = screen.getByTestId('scrim-carrito');
@@ -124,7 +142,7 @@ describe('Carrito', () => {
     const producto = productoDe({ id: 'p1', modoStock: 'unidad_simple', modoPrecio: 'por_unidad' });
     const item = crearItemUnidad(producto, 1, 'a');
 
-    render(<Carrito items={[item]} onQuitar={vi.fn()} onCobrar={vi.fn()} procesando={false} />);
+    renderCarrito({ items: [item] });
 
     const hoja = screen.getByTestId('hoja-carrito-mobil');
     // Mismo inset lateral que la píldora de BarraPestanas (packages/ui), en
@@ -146,7 +164,7 @@ describe('Carrito', () => {
     const producto = productoDe({ id: 'p1', modoStock: 'unidad_simple', modoPrecio: 'por_unidad' });
     const item = crearItemUnidad(producto, 1, 'a');
 
-    render(<Carrito items={[item]} onQuitar={vi.fn()} onCobrar={vi.fn()} procesando={false} />);
+    renderCarrito({ items: [item] });
 
     fireEvent.click(screen.getByRole('button', { name: /1 ítem/ }));
     expect(screen.getByTestId('scrim-carrito')).not.toBeNull();
@@ -156,6 +174,99 @@ describe('Carrito', () => {
     const resumen = screen.getByRole('button', { name: /1 ítem/ });
     expect(resumen.getAttribute('aria-expanded')).toBe('false');
     expect(screen.queryByTestId('scrim-carrito')).toBeNull();
+  });
+
+  describe('carrito editable en el lugar (docs/06-ui-ux.md §6)', () => {
+    it('unidad_simple: "+" y "−" llaman a onCambiarUnidades con la clave y el delta', () => {
+      const onCambiarUnidades = vi.fn();
+      const producto = productoDe({ id: 'p1', modoStock: 'unidad_simple', modoPrecio: 'por_unidad', stockUnidades: 5 });
+      const item = crearItemUnidad(producto, 2, 'clave-x');
+
+      renderCarrito({ items: [item], onCambiarUnidades });
+
+      fireEvent.click(screen.getAllByRole('button', { name: 'Agregar una unidad de Producto' })[0]!);
+      expect(onCambiarUnidades).toHaveBeenCalledWith('clave-x', 1);
+
+      fireEvent.click(screen.getAllByRole('button', { name: 'Quitar una unidad de Producto' })[0]!);
+      expect(onCambiarUnidades).toHaveBeenCalledWith('clave-x', -1);
+    });
+
+    it('unidad_simple: "+" se deshabilita al llegar al stock (contando lo ya carriteado)', () => {
+      const producto = productoDe({ id: 'p1', modoStock: 'unidad_simple', modoPrecio: 'por_unidad', stockUnidades: 2 });
+      const item = crearItemUnidad(producto, 2, 'clave-x');
+
+      renderCarrito({ items: [item] });
+
+      const botonSumar = screen.getAllByRole('button', { name: 'Agregar una unidad de Producto' })[0]! as HTMLButtonElement;
+      expect(botonSumar.disabled).toBe(true);
+    });
+
+    it('unidad_simple: la cantidad se muestra entre los dos botones del stepper', () => {
+      const producto = productoDe({ id: 'p1', modoStock: 'unidad_simple', modoPrecio: 'por_unidad', stockUnidades: 5 });
+      const item = crearItemUnidad(producto, 3, 'clave-x');
+
+      renderCarrito({ items: [item] });
+
+      expect(screen.getAllByText('3').length).toBeGreaterThan(0);
+    });
+
+    it('fraccionado_por_pieza: tocar la fila (no "Quitar") llama a onEditarAlPeso con el ítem', () => {
+      const onEditarAlPeso = vi.fn();
+      const producto = productoDe({ id: 'p1', modoStock: 'fraccionado_por_pieza', modoPrecio: 'por_kg' });
+      const pieza = {
+        id: 'pz1',
+        productoId: 'p1',
+        pesoInicialGramos: peso(1000),
+        pesoRestanteGramos: peso(700),
+        costoKgCents: money(500),
+        fechaIngreso: new Date('2026-01-01'),
+        estado: 'disponible' as const,
+      };
+      const item = crearItemFraccionado(producto, pieza, peso(300), 'clave-x');
+
+      renderCarrito({ items: [item], onEditarAlPeso });
+
+      fireEvent.click(screen.getAllByRole('button', { name: 'Editar Producto en el carrito' })[0]!);
+
+      expect(onEditarAlPeso).toHaveBeenCalledWith(item);
+    });
+
+    it('granel: tocar la fila llama a onEditarAlPeso; "Quitar" sigue siendo un botón aparte', () => {
+      const onEditarAlPeso = vi.fn();
+      const onQuitar = vi.fn();
+      const producto = productoDe({ id: 'p1', modoStock: 'granel', modoPrecio: 'por_kg' });
+      const item = crearItemGranel(producto, peso(300), 'clave-x');
+
+      renderCarrito({ items: [item], onEditarAlPeso, onQuitar });
+
+      fireEvent.click(screen.getAllByRole('button', { name: 'Editar Producto en el carrito' })[0]!);
+      expect(onEditarAlPeso).toHaveBeenCalledWith(item);
+      expect(onQuitar).not.toHaveBeenCalled();
+
+      fireEvent.click(screen.getAllByRole('button', { name: 'Quitar Producto del carrito' })[0]!);
+      expect(onQuitar).toHaveBeenCalledWith('clave-x');
+    });
+
+    it('pieza_entera: "+" llama a onAgregarOtraPieza con el ítem; no hay "−"', () => {
+      const onAgregarOtraPieza = vi.fn();
+      const producto = productoDe({ id: 'p1', modoStock: 'pieza_entera', modoPrecio: 'por_kg' });
+      const pieza = {
+        id: 'pz1',
+        productoId: 'p1',
+        pesoInicialGramos: peso(900),
+        pesoRestanteGramos: peso(900),
+        costoKgCents: money(500),
+        fechaIngreso: new Date('2026-01-01'),
+        estado: 'disponible' as const,
+      };
+      const item = crearItemPiezaEntera(producto, pieza, 'clave-x');
+
+      renderCarrito({ items: [item], onAgregarOtraPieza });
+
+      fireEvent.click(screen.getAllByRole('button', { name: 'Agregar otra pieza de Producto' })[0]!);
+      expect(onAgregarOtraPieza).toHaveBeenCalledWith(item);
+      expect(screen.queryByRole('button', { name: 'Quitar una unidad de Producto' })).toBeNull();
+    });
   });
 
   describe('agarre y arrastre para cerrar (docs/06-ui-ux.md §6)', () => {
@@ -180,13 +291,13 @@ describe('Carrito', () => {
     }
 
     it('colapsado: no hay agarre en el DOM', () => {
-      render(<Carrito items={[itemUnico()]} onQuitar={vi.fn()} onCobrar={vi.fn()} procesando={false} />);
+      renderCarrito({ items: [itemUnico()] });
 
       expect(screen.queryByTestId('agarre-carrito')).toBeNull();
     });
 
     it('expandido: el agarre está presente y es decorativo (aria-hidden)', () => {
-      render(<Carrito items={[itemUnico()]} onQuitar={vi.fn()} onCobrar={vi.fn()} procesando={false} />);
+      renderCarrito({ items: [itemUnico()] });
 
       fireEvent.click(screen.getByRole('button', { name: /1 ítem/ }));
 
@@ -196,7 +307,7 @@ describe('Carrito', () => {
 
     it('arrastre que supera el umbral (>90px) colapsa el carrito', () => {
       instalarMatchMediaFalso(false);
-      render(<Carrito items={[itemUnico()]} onQuitar={vi.fn()} onCobrar={vi.fn()} procesando={false} />);
+      renderCarrito({ items: [itemUnico()] });
       fireEvent.click(screen.getByRole('button', { name: /1 ítem/ }));
 
       const agarre = screen.getByTestId('agarre-carrito');
@@ -211,7 +322,7 @@ describe('Carrito', () => {
 
     it('arrastre corto (bajo el umbral) NO colapsa: la hoja sigue expandida', () => {
       instalarMatchMediaFalso(false);
-      render(<Carrito items={[itemUnico()]} onQuitar={vi.fn()} onCobrar={vi.fn()} procesando={false} />);
+      renderCarrito({ items: [itemUnico()] });
       fireEvent.click(screen.getByRole('button', { name: /1 ítem/ }));
 
       const agarre = screen.getByTestId('agarre-carrito');
@@ -225,7 +336,7 @@ describe('Carrito', () => {
 
     it('arrastre hacia arriba se ignora (clamp a 0): no colapsa', () => {
       instalarMatchMediaFalso(false);
-      render(<Carrito items={[itemUnico()]} onQuitar={vi.fn()} onCobrar={vi.fn()} procesando={false} />);
+      renderCarrito({ items: [itemUnico()] });
       fireEvent.click(screen.getByRole('button', { name: /1 ítem/ }));
 
       const agarre = screen.getByTestId('agarre-carrito');
@@ -239,7 +350,7 @@ describe('Carrito', () => {
 
     it('prefers-reduced-motion: el arrastre que supera el umbral igual cierra al soltar', () => {
       instalarMatchMediaFalso(true);
-      render(<Carrito items={[itemUnico()]} onQuitar={vi.fn()} onCobrar={vi.fn()} procesando={false} />);
+      renderCarrito({ items: [itemUnico()] });
       fireEvent.click(screen.getByRole('button', { name: /1 ítem/ }));
 
       const agarre = screen.getByTestId('agarre-carrito');
@@ -253,7 +364,7 @@ describe('Carrito', () => {
 
     it('pointercancel resetea el arrastre sin colapsar', () => {
       instalarMatchMediaFalso(false);
-      render(<Carrito items={[itemUnico()]} onQuitar={vi.fn()} onCobrar={vi.fn()} procesando={false} />);
+      renderCarrito({ items: [itemUnico()] });
       fireEvent.click(screen.getByRole('button', { name: /1 ítem/ }));
 
       const agarre = screen.getByTestId('agarre-carrito');

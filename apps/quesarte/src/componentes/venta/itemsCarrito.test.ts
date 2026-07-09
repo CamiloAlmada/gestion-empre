@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { money, peso, type Pieza, type Producto } from '@gestion/core';
 import {
+  cambiarUnidades,
   crearItemFraccionado,
   crearItemGranel,
   crearItemPiezaEntera,
@@ -8,6 +9,10 @@ import {
   detalleItem,
   piezaIdsEnCarrito,
   piezasAjustadasPorCarrito,
+  piezasParaEditar,
+  puedeSumarUnidad,
+  reemplazarItem,
+  stockGranelParaEditar,
   totalCarrito,
   type ItemCarrito,
 } from './itemsCarrito';
@@ -171,6 +176,161 @@ describe('piezasAjustadasPorCarrito', () => {
     const pieza = piezaDe({ id: 'pz1', productoId: 'p1' });
     const piezas = [pieza];
     expect(piezasAjustadasPorCarrito(piezas, 'p1', [])).toBe(piezas);
+  });
+});
+
+describe('puedeSumarUnidad', () => {
+  it('true si las unidades ya carriteadas del producto están por debajo del stock', () => {
+    const producto = productoDe({ id: 'p1', modoStock: 'unidad_simple', modoPrecio: 'por_unidad', stockUnidades: 3 });
+    const items = [crearItemUnidad(producto, 2, 'a')];
+    expect(puedeSumarUnidad(items, 'a')).toBe(true);
+  });
+
+  it('false al llegar al stock', () => {
+    const producto = productoDe({ id: 'p1', modoStock: 'unidad_simple', modoPrecio: 'por_unidad', stockUnidades: 3 });
+    const items = [crearItemUnidad(producto, 3, 'a')];
+    expect(puedeSumarUnidad(items, 'a')).toBe(false);
+  });
+
+  it('cuenta TODOS los ítems del mismo producto, no solo el propio', () => {
+    const producto = productoDe({ id: 'p1', modoStock: 'unidad_simple', modoPrecio: 'por_unidad', stockUnidades: 3 });
+    const items = [crearItemUnidad(producto, 1, 'a'), crearItemUnidad(producto, 2, 'b')];
+    expect(puedeSumarUnidad(items, 'a')).toBe(false);
+  });
+
+  it('false si la clave no existe o el ítem no es unidad_simple', () => {
+    const producto = productoDe({ id: 'p1', modoStock: 'granel', modoPrecio: 'por_kg' });
+    const items = [crearItemGranel(producto, peso(100), 'a')];
+    expect(puedeSumarUnidad(items, 'a')).toBe(false);
+    expect(puedeSumarUnidad(items, 'no-existe')).toBe(false);
+  });
+});
+
+describe('cambiarUnidades', () => {
+  it('delta positivo suma unidades y recalcula el subtotal por core', () => {
+    const producto = productoDe({ id: 'p1', modoStock: 'unidad_simple', modoPrecio: 'por_unidad', precioVentaCents: money(1000), stockUnidades: 5 });
+    const items = [crearItemUnidad(producto, 1, 'a')];
+
+    const resultado = cambiarUnidades(items, 'a', 1);
+
+    expect(resultado).toHaveLength(1);
+    expect(resultado[0]?.unidades).toBe(2);
+    expect(resultado[0]?.subtotalCents).toBe(money(2000));
+    expect(resultado[0]?.clave).toBe('a');
+  });
+
+  it('delta negativo resta unidades', () => {
+    const producto = productoDe({ id: 'p1', modoStock: 'unidad_simple', modoPrecio: 'por_unidad', stockUnidades: 5 });
+    const items = [crearItemUnidad(producto, 3, 'a')];
+
+    const resultado = cambiarUnidades(items, 'a', -1);
+
+    expect(resultado[0]?.unidades).toBe(2);
+  });
+
+  it('llegar a 0 unidades QUITA el ítem', () => {
+    const producto = productoDe({ id: 'p1', modoStock: 'unidad_simple', modoPrecio: 'por_unidad', stockUnidades: 5 });
+    const items = [crearItemUnidad(producto, 1, 'a')];
+
+    expect(cambiarUnidades(items, 'a', -1)).toEqual([]);
+  });
+
+  it('no permite superar el stock (contando lo ya carriteado): no-op', () => {
+    const producto = productoDe({ id: 'p1', modoStock: 'unidad_simple', modoPrecio: 'por_unidad', stockUnidades: 2 });
+    const items = [crearItemUnidad(producto, 2, 'a')];
+
+    const resultado = cambiarUnidades(items, 'a', 1);
+
+    expect(resultado).toBe(items);
+  });
+
+  it('no toca otros ítems del carrito', () => {
+    const producto = productoDe({ id: 'p1', modoStock: 'unidad_simple', modoPrecio: 'por_unidad', stockUnidades: 5 });
+    const otro = productoDe({ id: 'p2', modoStock: 'granel', modoPrecio: 'por_kg' });
+    const items = [crearItemUnidad(producto, 1, 'a'), crearItemGranel(otro, peso(200), 'b')];
+
+    const resultado = cambiarUnidades(items, 'a', 1);
+
+    expect(resultado).toHaveLength(2);
+    expect(resultado[1]).toBe(items[1]);
+  });
+
+  it('clave inexistente o ítem que no es unidad_simple: no-op', () => {
+    const producto = productoDe({ id: 'p1', modoStock: 'granel', modoPrecio: 'por_kg' });
+    const items = [crearItemGranel(producto, peso(200), 'a')];
+
+    expect(cambiarUnidades(items, 'a', 1)).toBe(items);
+    expect(cambiarUnidades(items, 'no-existe', 1)).toBe(items);
+  });
+});
+
+describe('reemplazarItem', () => {
+  it('reemplaza el ítem de esa clave, deja el resto intacto', () => {
+    const producto = productoDe({ id: 'p1', modoStock: 'granel', modoPrecio: 'por_kg' });
+    const original = crearItemGranel(producto, peso(200), 'a');
+    const otro = crearItemGranel(producto, peso(50), 'b');
+    const nuevo = crearItemGranel(producto, peso(500), 'a');
+
+    const resultado = reemplazarItem([original, otro], 'a', nuevo);
+
+    expect(resultado[0]).toBe(nuevo);
+    expect(resultado[1]).toBe(otro);
+  });
+
+  it('clave inexistente: no cambia nada', () => {
+    const producto = productoDe({ id: 'p1', modoStock: 'granel', modoPrecio: 'por_kg' });
+    const items = [crearItemGranel(producto, peso(200), 'a')];
+    const nuevo = crearItemGranel(producto, peso(500), 'z');
+
+    expect(reemplazarItem(items, 'z', nuevo)).toEqual(items);
+  });
+});
+
+describe('piezasParaEditar', () => {
+  it('caso clave: pieza justa — editar 800g a 900g de una pieza con 900g restantes es válido', () => {
+    const producto = productoDe({ id: 'p1', modoStock: 'fraccionado_por_pieza', modoPrecio: 'por_kg' });
+    const pieza = piezaDe({ id: 'pz1', productoId: 'p1', pesoRestanteGramos: peso(900) });
+    const itemEnEdicion = crearItemFraccionado(producto, pieza, peso(800), 'a');
+
+    const ajustadas = piezasParaEditar([pieza], 'p1', [itemEnEdicion], 'a');
+
+    // La reserva del propio ítem (800 g) queda excluida: los 900 g completos
+    // vuelven a estar "disponibles" para reasignar en la edición.
+    expect(ajustadas[0]?.pesoRestanteGramos).toBe(peso(900));
+  });
+
+  it('otros ítems que reservan la MISMA pieza sí se siguen descontando', () => {
+    const producto = productoDe({ id: 'p1', modoStock: 'fraccionado_por_pieza', modoPrecio: 'por_kg' });
+    const pieza = piezaDe({ id: 'pz1', productoId: 'p1', pesoRestanteGramos: peso(900) });
+    const itemEnEdicion = crearItemFraccionado(producto, pieza, peso(300), 'a');
+    const otroItem = crearItemFraccionado(producto, pieza, peso(200), 'b');
+
+    const ajustadas = piezasParaEditar([pieza], 'p1', [itemEnEdicion, otroItem], 'a');
+
+    // 900 - 200 (reserva de 'b', que NO se está editando) = 700.
+    expect(ajustadas[0]?.pesoRestanteGramos).toBe(peso(700));
+  });
+
+  it('claveEnEdicion que no está en el carrito: se comporta como piezasAjustadasPorCarrito sin excluir nada', () => {
+    const producto = productoDe({ id: 'p1', modoStock: 'fraccionado_por_pieza', modoPrecio: 'por_kg' });
+    const pieza = piezaDe({ id: 'pz1', productoId: 'p1', pesoRestanteGramos: peso(900) });
+    const item = crearItemFraccionado(producto, pieza, peso(300), 'a');
+
+    const ajustadas = piezasParaEditar([pieza], 'p1', [item], 'no-existe');
+
+    expect(ajustadas[0]?.pesoRestanteGramos).toBe(peso(600));
+  });
+});
+
+describe('stockGranelParaEditar', () => {
+  it('caso granel: mismo stock de catálogo que agregar (no hay reserva previa que devolver)', () => {
+    const producto = productoDe({ id: 'p1', modoStock: 'granel', modoPrecio: 'por_kg', stockGranelGramos: peso(900) });
+    expect(stockGranelParaEditar(producto)).toBe(peso(900));
+  });
+
+  it('sin stockGranelGramos: peso(0)', () => {
+    const producto = productoDe({ id: 'p1', modoStock: 'granel', modoPrecio: 'por_kg' });
+    expect(stockGranelParaEditar(producto)).toBe(peso(0));
   });
 });
 

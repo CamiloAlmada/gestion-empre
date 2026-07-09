@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { collection, query, where } from 'firebase/firestore';
-import type { MedioPago, Pieza, Producto } from '@gestion/core';
+import type { MedioPago, Peso, Pieza, Producto } from '@gestion/core';
 import {
   ItemInvalidoError,
   StockInsuficienteError,
@@ -22,12 +22,15 @@ import { Carrito } from '../componentes/venta/Carrito';
 import { useCarrito } from '../componentes/venta/ContextoCarrito';
 import { GrillaProductos } from '../componentes/venta/GrillaProductos';
 import {
+  cambiarUnidades,
   crearItemFraccionado,
   crearItemGranel,
   crearItemPiezaEntera,
   crearItemUnidad,
   piezaIdsEnCarrito,
   piezasAjustadasPorCarrito,
+  piezasParaEditar,
+  reemplazarItem,
   totalCarrito,
   type ItemCarrito,
 } from '../componentes/venta/itemsCarrito';
@@ -94,11 +97,17 @@ export function Venta() {
     agregar: agregarItemAlCarrito,
     quitar: quitarDelCarrito,
     vaciar: vaciarCarrito,
+    actualizar: actualizarCarrito,
     proximaClave,
   } = useCarrito();
 
   const [intento, setIntento] = useState(0);
   const [productoParaAgregar, setProductoParaAgregar] = useState<Producto | null>(null);
+  // Ítem del carrito que se está EDITANDO (docs/06-ui-ux.md §6: tocar un
+  // ítem al peso reabre su modal precargado). Mutuamente excluyente con
+  // `productoParaAgregar` — `abrirParaAgregar`/`editarAlPeso` garantizan que
+  // solo uno de los dos esté seteado a la vez.
+  const [itemParaEditar, setItemParaEditar] = useState<ItemCarrito | null>(null);
   const [modalCobroAbierto, setModalCobroAbierto] = useState(false);
   const [cobrando, setCobrando] = useState(false);
 
@@ -125,13 +134,83 @@ export function Venta() {
     setIntento((n) => n + 1);
   }
 
-  function cerrarModalProducto() {
+  // Producto activo para los modales de "agregar" (grilla tocada, o "+" de
+  // pieza_entera/agregar otra pieza) O el producto del ítem en edición (fila
+  // del carrito tocada) — nunca ambos a la vez.
+  const productoActivo = itemParaEditar?.producto ?? productoParaAgregar;
+
+  // `itemEnEdicion` se le pasa SOLO al modal cuyo `modoStock` coincide con el
+  // del ítem en edición: los otros tres modales siguen montados en el DOM
+  // (con `abierto={false}`) mientras `productoActivo !== null`, así que si
+  // les pasáramos `itemParaEditar` sin filtrar, cada uno calcularía su propio
+  // título "Editar · …" aunque esté cerrado (no visible, pero sí presente en
+  // el DOM — confunde queries de test y, en general, es un estado interno
+  // que no le corresponde a ese modal).
+  const itemFraccionadoEnEdicion =
+    itemParaEditar !== null && itemParaEditar.producto.modoStock === 'fraccionado_por_pieza'
+      ? itemParaEditar
+      : undefined;
+  const itemGranelEnEdicion =
+    itemParaEditar !== null && itemParaEditar.producto.modoStock === 'granel' ? itemParaEditar : undefined;
+
+  function cerrarModales() {
     setProductoParaAgregar(null);
+    setItemParaEditar(null);
+  }
+
+  function abrirParaAgregar(producto: Producto) {
+    setItemParaEditar(null);
+    setProductoParaAgregar(producto);
+  }
+
+  function editarAlPeso(item: ItemCarrito) {
+    setProductoParaAgregar(null);
+    setItemParaEditar(item);
   }
 
   function agregarAlCarrito(item: ItemCarrito) {
     agregarItemAlCarrito(item);
-    cerrarModalProducto();
+    cerrarModales();
+  }
+
+  /**
+   * Confirmar el modal de `fraccionado_por_pieza`/`granel`: si hay un ítem en
+   * edición, REEMPLAZA ese ítem por uno nuevo con la MISMA clave (mismo lugar
+   * de la lista, misma identidad de React — `reemplazarItem`); si no,
+   * agrega un ítem nuevo (flujo de siempre). La aritmética de "cuánto hay
+   * disponible" ya la resolvió `piezasParaEditar`/`stockGranelParaEditar`
+   * antes de llegar acá (ver props de los modales, abajo).
+   */
+  function confirmarFraccionado(pieza: Pieza, gramos: Peso) {
+    if (productoActivo === null) return;
+    if (itemParaEditar !== null) {
+      actualizarCarrito(
+        reemplazarItem(
+          carrito,
+          itemParaEditar.clave,
+          crearItemFraccionado(productoActivo, pieza, gramos, itemParaEditar.clave),
+        ),
+      );
+      cerrarModales();
+    } else {
+      agregarAlCarrito(crearItemFraccionado(productoActivo, pieza, gramos, proximaClave()));
+    }
+  }
+
+  function confirmarGranel(gramos: Peso) {
+    if (productoActivo === null) return;
+    if (itemParaEditar !== null) {
+      actualizarCarrito(
+        reemplazarItem(
+          carrito,
+          itemParaEditar.clave,
+          crearItemGranel(productoActivo, gramos, itemParaEditar.clave),
+        ),
+      );
+      cerrarModales();
+    } else {
+      agregarAlCarrito(crearItemGranel(productoActivo, gramos, proximaClave()));
+    }
   }
 
   async function confirmarCobro(medioPago: MedioPago) {
@@ -219,7 +298,7 @@ export function Venta() {
       <GrillaProductos
         productos={productos.datos}
         piezasAgrupadas={piezasAgrupadas}
-        onSeleccionar={setProductoParaAgregar}
+        onSeleccionar={abrirParaAgregar}
       />
     );
   }
@@ -237,45 +316,56 @@ export function Venta() {
         {contenido}
       </div>
 
-      <Carrito items={carrito} onQuitar={quitarDelCarrito} onCobrar={() => setModalCobroAbierto(true)} procesando={cobrando} />
+      <Carrito
+        items={carrito}
+        onQuitar={quitarDelCarrito}
+        onCobrar={() => setModalCobroAbierto(true)}
+        procesando={cobrando}
+        onCambiarUnidades={(clave, delta) => actualizarCarrito(cambiarUnidades(carrito, clave, delta))}
+        onEditarAlPeso={editarAlPeso}
+        onAgregarOtraPieza={(item) => abrirParaAgregar(item.producto)}
+      />
 
-      {productoParaAgregar !== null && (
+      {productoActivo !== null && (
         <>
           <ModalAgregarFraccionado
-            abierto={productoParaAgregar.modoStock === 'fraccionado_por_pieza'}
-            onCerrar={cerrarModalProducto}
-            producto={productoParaAgregar}
-            piezasDisponibles={piezasAjustadasPorCarrito(
-              piezasAgrupadas.get(productoParaAgregar.id) ?? [],
-              productoParaAgregar.id,
-              carrito,
-            )}
-            onAgregar={(pieza, gramos) =>
-              agregarAlCarrito(crearItemFraccionado(productoParaAgregar, pieza, gramos, proximaClave()))
+            abierto={productoActivo.modoStock === 'fraccionado_por_pieza'}
+            onCerrar={cerrarModales}
+            producto={productoActivo}
+            piezasDisponibles={
+              itemFraccionadoEnEdicion !== undefined
+                ? piezasParaEditar(
+                    piezasAgrupadas.get(productoActivo.id) ?? [],
+                    productoActivo.id,
+                    carrito,
+                    itemFraccionadoEnEdicion.clave,
+                  )
+                : piezasAjustadasPorCarrito(piezasAgrupadas.get(productoActivo.id) ?? [], productoActivo.id, carrito)
             }
+            itemEnEdicion={itemFraccionadoEnEdicion}
+            onAgregar={confirmarFraccionado}
           />
           <ModalAgregarPiezaEntera
-            abierto={productoParaAgregar.modoStock === 'pieza_entera'}
-            onCerrar={cerrarModalProducto}
-            producto={productoParaAgregar}
-            piezasDisponibles={(piezasAgrupadas.get(productoParaAgregar.id) ?? []).filter(
+            abierto={productoActivo.modoStock === 'pieza_entera'}
+            onCerrar={cerrarModales}
+            producto={productoActivo}
+            piezasDisponibles={(piezasAgrupadas.get(productoActivo.id) ?? []).filter(
               (pieza) => !piezaIdsEnCarrito(carrito).has(pieza.id),
             )}
-            onAgregar={(pieza) => agregarAlCarrito(crearItemPiezaEntera(productoParaAgregar, pieza, proximaClave()))}
+            onAgregar={(pieza) => agregarAlCarrito(crearItemPiezaEntera(productoActivo, pieza, proximaClave()))}
           />
           <ModalAgregarGranel
-            abierto={productoParaAgregar.modoStock === 'granel'}
-            onCerrar={cerrarModalProducto}
-            producto={productoParaAgregar}
-            onAgregar={(gramos) => agregarAlCarrito(crearItemGranel(productoParaAgregar, gramos, proximaClave()))}
+            abierto={productoActivo.modoStock === 'granel'}
+            onCerrar={cerrarModales}
+            producto={productoActivo}
+            itemEnEdicion={itemGranelEnEdicion}
+            onAgregar={confirmarGranel}
           />
           <ModalAgregarUnidad
-            abierto={productoParaAgregar.modoStock === 'unidad_simple'}
-            onCerrar={cerrarModalProducto}
-            producto={productoParaAgregar}
-            onAgregar={(unidades) =>
-              agregarAlCarrito(crearItemUnidad(productoParaAgregar, unidades, proximaClave()))
-            }
+            abierto={productoActivo.modoStock === 'unidad_simple'}
+            onCerrar={cerrarModales}
+            producto={productoActivo}
+            onAgregar={(unidades) => agregarAlCarrito(crearItemUnidad(productoActivo, unidades, proximaClave()))}
           />
         </>
       )}

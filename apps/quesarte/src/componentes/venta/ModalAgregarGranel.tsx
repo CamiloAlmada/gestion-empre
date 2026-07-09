@@ -1,13 +1,25 @@
 import { useEffect, useState } from 'react';
-import { formatearPeso, peso, type Peso, type Producto } from '@gestion/core';
+import { formatearPeso, type Peso, type Producto } from '@gestion/core';
 import { Button, Modal } from '@gestion/ui';
 import { TecladoPeso } from './TecladoPeso';
+import { stockGranelParaEditar, type ItemCarrito } from './itemsCarrito';
 
 export interface ModalAgregarGranelProps {
   abierto: boolean;
   onCerrar: () => void;
   producto: Producto;
   onAgregar: (gramos: Peso) => void;
+  /**
+   * Si se pasa, el modal abre en modo edición: precarga el peso actual de
+   * este ítem del carrito y cambia el copy ("Editar"/"Guardar"). `onAgregar`
+   * sigue siendo el único callback de confirmación — quien lo escucha decide
+   * si agrega un ítem nuevo o reemplaza este (ver Venta.tsx). El stock
+   * disponible mostrado sale de `stockGranelParaEditar` (ver esa función:
+   * hoy equivale al stock de catálogo tal cual, granel no reserva entre
+   * ítems del carrito como sí hace `fraccionado_por_pieza`). Si no se pasa:
+   * comportamiento actual EXACTO (modo agregar).
+   */
+  itemEnEdicion?: ItemCarrito;
 }
 
 /**
@@ -16,14 +28,22 @@ export interface ModalAgregarGranelProps {
  * Valida localmente contra `stockGranelGramos`; `registrarVenta` vuelve a
  * validar contra el estado que conoce el servidor al cobrar.
  */
-export function ModalAgregarGranel({ abierto, onCerrar, producto, onAgregar }: ModalAgregarGranelProps) {
+export function ModalAgregarGranel({
+  abierto,
+  onCerrar,
+  producto,
+  onAgregar,
+  itemEnEdicion,
+}: ModalAgregarGranelProps) {
   const [gramos, setGramos] = useState<Peso | null>(null);
 
   useEffect(() => {
-    if (abierto) setGramos(null);
+    if (!abierto) return;
+    setGramos(itemEnEdicion?.gramos ?? null);
   }, [abierto]);
 
-  const stock = producto.stockGranelGramos ?? peso(0);
+  const editando = itemEnEdicion !== undefined;
+  const stock = stockGranelParaEditar(producto);
   const excede = gramos !== null && gramos > stock;
   const puedeAgregar = gramos !== null && gramos > 0 && !excede;
 
@@ -36,21 +56,27 @@ export function ModalAgregarGranel({ abierto, onCerrar, producto, onAgregar }: M
     <Modal
       abierto={abierto}
       onCerrar={onCerrar}
-      titulo={`Agregar · ${producto.nombre}`}
+      titulo={`${editando ? 'Editar' : 'Agregar'} · ${producto.nombre}`}
       acciones={
         <>
           <Button variante="secundaria" onClick={onCerrar}>
             Cancelar
           </Button>
           <Button onClick={confirmar} disabled={!puedeAgregar}>
-            Agregar
+            {editando ? 'Guardar' : 'Agregar'}
           </Button>
         </>
       }
     >
       <div className="flex flex-col gap-3">
         <p className="text-sm text-texto-secundario">Disponible: {formatearPeso(stock)}</p>
-        <TecladoPeso label="Peso a vender" abierto={abierto} onChange={setGramos} unidadInicial="kg" />
+        <TecladoPeso
+          label="Peso a vender"
+          abierto={abierto}
+          onChange={setGramos}
+          unidadInicial="kg"
+          valorInicial={itemEnEdicion?.gramos}
+        />
         {excede && (
           <p role="alert" className="text-sm text-peligro">
             Superás el stock disponible ({formatearPeso(stock)}).

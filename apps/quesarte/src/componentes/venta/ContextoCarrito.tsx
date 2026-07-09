@@ -14,6 +14,16 @@ interface EstadoCarritoContexto {
   agregar: (item: ItemCarrito) => void;
   quitar: (clave: string) => void;
   vaciar: () => void;
+  /**
+   * Reemplaza la lista completa de ítems (docs/06-ui-ux.md §6, "el carrito es
+   * editable en el lugar"). A propósito NO sabe nada de cambiar unidades ni
+   * de reemplazar un ítem puntual — quien llama ya calculó la lista nueva con
+   * las funciones puras de `itemsCarrito.ts` (`cambiarUnidades`,
+   * `reemplazarItem`); el contexto solo la aplica. Mantenerlo así de tonto
+   * evita que la lógica de edición se filtre acá, la misma razón por la que
+   * `agregar`/`quitar`/`vaciar` tampoco calculan nada.
+   */
+  actualizar: (nuevosItems: ItemCarrito[]) => void;
   /** Próxima clave estable de lista (React) para un ítem nuevo. Vive acá y no
    * en `Venta.tsx` por la misma razón que el resto del estado: si el
    * contador reviviera en cada montaje de `Venta`, un ítem agregado antes de
@@ -68,6 +78,10 @@ export function ProveedorCarrito({ children }: ProveedorCarritoProps) {
     setItems([]);
   }, []);
 
+  const actualizar = useCallback((nuevosItems: ItemCarrito[]) => {
+    setItems(nuevosItems);
+  }, []);
+
   const proximaClave = useCallback(() => {
     const clave = `item-${proximaClaveRef.current}`;
     proximaClaveRef.current += 1;
@@ -75,8 +89,8 @@ export function ProveedorCarrito({ children }: ProveedorCarritoProps) {
   }, []);
 
   const valor = useMemo<EstadoCarritoContexto>(
-    () => ({ items, agregar, quitar, vaciar, proximaClave }),
-    [items, agregar, quitar, vaciar, proximaClave],
+    () => ({ items, agregar, quitar, vaciar, actualizar, proximaClave }),
+    [items, agregar, quitar, vaciar, actualizar, proximaClave],
   );
 
   return <ContextoCarrito.Provider value={valor}>{children}</ContextoCarrito.Provider>;

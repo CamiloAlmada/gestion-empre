@@ -20,6 +20,12 @@ export interface TecladoPesoProps {
   abierto: boolean;
   onChange: (valor: Peso | null) => void;
   unidadInicial?: UnidadPeso;
+  /**
+   * Peso con el que precargar el buffer al abrir (modo edición: reabrir el
+   * modal de un ítem del carrito con su peso actual). Si no se pasa, arranca
+   * vacío — comportamiento actual sin cambios.
+   */
+  valorInicial?: Peso;
   disabled?: boolean;
 }
 
@@ -44,22 +50,26 @@ export function TecladoPeso({
   abierto,
   onChange,
   unidadInicial = 'kg',
+  valorInicial,
   disabled = false,
 }: TecladoPesoProps) {
   const id = useId();
   const [unidad, setUnidad] = useState<UnidadPeso>(unidadInicial);
   const [buffer, setBuffer] = useState('');
 
-  // Reinicia el teclado cada vez que el modal contenedor se abre.
+  // Reinicia el teclado cada vez que el modal contenedor se abre. Si viene
+  // `valorInicial` (modo edición), precarga el buffer con ese peso en vez de
+  // vaciarlo — mismo `bufferDesdeValor` que usa el toggle g/kg para repoblar.
   useEffect(() => {
     if (!abierto) return;
     setUnidad(unidadInicial);
-    setBuffer('');
-    onChange(null);
+    setBuffer(bufferDesdeValor(valorInicial ?? null, unidadInicial));
+    onChange(valorInicial ?? null);
     // Solo debe correr al transicionar `abierto` (mismo criterio que el
     // resto de los modales del proyecto, ver ModalIngresarPiezas): no
-    // depende de `onChange`/`unidadInicial` a propósito, son props estables
-    // en la práctica (handlers definidos una vez por el modal contenedor).
+    // depende de `onChange`/`unidadInicial`/`valorInicial` a propósito, son
+    // props estables en la práctica (handlers y valor definidos una vez por
+    // el modal contenedor al abrir).
   }, [abierto]);
 
   function aplicar(tecla: TeclaPeso) {

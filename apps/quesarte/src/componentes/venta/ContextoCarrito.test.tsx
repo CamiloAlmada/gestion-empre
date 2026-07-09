@@ -23,13 +23,15 @@ const mielFrasco: Producto = {
  * agrega un ítem de `mielFrasco` por click, expone cantidad/claves y permite
  * quitar/vaciar. */
 function VisorCarrito() {
-  const { items, agregar, quitar, vaciar, proximaClave } = useCarrito();
+  const { items, agregar, quitar, vaciar, actualizar, proximaClave } = useCarrito();
   return (
     <div>
       <p data-testid="cantidad">{items.length}</p>
       <ul>
         {items.map((item) => (
-          <li key={item.clave}>{item.clave}</li>
+          <li key={item.clave}>
+            {item.clave}: {item.unidades}
+          </li>
         ))}
       </ul>
       <button type="button" onClick={() => agregar(crearItemUnidad(mielFrasco, 1, proximaClave()))}>
@@ -40,6 +42,12 @@ function VisorCarrito() {
           Quitar primero
         </button>
       )}
+      <button
+        type="button"
+        onClick={() => actualizar(items.map((item) => crearItemUnidad(mielFrasco, 9, item.clave)))}
+      >
+        Actualizar todos a 9
+      </button>
       <button type="button" onClick={vaciar}>
         Vaciar
       </button>
@@ -67,8 +75,8 @@ describe('useCarrito / ProveedorCarrito', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Agregar' }));
 
     expect(screen.getByTestId('cantidad').textContent).toBe('2');
-    expect(screen.getByText('item-0')).toBeTruthy();
-    expect(screen.getByText('item-1')).toBeTruthy();
+    expect(screen.getByText('item-0: 1')).toBeTruthy();
+    expect(screen.getByText('item-1: 1')).toBeTruthy();
   });
 
   it('quitar elimina solo el ítem indicado', () => {
@@ -78,8 +86,20 @@ describe('useCarrito / ProveedorCarrito', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Quitar primero' }));
 
     expect(screen.getByTestId('cantidad').textContent).toBe('1');
-    expect(screen.queryByText('item-0')).toBeNull();
-    expect(screen.getByText('item-1')).toBeTruthy();
+    expect(screen.queryByText('item-0: 1')).toBeNull();
+    expect(screen.getByText('item-1: 1')).toBeTruthy();
+  });
+
+  it('actualizar reemplaza la lista completa de ítems (edición desde el carrito)', () => {
+    renderizar();
+    fireEvent.click(screen.getByRole('button', { name: 'Agregar' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Agregar' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Actualizar todos a 9' }));
+
+    expect(screen.getByTestId('cantidad').textContent).toBe('2');
+    expect(screen.getByText('item-0: 9')).toBeTruthy();
+    expect(screen.getByText('item-1: 9')).toBeTruthy();
   });
 
   it('vaciar deja el carrito en cero', () => {

@@ -154,6 +154,95 @@ export function piezasAjustadasPorCarrito(
   });
 }
 
+/**
+ * ¿Se puede sumar una unidad más al ítem `clave` (`unidad_simple`)? Cuenta
+ * TODAS las unidades de ese producto ya carriteadas (no solo las del propio
+ * ítem — puede haber más de un ítem del mismo producto si se agregó por
+ * separado más de una vez), igual criterio que los constructores: nunca se
+ * valida contra el stock de catálogo a secas, sino contra lo que el carrito
+ * ya prometió. `false` si la clave no existe o el ítem no es `unidad_simple`.
+ */
+export function puedeSumarUnidad(items: ItemCarrito[], clave: string): boolean {
+  const item = items.find((i) => i.clave === clave);
+  if (item === undefined || item.producto.modoStock !== 'unidad_simple') return false;
+  const stock = item.producto.stockUnidades ?? 0;
+  return unidadesEnCarrito(items, item.producto.id) < stock;
+}
+
+function unidadesEnCarrito(items: ItemCarrito[], productoId: string): number {
+  return items.reduce((acc, item) => (item.producto.id === productoId ? acc + (item.unidades ?? 0) : acc), 0);
+}
+
+/**
+ * Cambia en `delta` (típicamente +1 o -1, el stepper del carrito) las
+ * unidades del ítem `clave` (`unidad_simple`). El ítem reconstruido sale de
+ * `crearItemUnidad` (subtotal por core, nunca aritmética de plata acá). Si
+ * las unidades resultantes son ≤ 0, el ítem se QUITA del carrito. Si `delta`
+ * es positivo y no hay stock para sumar (`puedeSumarUnidad` da `false`), es
+ * no-op: devuelve `items` sin cambios — el componente ya debe deshabilitar el
+ * "+" en ese caso, esto es la garantía de dominio detrás de esa UI.
+ */
+export function cambiarUnidades(items: ItemCarrito[], clave: string, delta: number): ItemCarrito[] {
+  const item = items.find((i) => i.clave === clave);
+  if (item === undefined || item.producto.modoStock !== 'unidad_simple') return items;
+
+  const unidadesNuevas = (item.unidades ?? 0) + delta;
+  if (unidadesNuevas <= 0) {
+    return items.filter((i) => i.clave !== clave);
+  }
+  if (delta > 0 && !puedeSumarUnidad(items, clave)) {
+    return items;
+  }
+
+  const itemActualizado = crearItemUnidad(item.producto, unidadesNuevas, clave);
+  return items.map((i) => (i.clave === clave ? itemActualizado : i));
+}
+
+/** Reemplaza el ítem de clave `clave` por `nuevoItem` (mismo lugar de la lista, misma clave). No-op si `clave` no está. */
+export function reemplazarItem(items: ItemCarrito[], clave: string, nuevoItem: ItemCarrito): ItemCarrito[] {
+  return items.map((item) => (item.clave === clave ? nuevoItem : item));
+}
+
+/**
+ * Piezas disponibles para EDITAR el ítem `claveEnEdicion` (`fraccionado_por_pieza`):
+ * igual que `piezasAjustadasPorCarrito`, pero excluyendo la reserva del
+ * propio ítem que se está editando — esos gramos vuelven a estar "libres"
+ * para reasignar. Así, editar un corte de 800 g a 900 g de una pieza con
+ * 900 g restantes es válido: los 800 g ya eran del propio ítem, no había que
+ * pedírselos a nadie más. Sin este ajuste, `piezasAjustadasPorCarrito`
+ * seguiría contando la reserva vieja del ítem Y la nueva, rechazando una
+ * edición que en los hechos no pide nada extra.
+ */
+export function piezasParaEditar(
+  piezas: Pieza[],
+  productoId: string,
+  itemsCarrito: ItemCarrito[],
+  claveEnEdicion: string,
+): Pieza[] {
+  return piezasAjustadasPorCarrito(
+    piezas,
+    productoId,
+    itemsCarrito.filter((item) => item.clave !== claveEnEdicion),
+  );
+}
+
+/**
+ * Stock de `granel` disponible para EDITAR un ítem. A diferencia de
+ * `fraccionado_por_pieza`, el carrito NO ajusta `producto.stockGranelGramos`
+ * por lo ya reservado (no existe un equivalente a `piezasAjustadasPorCarrito`
+ * para granel — ver nota al tech lead): `ModalAgregarGranel` valida siempre
+ * contra el stock de catálogo tal cual, sin restar otros ítems `granel` del
+ * carrito. Como ese stock nunca se redujo por la reserva del propio ítem en
+ * primer lugar, no hay nada que "devolverle": el mismo stock de catálogo que
+ * agregar sirve, sin transformación, para editar. Esta función existe para
+ * que el modal pida ese valor con la misma forma en ambos modos (paridad de
+ * interfaz con `piezasParaEditar`) y para dejar la equivalencia documentada
+ * en vez de implícita.
+ */
+export function stockGranelParaEditar(producto: Producto): Peso {
+  return producto.stockGranelGramos ?? peso(0);
+}
+
 /** Línea de detalle de un ítem para la fila del carrito (peso/pieza/unidades). */
 export function detalleItem(item: ItemCarrito): string {
   if (item.producto.modoStock === 'unidad_simple') {

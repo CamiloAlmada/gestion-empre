@@ -3,14 +3,29 @@ import { elegirPieza, formatearPeso, type Peso, type Pieza, type Producto } from
 import { Button, Modal } from '@gestion/ui';
 import { formatearFecha } from '../stock/resumen';
 import { TecladoPeso } from './TecladoPeso';
+import type { ItemCarrito } from './itemsCarrito';
 
 export interface ModalAgregarFraccionadoProps {
   abierto: boolean;
   onCerrar: () => void;
   producto: Producto;
-  /** Piezas disponibles del producto, ya ajustadas por lo reservado en el carrito (`piezasAjustadasPorCarrito`). */
+  /**
+   * Piezas disponibles del producto. En modo agregar, ya ajustadas por lo
+   * reservado en el carrito (`piezasAjustadasPorCarrito`); en modo edición
+   * (`itemEnEdicion` presente), ajustadas EXCLUYENDO la reserva del propio
+   * ítem (`piezasParaEditar`) — quien arma este array decide cuál, el modal
+   * solo lo muestra.
+   */
   piezasDisponibles: Pieza[];
   onAgregar: (pieza: Pieza, gramos: Peso) => void;
+  /**
+   * Si se pasa, el modal abre en modo edición: precarga el peso y la pieza
+   * actuales de este ítem del carrito, y cambia el copy ("Editar"/"Guardar").
+   * `onAgregar` sigue siendo el único callback de confirmación — quien lo
+   * escucha decide si agrega un ítem nuevo o reemplaza este (ver Venta.tsx).
+   * Si no se pasa: comportamiento actual EXACTO (modo agregar).
+   */
+  itemEnEdicion?: ItemCarrito;
 }
 
 /**
@@ -27,6 +42,7 @@ export function ModalAgregarFraccionado({
   producto,
   piezasDisponibles,
   onAgregar,
+  itemEnEdicion,
 }: ModalAgregarFraccionadoProps) {
   const [gramos, setGramos] = useState<Peso | null>(null);
   const [piezaManual, setPiezaManual] = useState<Pieza | null>(null);
@@ -34,9 +50,21 @@ export function ModalAgregarFraccionado({
 
   useEffect(() => {
     if (!abierto) return;
-    setGramos(null);
-    setPiezaManual(null);
+    if (itemEnEdicion !== undefined) {
+      setGramos(itemEnEdicion.gramos ?? null);
+      const piezaId = itemEnEdicion.pieza?.id;
+      setPiezaManual(
+        piezaId === undefined ? null : (piezasDisponibles.find((p) => p.id === piezaId) ?? itemEnEdicion.pieza ?? null),
+      );
+    } else {
+      setGramos(null);
+      setPiezaManual(null);
+    }
     setMostrarSelector(false);
+    // Solo al transicionar `abierto` (mismo criterio que el resto de los
+    // modales del proyecto): `itemEnEdicion`/`piezasDisponibles` son props
+    // estables mientras el modal está abierto (Venta.tsx las recalcula, pero
+    // no cambian a mitad de edición).
   }, [abierto]);
 
   const sinPiezas = piezasDisponibles.length === 0;
@@ -62,18 +90,20 @@ export function ModalAgregarFraccionado({
     setGramos(piezaMostrada.pesoRestanteGramos);
   }
 
+  const editando = itemEnEdicion !== undefined;
+
   return (
     <Modal
       abierto={abierto}
       onCerrar={onCerrar}
-      titulo={`Agregar · ${producto.nombre}`}
+      titulo={`${editando ? 'Editar' : 'Agregar'} · ${producto.nombre}`}
       acciones={
         <>
           <Button variante="secundaria" onClick={onCerrar}>
             Cancelar
           </Button>
           <Button onClick={confirmar} disabled={!puedeAgregar}>
-            Agregar
+            {editando ? 'Guardar' : 'Agregar'}
           </Button>
         </>
       }
@@ -84,7 +114,13 @@ export function ModalAgregarFraccionado({
         </p>
       ) : (
         <div className="flex flex-col gap-4">
-          <TecladoPeso label="Peso a vender" abierto={abierto} onChange={setGramos} unidadInicial="kg" />
+          <TecladoPeso
+            label="Peso a vender"
+            abierto={abierto}
+            onChange={setGramos}
+            unidadInicial="kg"
+            valorInicial={itemEnEdicion?.gramos}
+          />
 
           {gramos !== null &&
             gramos > 0 &&

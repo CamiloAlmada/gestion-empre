@@ -64,6 +64,32 @@ describe('TecladoPeso', () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
+  it('valorInicial precarga el buffer (modo edición) y avisa ese valor, no null', () => {
+    const onChange = vi.fn();
+    render(
+      <TecladoPeso label="Peso" abierto onChange={onChange} unidadInicial="kg" valorInicial={peso(1250)} />,
+    );
+
+    expect(screen.getByRole('textbox').textContent).toBe('1,25kg');
+    expect(onChange).toHaveBeenCalledWith(peso(1250));
+  });
+
+  it('valorInicial respeta unidadInicial "g" al precargar', () => {
+    const onChange = vi.fn();
+    render(<TecladoPeso label="Peso" abierto onChange={onChange} unidadInicial="g" valorInicial={peso(350)} />);
+
+    expect(screen.getByRole('textbox').textContent).toBe('350g');
+    expect(onChange).toHaveBeenCalledWith(peso(350));
+  });
+
+  it('sin valorInicial: comportamiento actual EXACTO (arranca vacío)', () => {
+    const onChange = vi.fn();
+    render(<TecladoPeso label="Peso" abierto onChange={onChange} unidadInicial="kg" />);
+
+    expect(screen.getByRole('textbox').textContent).toBe('0kg');
+    expect(onChange).toHaveBeenCalledWith(null);
+  });
+
   it('al abrirse (abierto) reinicia el buffer y avisa value: null', () => {
     const onChange = vi.fn();
     const { rerender } = render(<TecladoPeso label="Peso" abierto={false} onChange={onChange} unidadInicial="g" />);

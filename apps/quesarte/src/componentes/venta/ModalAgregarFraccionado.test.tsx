@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { money, peso, type Pieza, type Producto } from '@gestion/core';
 import { ModalAgregarFraccionado } from './ModalAgregarFraccionado';
+import { crearItemFraccionado } from './itemsCarrito';
 
 afterEach(cleanup);
 
@@ -153,6 +154,73 @@ describe('ModalAgregarFraccionado', () => {
 
     expect(screen.getByRole('alert').textContent).toContain('No hay piezas disponibles');
     expect(screen.queryByRole('button', { name: '1' })).toBeNull();
+  });
+
+  describe('modo edición (itemEnEdicion)', () => {
+    it('precarga el peso y la pieza actuales, y cambia el copy a Editar/Guardar', () => {
+      const pieza = piezaDe({ id: 'a', fechaIngreso: new Date('2026-01-01T10:00:00'), pesoRestanteGramos: peso(900) });
+      const itemEnEdicion = crearItemFraccionado(producto, pieza, peso(300), 'clave-x');
+      const onAgregar = vi.fn();
+      render(
+        <ModalAgregarFraccionado
+          abierto
+          onCerrar={vi.fn()}
+          producto={producto}
+          piezasDisponibles={[pieza]}
+          onAgregar={onAgregar}
+          itemEnEdicion={itemEnEdicion}
+        />,
+      );
+
+      expect(screen.getByText(`Editar · ${producto.nombre}`)).toBeTruthy();
+      expect(screen.getByRole('textbox').textContent).toBe('0,3kg');
+      expect(screen.getByText(/De: pieza del 01\/01\/2026/)).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Guardar' })).toBeTruthy();
+    });
+
+    it('confirmar en modo edición llama a onAgregar con el peso nuevo (reemplazo lo decide quien escucha)', () => {
+      const pieza = piezaDe({ id: 'a', fechaIngreso: new Date('2026-01-01T10:00:00'), pesoRestanteGramos: peso(900) });
+      const itemEnEdicion = crearItemFraccionado(producto, pieza, peso(300), 'clave-x');
+      const onAgregar = vi.fn();
+      render(
+        <ModalAgregarFraccionado
+          abierto
+          onCerrar={vi.fn()}
+          producto={producto}
+          piezasDisponibles={[pieza]}
+          onAgregar={onAgregar}
+          itemEnEdicion={itemEnEdicion}
+        />,
+      );
+
+      // Caso clave: pieza justa. Sube de 300g a 900g (todo lo que la pieza
+      // tiene, ya devuelto a "disponible" porque `piezasDisponibles` vino
+      // ajustada excluyendo la reserva del propio ítem, ver Venta.tsx).
+      fireEvent.click(screen.getByRole('button', { name: 'Borrar último dígito' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Borrar último dígito' }));
+      tipear('0,9');
+      expect(screen.queryByRole('alert')).toBeNull();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+      expect(onAgregar).toHaveBeenCalledWith(pieza, peso(900));
+    });
+
+    it('sin itemEnEdicion: comportamiento actual EXACTO (título y botón "Agregar")', () => {
+      render(
+        <ModalAgregarFraccionado
+          abierto
+          onCerrar={vi.fn()}
+          producto={producto}
+          piezasDisponibles={[piezaDe({ id: 'a', fechaIngreso: new Date('2026-01-01T10:00:00') })]}
+          onAgregar={vi.fn()}
+        />,
+      );
+
+      expect(screen.getByText(`Agregar · ${producto.nombre}`)).toBeTruthy();
+      expect(screen.getByRole('textbox').textContent).toBe('0kg');
+      expect(screen.getByRole('button', { name: 'Agregar' })).toBeTruthy();
+    });
   });
 
   it('cancelar llama a onCerrar', () => {

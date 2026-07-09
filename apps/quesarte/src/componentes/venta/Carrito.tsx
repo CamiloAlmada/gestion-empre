@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { formatearMoney } from '@gestion/core';
 import { Button } from '@gestion/ui';
-import { detalleItem, totalCarrito, type ItemCarrito } from './itemsCarrito';
+import { detalleItem, puedeSumarUnidad, totalCarrito, type ItemCarrito } from './itemsCarrito';
+
+/** Botón "− / +" del stepper y del "+" de `pieza_entera`: mismo target táctil
+ * (44px, docs/06-ui-ux.md §5) y mismo estilo circular en toda la fila. */
+const CLASE_BOTON_REDONDO =
+  'flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-borde text-lg font-semibold text-texto hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 disabled:cursor-not-allowed disabled:opacity-40';
 
 /**
  * Umbral de arrastre para cerrar la hoja expandida arrastrando desde el
@@ -33,27 +38,95 @@ export interface CarritoProps {
   onCobrar: () => void;
   /** `true` mientras se procesa el cobro (deshabilita "Cobrar" para evitar doble envío). */
   procesando: boolean;
+  /** Stepper `unidad_simple`: cambia en `delta` (+1/-1) las unidades del ítem `clave` (docs/06-ui-ux.md §6). */
+  onCambiarUnidades: (clave: string, delta: number) => void;
+  /** Tocar un ítem `fraccionado_por_pieza`/`granel` reabre su modal precargado, en modo edición. */
+  onEditarAlPeso: (item: ItemCarrito) => void;
+  /** "+" de un ítem `pieza_entera`: abre el selector para sumar OTRA pieza del mismo producto. */
+  onAgregarOtraPieza: (item: ItemCarrito) => void;
 }
 
 interface FilaItemProps {
   item: ItemCarrito;
   onQuitar: (clave: string) => void;
+  onCambiarUnidades: (clave: string, delta: number) => void;
+  onEditarAlPeso: (item: ItemCarrito) => void;
+  onAgregarOtraPieza: (item: ItemCarrito) => void;
+  /** Precalculado por `Carrito` con `puedeSumarUnidad` (necesita ver TODOS los ítems, no solo este). */
+  puedeSumar: boolean;
 }
 
-function FilaItem({ item, onQuitar }: FilaItemProps) {
+function FilaItem({ item, onQuitar, onCambiarUnidades, onEditarAlPeso, onAgregarOtraPieza, puedeSumar }: FilaItemProps) {
+  const nombre = item.producto.nombre;
+  const modo = item.producto.modoStock;
+  const editableAlPeso = modo === 'fraccionado_por_pieza' || modo === 'granel';
+
   return (
     <li className="flex items-start justify-between gap-2 rounded-elemento border border-borde bg-superficie p-3">
-      <div className="flex flex-col">
-        <span className="font-medium text-texto">{item.producto.nombre}</span>
-        <span className="text-sm text-texto-secundario">{detalleItem(item)}</span>
-      </div>
+      {editableAlPeso ? (
+        // Ítems al peso: tocar la fila reabre su modal precargado, en modo
+        // edición (docs/06-ui-ux.md §6). "Quitar" queda AFUERA de este botón
+        // (no puede haber un <button> interactivo anidado dentro de otro).
+        <button
+          type="button"
+          onClick={() => onEditarAlPeso(item)}
+          aria-label={`Editar ${nombre} en el carrito`}
+          className="flex flex-1 flex-col items-start rounded-control text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
+        >
+          <span className="font-medium text-texto">{nombre}</span>
+          <span className="text-sm text-texto-secundario">{detalleItem(item)}</span>
+        </button>
+      ) : (
+        <div className="flex flex-col">
+          <span className="font-medium text-texto">{nombre}</span>
+          <span className="text-sm text-texto-secundario">{detalleItem(item)}</span>
+        </div>
+      )}
+
       <div className="flex flex-col items-end gap-1">
         <span className="tabular-nums font-semibold text-texto">{formatearMoney(item.subtotalCents)}</span>
+
+        {modo === 'unidad_simple' && (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => onCambiarUnidades(item.clave, -1)}
+              aria-label={`Quitar una unidad de ${nombre}`}
+              className={CLASE_BOTON_REDONDO}
+            >
+              −
+            </button>
+            <span aria-live="polite" className="min-w-[2ch] text-center tabular-nums font-medium text-texto">
+              {item.unidades ?? 0}
+            </span>
+            <button
+              type="button"
+              onClick={() => onCambiarUnidades(item.clave, 1)}
+              disabled={!puedeSumar}
+              aria-label={`Agregar una unidad de ${nombre}`}
+              className={CLASE_BOTON_REDONDO}
+            >
+              +
+            </button>
+          </div>
+        )}
+
+        {modo === 'pieza_entera' && (
+          <button
+            type="button"
+            onClick={() => onAgregarOtraPieza(item)}
+            aria-label={`Agregar otra pieza de ${nombre}`}
+            className={CLASE_BOTON_REDONDO}
+          >
+            +
+          </button>
+        )}
+
         {/* Quitar del carrito es reversible: nunca pide confirmación (docs/06-ui-ux.md §6). */}
         <button
           type="button"
           onClick={() => onQuitar(item.clave)}
-          aria-label={`Quitar ${item.producto.nombre} del carrito`}
+          aria-label={`Quitar ${nombre} del carrito`}
           className="min-h-[44px] text-sm text-peligro underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
         >
           Quitar
@@ -70,7 +143,15 @@ function FilaItem({ item, onQuitar }: FilaItemProps) {
  * "Cobrar" está SIEMPRE visible en ambos layouts, con el total calculado por
  * `totalCarrito` (`sumarMoney` de core, cero aritmética propia acá).
  */
-export function Carrito({ items, onQuitar, onCobrar, procesando }: CarritoProps) {
+export function Carrito({
+  items,
+  onQuitar,
+  onCobrar,
+  procesando,
+  onCambiarUnidades,
+  onEditarAlPeso,
+  onAgregarOtraPieza,
+}: CarritoProps) {
   const [expandidoMobile, setExpandidoMobile] = useState(false);
   // Desplazamiento vertical (px, siempre ≥0) que sigue al dedo mientras se
   // arrastra el agarre hacia abajo; `arrastrando` distingue "siguiendo el
@@ -132,6 +213,25 @@ export function Carrito({ items, onQuitar, onCobrar, procesando }: CarritoProps)
     setArrastreY(0);
   }
 
+  // Misma `FilaItem` para el panel desktop y la hoja mobile (docs/06-ui-ux.md
+  // §6): se arma una vez para no repetir el cálculo de `puedeSumar` en los
+  // dos `.map`. `puedeSumarUnidad` necesita ver TODOS los ítems (puede haber
+  // más de un ítem del mismo producto `unidad_simple`), por eso vive acá y no
+  // dentro de `FilaItem`.
+  function renderFila(item: ItemCarrito) {
+    return (
+      <FilaItem
+        key={item.clave}
+        item={item}
+        onQuitar={onQuitar}
+        onCambiarUnidades={onCambiarUnidades}
+        onEditarAlPeso={onEditarAlPeso}
+        onAgregarOtraPieza={onAgregarOtraPieza}
+        puedeSumar={item.producto.modoStock === 'unidad_simple' && puedeSumarUnidad(items, item.clave)}
+      />
+    );
+  }
+
   const estiloArrastre: CSSProperties | undefined =
     expandidoMobile && arrastreY > 0
       ? { transform: `translateY(${arrastreY}px)`, transition: arrastrando ? 'none' : 'transform 180ms ease-out' }
@@ -145,11 +245,7 @@ export function Carrito({ items, onQuitar, onCobrar, procesando }: CarritoProps)
         {carritoVacio ? (
           <p className="text-sm text-texto-secundario">Todavía no agregaste productos.</p>
         ) : (
-          <ul className="flex flex-col gap-2 overflow-y-auto">
-            {items.map((item) => (
-              <FilaItem key={item.clave} item={item} onQuitar={onQuitar} />
-            ))}
-          </ul>
+          <ul className="flex flex-col gap-2 overflow-y-auto">{items.map(renderFila)}</ul>
         )}
         <div className="mt-auto flex flex-col gap-2 border-t border-borde pt-3">
           <div className="flex items-center justify-between text-lg font-bold text-texto">
@@ -236,7 +332,7 @@ export function Carrito({ items, onQuitar, onCobrar, procesando }: CarritoProps)
               {carritoVacio ? (
                 <p className="text-sm text-texto-secundario">Todavía no agregaste productos.</p>
               ) : (
-                items.map((item) => <FilaItem key={item.clave} item={item} onQuitar={onQuitar} />)
+                items.map(renderFila)
               )}
             </ul>
           </>
