@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { collection, limit, orderBy, query, where } from 'firebase/firestore';
-import type { MovimientoStock, Pieza, Producto } from '@gestion/core';
+import type { Categoria, MovimientoStock, Pieza, Producto } from '@gestion/core';
 import {
+  categoriaConverter,
   movimientoConverter,
   piezaConverter,
   productoConverter,
@@ -12,8 +13,9 @@ import {
 } from '@gestion/firebase-kit';
 import { Button } from '@gestion/ui';
 import { db } from '../firebase';
+import { agruparPorCategoria } from '../componentes/stock/agrupacion';
 import { DetalleProducto } from '../componentes/stock/DetalleProducto';
-import { ListaProductos } from '../componentes/stock/ListaProductos';
+import { ListaProductosAgrupada } from '../componentes/stock/ListaProductosAgrupada';
 import { ModalAjusteNegativo } from '../componentes/stock/ModalAjusteNegativo';
 import { ModalIngresarPiezas } from '../componentes/stock/ModalIngresarPiezas';
 import { ModalSumarStock } from '../componentes/stock/ModalSumarStock';
@@ -32,9 +34,10 @@ function esModoStockPorPieza(modoStock: Producto['modoStock']): boolean {
  * ruta nueva). Admin puede ingresar piezas manualmente, sumar granel/unidades
  * y aplicar ajustes/merma con motivo; vendedor solo mira.
  *
- * Trae productos activos y piezas disponibles con UNA sola `useCollection`
- * cada una (memoizadas), y agrupa las piezas por producto client-side — nunca
- * una query por producto.
+ * Trae productos activos, piezas disponibles y categorías (ordenadas por
+ * `orden`) con UNA sola `useCollection` cada una (memoizadas), y agrupa
+ * client-side: piezas por producto, y productos por categoría para la lista
+ * maestra — nunca una query por producto ni por categoría.
  */
 export function Stock() {
   const { perfil } = useAuth();
@@ -64,11 +67,20 @@ export function Stock() {
       query(collection(db, 'piezas').withConverter(piezaConverter), where('estado', '==', 'disponible')),
     [intento],
   );
+  const categoriasQuery = useMemo(
+    () => query(collection(db, 'categorias').withConverter(categoriaConverter), orderBy('orden')),
+    [intento],
+  );
 
   const productos = useCollection<Producto>(productosQuery);
   const piezas = useCollection<Pieza>(piezasQuery);
+  const categorias = useCollection<Categoria>(categoriasQuery);
 
   const piezasAgrupadas = useMemo(() => agruparPiezasPorProducto(piezas.datos), [piezas.datos]);
+  const gruposPorCategoria = useMemo(
+    () => agruparPorCategoria(productos.datos, categorias.datos),
+    [productos.datos, categorias.datos],
+  );
 
   const productoSeleccionado = productos.datos.find((p) => p.id === productoSeleccionadoId) ?? null;
 
@@ -107,8 +119,8 @@ export function Stock() {
     setModal('ajuste');
   }
 
-  const cargando = productos.cargando || piezas.cargando;
-  const error = productos.error ?? piezas.error;
+  const cargando = productos.cargando || piezas.cargando || categorias.cargando;
+  const error = productos.error ?? piezas.error ?? categorias.error;
 
   let contenido;
   if (cargando) {
@@ -145,8 +157,8 @@ export function Stock() {
             Gestionar catálogo
           </Link>
         </div>
-        <ListaProductos
-          productos={productos.datos}
+        <ListaProductosAgrupada
+          grupos={gruposPorCategoria}
           piezasAgrupadas={piezasAgrupadas}
           onSeleccionar={(producto) => setProductoSeleccionadoId(producto.id)}
         />

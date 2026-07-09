@@ -151,6 +151,27 @@ describe('ListaProductos - alertas visuales', () => {
   });
 });
 
+describe('ListaProductos - ocultarCategoria', () => {
+  it('por defecto muestra el subtítulo de categoría de cada fila', () => {
+    const prod = producto({ id: 'p1', nombre: 'Queso Colonia', categoria: 'Quesos', modoStock: 'granel' });
+
+    render(<ListaProductos productos={[prod]} piezasAgrupadas={new Map()} onSeleccionar={() => {}} />);
+
+    expect(screen.getByText('Quesos')).toBeTruthy();
+  });
+
+  it('con ocultarCategoria=true no muestra el subtítulo de categoría', () => {
+    const prod = producto({ id: 'p1', nombre: 'Queso Colonia', categoria: 'Quesos', modoStock: 'granel' });
+
+    render(
+      <ListaProductos productos={[prod]} piezasAgrupadas={new Map()} onSeleccionar={() => {}} ocultarCategoria />,
+    );
+
+    expect(screen.queryByText('Quesos')).toBeNull();
+    expect(screen.getByText('Queso Colonia')).toBeTruthy();
+  });
+});
+
 describe('ListaProductos - interacción', () => {
   it('tocar una fila llama a onSeleccionar con el producto', () => {
     const onSeleccionar = vi.fn();

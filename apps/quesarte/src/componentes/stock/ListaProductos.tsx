@@ -7,6 +7,13 @@ export interface ListaProductosProps {
   /** Piezas disponibles, ya agrupadas por `productoId` (`agruparPiezasPorProducto`). */
   piezasAgrupadas: Map<string, Pieza[]>;
   onSeleccionar: (producto: Producto) => void;
+  /**
+   * Oculta el subtítulo de categoría de cada fila. Se usa cuando la lista se
+   * renderiza agrupada por categoría (`ListaProductosAgrupada`): el
+   * encabezado de sección ya comunica esa información, repetirla por fila es
+   * redundante. Por defecto `false` (lista plana, como antes).
+   */
+  ocultarCategoria?: boolean;
 }
 
 /**
@@ -15,7 +22,12 @@ export interface ListaProductosProps {
  * (vencimiento, stock bajo). Tocar una fila selecciona el producto (el
  * llamador decide qué hacer con eso — ver `Stock.tsx`).
  */
-export function ListaProductos({ productos, piezasAgrupadas, onSeleccionar }: ListaProductosProps) {
+export function ListaProductos({
+  productos,
+  piezasAgrupadas,
+  onSeleccionar,
+  ocultarCategoria = false,
+}: ListaProductosProps) {
   return (
     <ul className="flex flex-col gap-2">
       {productos.map((producto) => {
@@ -36,7 +48,9 @@ export function ListaProductos({ productos, piezasAgrupadas, onSeleccionar }: Li
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="font-semibold text-texto">{producto.nombre}</span>
-                <span className="text-sm text-texto-secundario">{producto.categoria}</span>
+                {!ocultarCategoria && (
+                  <span className="text-sm text-texto-secundario">{producto.categoria}</span>
+                )}
               </div>
               <span className="tabular-nums text-texto-secundario">{textoResumen(resumen)}</span>
               {(estadoVenc !== null || bajo) && (

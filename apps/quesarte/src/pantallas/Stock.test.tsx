@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import type { FirestoreError } from 'firebase/firestore';
-import { money, peso, type Pieza, type Producto } from '@gestion/core';
+import { money, peso, type Categoria, type Pieza, type Producto } from '@gestion/core';
 import { ProveedorToasts } from '@gestion/ui';
 import { Stock } from './Stock';
 
@@ -29,6 +29,7 @@ vi.mock('@gestion/firebase-kit', () => ({
   productoConverter: {},
   piezaConverter: {},
   movimientoConverter: {},
+  categoriaConverter: {},
   ingresarPiezas: mocks.ingresarPiezas,
   ajustarStock: mocks.ajustarStock,
   IngresoInvalidoError: mocks.IngresoInvalidoError,
@@ -108,12 +109,15 @@ function configurarCollections(estados: {
   productos?: EstadoFalso<Producto>;
   piezas?: EstadoFalso<Pieza>;
   movimientos?: EstadoFalso<unknown>;
+  /** Por defecto vacía: sin categorías definidas, la lista queda plana (comportamiento previo a CAT-3). */
+  categorias?: EstadoFalso<Categoria>;
 }) {
   mocks.useCollection.mockImplementation((q: RefFalsa | null) => {
     if (q === null) return { datos: [], cargando: false, error: null };
     if (q.__path === 'productos') return estados.productos ?? estadoOk([]);
     if (q.__path === 'piezas') return estados.piezas ?? estadoOk([]);
     if (q.__path === 'movimientos') return estados.movimientos ?? estadoOk([]);
+    if (q.__path === 'categorias') return estados.categorias ?? estadoOk([]);
     return { datos: [], cargando: false, error: null };
   });
 }
@@ -215,6 +219,59 @@ describe('Stock - lista maestra (agrupación)', () => {
     expect(screen.getByText('1 pieza · 1,2 kg')).toBeTruthy();
     expect(screen.getByText('3 kg')).toBeTruthy();
     expect(screen.getByText('6 unidades')).toBeTruthy();
+  });
+});
+
+function categoria(over: Partial<Categoria> & Pick<Categoria, 'nombre' | 'orden'>): Categoria {
+  return { id: over.nombre, ...over };
+}
+
+describe('Stock - agrupación por categoría', () => {
+  it('sin categorías definidas: lista plana, sin encabezados de sección', () => {
+    configurarAuth('admin');
+    const prod = producto({ id: 'p1', nombre: 'Queso Colonia', categoria: 'Quesos', modoStock: 'granel' });
+    configurarCollections({ productos: estadoOk([prod]) });
+
+    renderizar();
+
+    expect(screen.getByText('Queso Colonia')).toBeTruthy();
+    expect(screen.queryAllByRole('heading').length).toBe(0);
+  });
+
+  it('con categorías definidas: encabezados en el orden de `orden`, huérfanos al final bajo "Sin categoría"', () => {
+    configurarAuth('admin');
+    const categorias = estadoOk([
+      categoria({ nombre: 'Quesos', orden: 0 }),
+      categoria({ nombre: 'Miel', orden: 1 }),
+    ]);
+    const productos = estadoOk([
+      producto({ id: 'p1', nombre: 'Miel 500g', categoria: 'Miel', modoPrecio: 'por_unidad', modoStock: 'unidad_simple', stockUnidades: 3 }),
+      producto({ id: 'p2', nombre: 'Queso Colonia', categoria: 'Quesos', modoStock: 'granel', stockGranelGramos: peso(1000) }),
+      producto({ id: 'p3', nombre: 'Especias raras', categoria: 'Especias', modoStock: 'granel', stockGranelGramos: peso(200) }),
+    ]);
+    configurarCollections({ productos, categorias });
+
+    renderizar();
+
+    const encabezados = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
+    expect(encabezados).toEqual(['Quesos', 'Miel', 'Sin categoría']);
+  });
+
+  it('categoría sin productos no genera encabezado', () => {
+    configurarAuth('admin');
+    const categorias = estadoOk([
+      categoria({ nombre: 'Quesos', orden: 0 }),
+      categoria({ nombre: 'Miel', orden: 1 }), // sin productos
+    ]);
+    const productos = estadoOk([
+      producto({ id: 'p1', nombre: 'Queso Colonia', categoria: 'Quesos', modoStock: 'granel', stockGranelGramos: peso(1000) }),
+    ]);
+    configurarCollections({ productos, categorias });
+
+    renderizar();
+
+    const encabezados = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
+    expect(encabezados).toEqual(['Quesos']);
   });
 });
 
