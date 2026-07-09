@@ -84,6 +84,22 @@ vi.mock('./pantallas/DetalleProductoPantalla', () => ({
   DetalleProductoPantalla: () => <div>Contenido de DetalleProductoPantalla</div>,
 }));
 
+// Clientes (pantalla de /historial/clientes) también arma su query de
+// Firestore al importarse (`collection(db, 'clientes')`, ver Clientes.tsx),
+// mismo motivo que Productos/Usuarios arriba: se mockea entera
+// (Clientes.test.tsx cubre su contenido), este suite solo prueba que la ruta
+// existe y llega ahí.
+vi.mock('./pantallas/Clientes', () => ({
+  Clientes: () => <div>Contenido de Clientes</div>,
+}));
+
+// DetalleClientePantalla (pantalla de /historial/cliente/:id): mismo motivo
+// que DetalleProductoPantalla arriba (DetalleClientePantalla.test.tsx cubre
+// su contenido).
+vi.mock('./pantallas/DetalleClientePantalla', () => ({
+  DetalleClientePantalla: () => <div>Contenido de DetalleClientePantalla</div>,
+}));
+
 function configurarAuth(rol: 'admin' | 'vendedor') {
   mocks.useAuth.mockReturnValue({
     usuario: { uid: 'u1' },
@@ -199,5 +215,29 @@ describe('App - rutas', () => {
     renderizarEn('/stock/producto/abc123');
 
     expect(screen.getByText('Contenido de DetalleProductoPantalla')).toBeTruthy();
+  });
+
+  it('navega a /historial/clientes (sección Clientes, ruta real)', () => {
+    configurarAuth('admin');
+
+    renderizarEn('/historial/clientes');
+
+    expect(screen.getByText('Contenido de Clientes')).toBeTruthy();
+  });
+
+  it('vendedor también puede navegar a /historial/clientes (no es solo-admin, doc 07)', () => {
+    configurarAuth('vendedor');
+
+    renderizarEn('/historial/clientes');
+
+    expect(screen.getByText('Contenido de Clientes')).toBeTruthy();
+  });
+
+  it('navega a /historial/cliente/:id (ficha de cliente, ruta real)', () => {
+    configurarAuth('admin');
+
+    renderizarEn('/historial/cliente/abc123');
+
+    expect(screen.getByText('Contenido de DetalleClientePantalla')).toBeTruthy();
   });
 });

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { Link } from 'react-router';
 import { collection, limit, orderBy, query } from 'firebase/firestore';
 import type { Venta } from '@gestion/core';
 import { useAuth, useCollection, useOnlineStatus, ventaConverter } from '@gestion/firebase-kit';
@@ -27,7 +28,19 @@ export function Historial() {
   const enLinea = useOnlineStatus();
   const esAdmin = perfil?.rol === 'admin';
 
-  useHeader({ titulo: 'Historial' });
+  useHeader({
+    titulo: 'Historial',
+    // min-h-[48px]: flota sobre la tab bar en mobile (docs/06-ui-ux.md §2 y
+    // §5 — targets ≥48px ahí), mismo estilo que "Catálogo" en Stock.tsx.
+    acciones: (
+      <Link
+        to="/historial/clientes"
+        className="inline-flex min-h-[48px] items-center justify-center rounded-control border border-borde bg-superficie px-3 text-sm font-medium text-texto hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
+      >
+        Clientes
+      </Link>
+    ),
+  });
 
   const [intento, setIntento] = useState(0);
   const [limiteVentas, setLimiteVentas] = useState(LIMITE_INICIAL_VENTAS);
