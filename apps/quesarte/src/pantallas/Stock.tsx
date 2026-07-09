@@ -6,8 +6,10 @@ import { categoriaConverter, piezaConverter, productoConverter, useCollection } 
 import { Button } from '@gestion/ui';
 import { db } from '../firebase';
 import { agruparPorCategoria } from '../componentes/stock/agrupacion';
+import { contarAlertas, filtrarPorAlerta, type TipoAlerta } from '../componentes/stock/alertas';
+import { FranjaAlertas } from '../componentes/stock/FranjaAlertas';
 import { ListaProductosAgrupada } from '../componentes/stock/ListaProductosAgrupada';
-import { agruparPiezasPorProducto } from '../componentes/stock/resumen';
+import { agruparPiezasPorProducto, calcularResumen, type ResumenStock } from '../componentes/stock/resumen';
 import { useHeader } from '../componentes/header/ContextoHeader';
 
 /**
@@ -26,6 +28,7 @@ export function Stock() {
   const navigate = useNavigate();
 
   const [intento, setIntento] = useState(0);
+  const [alertaActiva, setAlertaActiva] = useState<TipoAlerta | null>(null);
 
   // `db` es el import estable de '../firebase' (no cambia entre renders); la
   // única dependencia real de estas queries es `intento`, que fuerza un
@@ -55,9 +58,35 @@ export function Stock() {
   const categorias = useCollection<Categoria>(categoriasQuery);
 
   const piezasAgrupadas = useMemo(() => agruparPiezasPorProducto(piezas.datos), [piezas.datos]);
+
+  // Resumen por producto, base tanto de las filas (peso/vencimiento) como de
+  // la franja de alertas: se calcula UNA vez acá y se reutiliza, en vez de
+  // recalcularlo en `ListaProductos` y en la franja por separado.
+  const resumenesPorProducto = useMemo(() => {
+    const mapa = new Map<string, ResumenStock>();
+    for (const producto of productos.datos) {
+      mapa.set(producto.id, calcularResumen(producto, piezasAgrupadas.get(producto.id) ?? []));
+    }
+    return mapa;
+  }, [productos.datos, piezasAgrupadas]);
+
+  const conteoAlertas = useMemo(
+    () => contarAlertas(productos.datos, resumenesPorProducto),
+    [productos.datos, resumenesPorProducto],
+  );
+
+  function alternarAlerta(alerta: TipoAlerta) {
+    setAlertaActiva((actual) => (actual === alerta ? null : alerta));
+  }
+
+  const productosFiltrados = useMemo(
+    () => filtrarPorAlerta(productos.datos, resumenesPorProducto, alertaActiva),
+    [productos.datos, resumenesPorProducto, alertaActiva],
+  );
+
   const gruposPorCategoria = useMemo(
-    () => agruparPorCategoria(productos.datos, categorias.datos),
-    [productos.datos, categorias.datos],
+    () => agruparPorCategoria(productosFiltrados, categorias.datos),
+    [productosFiltrados, categorias.datos],
   );
 
   useHeader({
@@ -105,11 +134,14 @@ export function Stock() {
     );
   } else {
     contenido = (
-      <ListaProductosAgrupada
-        grupos={gruposPorCategoria}
-        piezasAgrupadas={piezasAgrupadas}
-        onSeleccionar={(producto) => navigate(`/stock/producto/${producto.id}`)}
-      />
+      <>
+        <FranjaAlertas conteo={conteoAlertas} alertaActiva={alertaActiva} onAlternar={alternarAlerta} />
+        <ListaProductosAgrupada
+          grupos={gruposPorCategoria}
+          piezasAgrupadas={piezasAgrupadas}
+          onSeleccionar={(producto) => navigate(`/stock/producto/${producto.id}`)}
+        />
+      </>
     );
   }
 

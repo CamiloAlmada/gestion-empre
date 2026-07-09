@@ -230,6 +230,87 @@ function categoria(over: Partial<Categoria> & Pick<Categoria, 'nombre' | 'orden'
   return { id: over.nombre, ...over };
 }
 
+describe('Stock - franja de alertas', () => {
+  it('sin alertas: no renderiza la franja de chips', () => {
+    configurarAuth('admin');
+    const prod = producto({ id: 'p1', nombre: 'Queso Colonia', modoStock: 'granel', stockGranelGramos: peso(5000) });
+    configurarCollections({ productos: estadoOk([prod]) });
+
+    renderizar();
+
+    expect(screen.queryByRole('group', { name: 'Alertas de stock' })).toBeNull();
+  });
+
+  it('con productos vencidos y con stock bajo: muestra ambos chips con su conteo', () => {
+    configurarAuth('admin');
+    const ahora = new Date();
+    const ayer = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate() - 1);
+    const prodVencido = producto({ id: 'p1', nombre: 'Queso Colonia', modoStock: 'fraccionado_por_pieza' });
+    const prodBajo = producto({
+      id: 'p2',
+      nombre: 'Nuez mariposa',
+      modoStock: 'granel',
+      stockGranelGramos: peso(100),
+      umbralAlertaStock: 500,
+    });
+    configurarCollections({
+      productos: estadoOk([prodVencido, prodBajo]),
+      piezas: estadoOk([pieza({ id: 'a', productoId: 'p1', fechaVencimiento: ayer })]),
+    });
+
+    renderizar();
+
+    expect(screen.getByRole('button', { name: '1 por vencer' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '1 stock bajo' })).toBeTruthy();
+  });
+
+  it('tocar el chip "por vencer" filtra la lista a esos productos; volver a tocarlo la restaura', () => {
+    configurarAuth('admin');
+    const ahora = new Date();
+    const ayer = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate() - 1);
+    const prodVencido = producto({ id: 'p1', nombre: 'Queso Colonia', modoStock: 'fraccionado_por_pieza' });
+    const prodOk = producto({ id: 'p2', nombre: 'Nuez mariposa', modoStock: 'granel', stockGranelGramos: peso(5000) });
+    configurarCollections({
+      productos: estadoOk([prodVencido, prodOk]),
+      piezas: estadoOk([pieza({ id: 'a', productoId: 'p1', fechaVencimiento: ayer })]),
+    });
+
+    renderizar();
+    expect(screen.getByText('Queso Colonia')).toBeTruthy();
+    expect(screen.getByText('Nuez mariposa')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: '1 por vencer' }));
+
+    expect(screen.getByText('Queso Colonia')).toBeTruthy();
+    expect(screen.queryByText('Nuez mariposa')).toBeNull();
+    expect(screen.getByRole('button', { name: /1 por vencer/ }).getAttribute('aria-pressed')).toBe('true');
+
+    fireEvent.click(screen.getByRole('button', { name: /1 por vencer/ }));
+
+    expect(screen.getByText('Queso Colonia')).toBeTruthy();
+    expect(screen.getByText('Nuez mariposa')).toBeTruthy();
+  });
+
+  it('tocar el chip "stock bajo" filtra la lista dejando solo esos productos', () => {
+    configurarAuth('admin');
+    const prodBajo = producto({
+      id: 'p1',
+      nombre: 'Nuez mariposa',
+      modoStock: 'granel',
+      stockGranelGramos: peso(100),
+      umbralAlertaStock: 500,
+    });
+    const prodOk = producto({ id: 'p2', nombre: 'Queso Colonia', modoStock: 'granel', stockGranelGramos: peso(5000) });
+    configurarCollections({ productos: estadoOk([prodBajo, prodOk]) });
+
+    renderizar();
+    fireEvent.click(screen.getByRole('button', { name: '1 stock bajo' }));
+
+    expect(screen.getByText('Nuez mariposa')).toBeTruthy();
+    expect(screen.queryByText('Queso Colonia')).toBeNull();
+  });
+});
+
 describe('Stock - agrupación por categoría', () => {
   it('sin categorías definidas: lista plana, sin encabezados de sección', () => {
     configurarAuth('admin');
