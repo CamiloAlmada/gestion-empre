@@ -1,6 +1,7 @@
 import { Outlet } from 'react-router';
 import { useAuth } from '@gestion/firebase-kit';
 import { itemsSelectorStock, SelectorSeccion } from './SelectorSeccion';
+import { useSwipeSeccion } from './useSwipeSeccion';
 
 /**
  * Layout route pathless de las secciones RAÍZ del tab Stock (docs/06-ui-ux.md
@@ -15,14 +16,26 @@ import { itemsSelectorStock, SelectorSeccion } from './SelectorSeccion';
  * esta tarea): las pantallas admin-only (Compras/Proveedores/Precios/
  * Categorías) igual quedan protegidas server-side por `RutaSoloAdmin` en
  * App.tsx — acá solo se decide qué ítems mostrar en el selector.
+ *
+ * El swipe (UI-4c, docs/06-ui-ux.md §2) escucha sobre ESTE contenedor (no el
+ * selector ni el `Outlet`): `useSwipeSeccion` recibe el mismo array `items`
+ * ya filtrado por rol, así que navega respetando el rol sin recalcularlo.
  */
 export function StockLayout() {
   const { perfil } = useAuth();
   const esAdmin = perfil?.rol === 'admin';
+  const items = itemsSelectorStock(esAdmin);
+  const { ref, onTouchStart, onTouchEnd, onTouchCancel } = useSwipeSeccion(items);
 
   return (
-    <div className="flex flex-col gap-4">
-      <SelectorSeccion items={itemsSelectorStock(esAdmin)} />
+    <div
+      ref={ref}
+      onTouchStart={onTouchStart}
+      onTouchEnd={onTouchEnd}
+      onTouchCancel={onTouchCancel}
+      className="flex flex-col gap-4"
+    >
+      <SelectorSeccion items={items} />
       <Outlet />
     </div>
   );

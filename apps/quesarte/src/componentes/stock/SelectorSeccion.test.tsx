@@ -117,4 +117,23 @@ describe('SelectorSeccion', () => {
     expect(screen.queryByText('Pantalla Stock')).toBeNull();
     expect(screen.getByRole('link', { name: 'Catálogo' }).getAttribute('aria-current')).toBe('page');
   });
+
+  it('el ítem activo (y solo él) lleva view-transition-name para el morph de la píldora (docs/06 §2/§3, UI-4c)', () => {
+    renderizar('/stock/productos');
+
+    const nav = within(screen.getByRole('navigation', { name: 'Secciones de Stock' }));
+    const activo = nav.getByRole('link', { name: 'Catálogo' });
+    const inactivo = nav.getByRole('link', { name: 'Stock' });
+
+    // La View Transitions API exige nombre único por documento: si dos
+    // ítems lo llevaran a la vez, `document.startViewTransition` tira
+    // error — por eso el resto de los inactivos NUNCA lo lleva.
+    expect(activo.className).toContain('[view-transition-name:pill-seccion]');
+    expect(inactivo.className).not.toContain('view-transition-name');
+    for (const item of nav.getAllByRole('link')) {
+      if (item !== activo) {
+        expect(item.className).not.toContain('view-transition-name');
+      }
+    }
+  });
 });

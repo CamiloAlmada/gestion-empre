@@ -100,10 +100,19 @@ export function SelectorSeccion({ items }: SelectorSeccionProps) {
             <Link
               key={item.id}
               to={item.a}
+              viewTransition
               aria-current={activo ? 'page' : undefined}
               className={`flex min-h-[44px] items-center justify-center whitespace-nowrap rounded-control px-4 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-inset ${
                 activo
-                  ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300'
+                  ? // `view-transition-name` SOLO en el activo (docs/06-ui-ux.md
+                    // §2/§3, UI-4c): la View Transitions API exige un nombre
+                    // único por documento — si se lo diéramos a todos los
+                    // ítems, `document.startViewTransition` tira error. Con
+                    // el nombre solo acá, el navegador hace el morph de
+                    // posición/tamaño de ESTE elemento entre la foto vieja
+                    // (ítem que dejaba de estar activo) y la nueva (el que
+                    // pasa a estarlo).
+                    'bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300 [view-transition-name:pill-seccion]'
                   : 'text-texto-secundario hover:text-texto'
               }`}
             >
