@@ -20,8 +20,7 @@ const CLASE_ACCION_PRIMARIA =
 /**
  * Listado de Clientes: RAÍZ del tab (docs/06-ui-ux.md §2, 2026-07-10 —
  * decisión del dueño: con el módulo de clientes recién lanzado, es la
- * entrada de uso diario; el Historial general pasa a colgar de acá, ver
- * `pantallas/Historial.tsx`). Sin `volverA`: es tab raíz, igual que
+ * entrada de uso diario). Sin `volverA`: es tab raíz, igual que
  * `Stock.tsx`/`Venta.tsx`. Trae TODA la colección `clientes` con UNA
  * `useCollection` memoizada (ordenada por nombre; colección chica, sin
  * queries por prefijo) y filtra client-side por búsqueda (nombre/alias/
@@ -50,6 +49,16 @@ export function Clientes() {
     titulo: 'Clientes',
     acciones: (
       <>
+        {/* Historial general (consulta cruzada, docs/06-ui-ux.md §2): acción
+            de navegación interna, con etiqueta de texto, a la izquierda del
+            "+" (2026-07-10: el orden y la forma de las acciones son un
+            contrato — el AGREGAR va SIEMPRE al extremo derecho). */}
+        <Link
+          to="/historial"
+          className="inline-flex min-h-[48px] items-center justify-center rounded-control border border-borde bg-superficie px-3 text-sm font-medium text-texto hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
+        >
+          Historial
+        </Link>
         <button
           type="button"
           onClick={() => setAltaAbierta(true)}
@@ -59,15 +68,6 @@ export function Clientes() {
           <span aria-hidden="true">＋</span>
           <span className="hidden md:inline">Agregar</span>
         </button>
-        {/* Historial general (docs/06-ui-ux.md §2, 2026-07-10): acción
-            invertida respecto de antes (era Historial quien enlazaba acá).
-            Mismo estilo que tenía esa acción. */}
-        <Link
-          to="/historial"
-          className="inline-flex min-h-[48px] items-center justify-center rounded-control border border-borde bg-superficie px-3 text-sm font-medium text-texto hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
-        >
-          Historial
-        </Link>
       </>
     ),
   });

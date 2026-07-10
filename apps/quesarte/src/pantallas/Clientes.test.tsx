@@ -137,6 +137,19 @@ describe('Clientes - header', () => {
     const enlace = screen.getByRole('link', { name: 'Historial' });
     expect(enlace.getAttribute('href')).toBe('/historial');
   });
+
+  it('orden de las acciones: "Historial" (navegación) queda a la izquierda del "+" de agregar, que ocupa el extremo derecho (docs/06-ui-ux.md §2, 2026-07-10)', () => {
+    configurarClientes(estadoOk([cliente({ id: 'c1', nombre: 'Ana Pérez' })]));
+    renderizar();
+
+    const contenedor = screen.getByTestId('acciones-header');
+    const hijos = Array.from(contenedor.children);
+    const indiceHistorial = hijos.findIndex((el) => el.textContent === 'Historial');
+    const indiceAgregar = hijos.findIndex((el) => el.getAttribute('aria-label') === 'Agregar cliente');
+
+    expect(indiceHistorial).toBeGreaterThanOrEqual(0);
+    expect(indiceAgregar).toBeGreaterThan(indiceHistorial);
+  });
 });
 
 describe('Clientes - estados', () => {

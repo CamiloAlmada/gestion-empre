@@ -126,6 +126,19 @@ describe('Proveedores', () => {
     expect(screen.getAllByRole('button', { name: 'Agregar proveedor' }).length).toBeGreaterThan(0);
   });
 
+  it('la acción de agregar es un "+" cuadrado con aria-label, sin el texto largo "Agregar proveedor" visible en el cluster (docs/06-ui-ux.md §2, 2026-07-10)', () => {
+    configurarCollection({ datos: [] });
+
+    renderizar();
+
+    const boton = screen.getAllByRole('button', { name: 'Agregar proveedor' })[0]!;
+    // El nombre accesible sale del `aria-label`, no de texto visible: el
+    // botón en sí no repite la palabra "proveedor" (antes era una píldora
+    // con el texto completo).
+    expect(boton.getAttribute('aria-label')).toBe('Agregar proveedor');
+    expect(boton.textContent).not.toContain('proveedor');
+  });
+
   it('estado cargando', () => {
     configurarCollection({ cargando: true });
 

@@ -14,6 +14,14 @@ import { db } from '../firebase';
 import { ModalProveedor } from './ModalProveedor';
 import { useHeader } from '../componentes/header/ContextoHeader';
 
+// Mismas clases que la acción "Agregar" de `Clientes.tsx`/`Productos.tsx`
+// (docs/06-ui-ux.md §2, 2026-07-10: la acción de AGREGAR es SIEMPRE un "+"
+// cuadrado, solo ícono en mobile, nunca un botón con texto largo como
+// "Agregar proveedor" en el cluster — ese texto vive en el `aria-label` y en
+// el botón del estado vacío, más abajo).
+const CLASE_ACCION_PRIMARIA =
+  'inline-flex min-h-[48px] min-w-[48px] items-center justify-center gap-1.5 rounded-control bg-primary-600 px-3 font-medium text-white hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2 focus-visible:ring-offset-superficie';
+
 /** Minúsculas y sin diacríticos, para que la búsqueda ignore acentos (mismo
  * criterio que Productos.tsx). */
 function normalizarTexto(texto: string): string {
@@ -84,9 +92,15 @@ export function Proveedores() {
     titulo: 'Proveedores',
     volverA: { etiqueta: 'Stock', a: '/stock' },
     acciones: (
-      <Button onClick={() => setModalAltaAbierto(true)} className="min-h-[48px]">
-        Agregar proveedor
-      </Button>
+      <button
+        type="button"
+        onClick={() => setModalAltaAbierto(true)}
+        aria-label="Agregar proveedor"
+        className={CLASE_ACCION_PRIMARIA}
+      >
+        <span aria-hidden="true">＋</span>
+        <span className="hidden md:inline">Agregar</span>
+      </button>
     ),
   });
 

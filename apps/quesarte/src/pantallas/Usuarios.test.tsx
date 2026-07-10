@@ -129,6 +129,17 @@ describe('Usuarios', () => {
     expect(screen.getByTestId('volver-header').textContent).toBe('Ajustes:/ajustes');
   });
 
+  it('la acción de agregar es un "+" cuadrado con aria-label "Invitar usuario", sin texto largo visible (docs/06-ui-ux.md §2, 2026-07-10)', () => {
+    configurarAuth();
+    configurarCollection({ datos: [] });
+
+    renderizar();
+
+    const boton = screen.getByRole('button', { name: 'Invitar usuario' });
+    expect(boton.getAttribute('aria-label')).toBe('Invitar usuario');
+    expect(boton.textContent).not.toContain('usuario');
+  });
+
   it('renderiza el listado con nombre, correo, rol y estado', () => {
     configurarAuth();
     configurarCollection({ datos: usuariosFalsos });

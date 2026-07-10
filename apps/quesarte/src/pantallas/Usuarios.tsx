@@ -20,6 +20,14 @@ import { useHeader } from '../componentes/header/ContextoHeader';
 
 const coleccionUsuarios = collection(db, 'usuarios').withConverter(usuarioConverter);
 
+// Mismas clases que la acción "Agregar" de `Clientes.tsx`/`Productos.tsx`/
+// `Proveedores.tsx` (docs/06-ui-ux.md §2, 2026-07-10: la acción de AGREGAR es
+// SIEMPRE un "+" cuadrado, solo ícono en mobile — "Invitar usuario" es la
+// misma clase de acción, alta de una entidad nueva, así que sigue la misma
+// regla en vez de quedar como pill con texto largo).
+const CLASE_ACCION_PRIMARIA =
+  'inline-flex min-h-[48px] min-w-[48px] items-center justify-center gap-1.5 rounded-control bg-primary-600 px-3 font-medium text-white hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2 focus-visible:ring-offset-superficie';
+
 // Mensaje fijo (no el `.message` del error, más técnico) para el fallo
 // parcial crítico de la invitación: instruye al admin qué hacer, ver JSDoc de
 // `PerfilNoCreadoError` en packages/firebase-kit/src/errores.ts.
@@ -127,13 +135,25 @@ export function Usuarios() {
   useHeader({
     titulo: 'Usuarios',
     volverA: { etiqueta: 'Ajustes', a: '/ajustes' },
-    // min-h-[48px]: en mobile esta acción flota sobre la tab bar
-    // (docs/06-ui-ux.md §2 y §5 — targets ≥48px ahí; `Button` no fuerza una
-    // altura mínima propia).
+    // "+" cuadrado (docs/06-ui-ux.md §2, 2026-07-10): única acción de esta
+    // pantalla, misma forma que "Agregar cliente"/"Agregar proveedor" — el
+    // texto completo vive en el `aria-label`. A diferencia de esas dos
+    // pantallas, el estado vacío de acá (ver `vacio` de la `DataTable`, más
+    // abajo) NO repite un botón "Invitar usuario" en texto — se deja así
+    // deliberadamente en esta tarea (NAV-2) para no introducir una segunda
+    // acción con el mismo nombre accesible mientras la lista está vacía
+    // (ambigüedad en los tests existentes que corren justo sobre ese estado);
+    // reportado al tech lead como posible mejora de discoverability a futuro.
     acciones: (
-      <Button onClick={abrirModalInvitar} className="min-h-[48px]">
-        Invitar usuario
-      </Button>
+      <button
+        type="button"
+        onClick={abrirModalInvitar}
+        aria-label="Invitar usuario"
+        className={CLASE_ACCION_PRIMARIA}
+      >
+        <span aria-hidden="true">＋</span>
+        <span className="hidden md:inline">Invitar</span>
+      </button>
     ),
   });
 
