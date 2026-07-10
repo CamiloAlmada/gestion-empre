@@ -22,11 +22,14 @@ import { useHeader } from '../componentes/header/ContextoHeader';
  * La anulación (solo admin) se dispara desde el detalle pero el modal de
  * confirmación se orquesta acá, igual que los modales de escritura de Stock.
  *
- * Sección interna del tab Clientes (docs/06-ui-ux.md §2, 2026-07-10 — antes
- * era tab propio): su `‹ volver` lleva a Clientes y el tab Clientes queda
- * activo mientras se está acá (ver `TAB_POR_SEGMENTO` en Shell.tsx). Ya no
- * declara la acción "Clientes" (quedó invertida: ahora es Clientes quien
- * declara la acción "Historial", ver `pantallas/Clientes.tsx`).
+ * Historial DE VENTAS (docs/06-ui-ux.md §2, 2026-07-10, ajustado tras uso
+ * real del dueño): cuelga del tab **Venta** — su `‹ volver` lleva a Venta y
+ * el tab Venta queda activo mientras se está acá o en el detalle de una
+ * venta (ver `TAB_POR_SEGMENTO` en Shell.tsx). Dos entradas: el icono de
+ * historial del header de Venta (`accionHeader`, ver `pantallas/Venta.tsx`)
+ * y la acción "Historial" del listado de Clientes (consulta cruzada
+ * frecuente, ver `pantallas/Clientes.tsx`) — esta pantalla no declara
+ * ninguna acción propia de vuelta hacia esas pantallas.
  */
 export function Historial() {
   const { perfil } = useAuth();
@@ -35,7 +38,7 @@ export function Historial() {
 
   useHeader({
     titulo: 'Historial',
-    volverA: { etiqueta: 'Clientes', a: '/clientes' },
+    volverA: { etiqueta: 'Venta', a: '/venta' },
   });
 
   const [intento, setIntento] = useState(0);

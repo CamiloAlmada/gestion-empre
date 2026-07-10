@@ -137,13 +137,13 @@ afterEach(() => {
 });
 
 describe('Historial - header', () => {
-  it('vuelve a Clientes (docs/06-ui-ux.md §2, 2026-07-10: Historial cuelga de Clientes)', () => {
+  it('vuelve a Venta (docs/06-ui-ux.md §2, 2026-07-10: Historial es historial DE VENTAS y cuelga de Venta)', () => {
     configurarAuth('admin');
     configurarVentas(estadoOk([]));
 
     renderizar();
 
-    expect(screen.getByTestId('volver-header').textContent).toBe('Clientes:/clientes');
+    expect(screen.getByTestId('volver-header').textContent).toBe('Venta:/venta');
   });
 });
 

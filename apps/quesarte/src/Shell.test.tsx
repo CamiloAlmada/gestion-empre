@@ -136,15 +136,13 @@ describe('Shell', () => {
       );
     });
 
-    it('parado en el Historial general (/historial), el tab activo es Clientes, no Venta', () => {
+    it('parado en el Historial general (/historial), el tab activo es Venta, no Clientes (docs/06-ui-ux.md §2, 2026-07-10: Historial es historial DE VENTAS)', () => {
       configurarAuth('admin');
 
       renderizarEn('/historial');
 
-      expect(screen.getByRole('button', { name: /Clientes/ }).getAttribute('aria-current')).toBe(
-        'page',
-      );
-      expect(screen.getByRole('button', { name: 'Venta' }).getAttribute('aria-current')).toBeNull();
+      expect(screen.getByRole('button', { name: 'Venta' }).getAttribute('aria-current')).toBe('page');
+      expect(screen.getByRole('button', { name: /Clientes/ }).getAttribute('aria-current')).toBeNull();
       expect(screen.getByRole('heading', { name: 'Historial', level: 1 })).toBeTruthy();
     });
 

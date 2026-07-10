@@ -114,11 +114,12 @@ vi.mock('./pantallas/DetalleClientePantalla', () => ({
   DetalleClientePantalla: () => <div>Contenido de DetalleClientePantalla</div>,
 }));
 
-// Historial (pantalla de /historial, sin cambios de URL — 2026-07-10 pasó a
-// colgar de Clientes en la jerarquía, ver docs/06-ui-ux.md §2) también arma
-// su query de Firestore al importarse: mismo motivo que arriba, se mockea
-// entera (Historial.test.tsx cubre su contenido), este suite solo prueba
-// ruteo y el gate de rol (no está protegida por RutaSoloAdmin).
+// Historial (pantalla de /historial, sin cambios de URL — 2026-07-10 es el
+// historial DE VENTAS y cuelga de Venta en la jerarquía, ver docs/06-ui-ux.md
+// §2) también arma su query de Firestore al importarse: mismo motivo que
+// arriba, se mockea entera (Historial.test.tsx cubre su contenido), este
+// suite solo prueba ruteo y el gate de rol (no está protegida por
+// RutaSoloAdmin).
 vi.mock('./pantallas/Historial', () => ({
   Historial: () => <div>Contenido de Historial</div>,
 }));
@@ -298,15 +299,13 @@ describe('App - rutas', () => {
     expect(screen.getByText('Contenido de DetalleClientePantalla')).toBeTruthy();
   });
 
-  it('navega a /historial (Historial general, URL sin cambios) y el tab activo es Clientes', () => {
+  it('navega a /historial (Historial general, URL sin cambios) y el tab activo es Venta', () => {
     configurarAuth('admin');
 
     renderizarEn('/historial');
 
     expect(screen.getByText('Contenido de Historial')).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Clientes/ }).getAttribute('aria-current')).toBe(
-      'page',
-    );
+    expect(screen.getByRole('button', { name: 'Venta' }).getAttribute('aria-current')).toBe('page');
   });
 
   it('vendedor también puede navegar a /historial (no está gateada a admin)', () => {

@@ -21,15 +21,16 @@ const TITULOS_POR_TAB: Record<string, string> = {
 };
 
 // Primer segmento de ruta -> tab que debe iluminarse en la barra. Coincide
-// 1:1 con `TITULOS_POR_TAB` salvo `historial`: el Historial general cuelga de
-// Clientes en la jerarquía (docs/06-ui-ux.md §2, 2026-07-10) aunque su URL
-// siga siendo `/historial` (no se movió: hay PWAs instaladas con ese deep
-// link — ver App.tsx).
+// 1:1 con `TITULOS_POR_TAB` salvo `historial`: el Historial general (de
+// VENTAS) cuelga del tab Venta en la jerarquía (docs/06-ui-ux.md §2,
+// 2026-07-10, ajustado tras uso real del dueño) aunque su URL siga siendo
+// `/historial` (no se movió: hay PWAs instaladas con ese deep link — ver
+// App.tsx).
 const TAB_POR_SEGMENTO: Record<string, string> = {
   venta: 'venta',
   stock: 'stock',
   clientes: 'clientes',
-  historial: 'clientes',
+  historial: 'venta',
   reportes: 'reportes',
   ajustes: 'ajustes',
 };

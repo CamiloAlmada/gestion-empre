@@ -60,12 +60,13 @@ export function App() {
               </RutaSoloAdmin>
             }
           />
-          {/* Clientes es la raíz del tab (docs/06-ui-ux.md §2, 2026-07-10);
-              Historial general cuelga de él en la jerarquía (volverA + tab
-              activo, ver Shell.tsx) pero su URL no cambió: hay PWAs
-              instaladas con ese deep link ("ver/anular la última venta"). */}
+          {/* Clientes es la raíz del tab (docs/06-ui-ux.md §2, 2026-07-10). */}
           <Route path="clientes" element={<Clientes />} />
           <Route path="clientes/cliente/:id" element={<DetalleClientePantalla />} />
+          {/* Historial general (DE VENTAS) cuelga del tab Venta en la
+              jerarquía (volverA + tab activo, ver Shell.tsx, docs/06-ui-ux.md
+              §2, 2026-07-10) pero su URL no cambió: hay PWAs instaladas con
+              ese deep link ("ver/anular la última venta"). */}
           <Route path="historial" element={<Historial />} />
           {/* Redirects de las rutas viejas de Clientes (vivían bajo
               /historial antes de que el tab se invirtiera) — mismo motivo,
