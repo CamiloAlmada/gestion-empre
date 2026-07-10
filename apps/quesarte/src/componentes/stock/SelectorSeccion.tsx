@@ -19,7 +19,17 @@ export function itemsSelectorStock(esAdmin: boolean): ItemSelectorSeccion[] {
   return [
     { id: 'stock', etiqueta: 'Stock', a: '/stock' },
     { id: 'catalogo', etiqueta: 'Catálogo', a: '/stock/productos' },
-    ...(esAdmin ? [{ id: 'proveedores', etiqueta: 'Proveedores', a: '/stock/proveedores' }] : []),
+    ...(esAdmin
+      ? [
+          { id: 'proveedores', etiqueta: 'Proveedores', a: '/stock/proveedores' },
+          // "Precios" (F2-F2, docs/03-compras-costos-precios.md): solo admin,
+          // mismo criterio que Proveedores (el vendedor no ve costos ni
+          // edición de precios, docs/06-ui-ux.md §2). Al final de la fila
+          // (spec de la tarea) — el orden coincide con `ITEMS_SELECTOR` de
+          // `Precios.tsx`.
+          { id: 'precios', etiqueta: 'Precios', a: '/stock/precios' },
+        ]
+      : []),
   ];
 }
 

@@ -35,6 +35,7 @@ const DetalleProductoPantalla = lazy(() =>
 const Proveedores = lazy(() =>
   import('./pantallas/Proveedores').then((m) => ({ default: m.Proveedores })),
 );
+const Precios = lazy(() => import('./pantallas/Precios').then((m) => ({ default: m.Precios })));
 const DetalleProveedorPantalla = lazy(() =>
   import('./pantallas/DetalleProveedorPantalla').then((m) => ({
     default: m.DetalleProveedorPantalla,
@@ -98,6 +99,16 @@ export function App() {
             element={
               <RutaSoloAdmin>
                 <DetalleProveedorPantalla />
+              </RutaSoloAdmin>
+            }
+          />
+          {/* Precios y márgenes (F2-F2, docs/03-compras-costos-precios.md):
+              solo admin, mismo criterio que Proveedores. */}
+          <Route
+            path="stock/precios"
+            element={
+              <RutaSoloAdmin>
+                <Precios />
               </RutaSoloAdmin>
             }
           />
