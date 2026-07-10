@@ -147,6 +147,14 @@ describe('DetalleProveedorPantalla', () => {
     expect(screen.getByTestId('volver-header').textContent).toBe('Proveedores:/stock/proveedores');
   });
 
+  it('no muestra el SelectorSeccion (es un drill-down, no una raíz de sección — docs/06 §2)', () => {
+    configurarProveedor(estadoOkDoc(proveedorDe({ id: 'p1', nombre: 'Quesos del Norte' })));
+
+    renderizar('p1');
+
+    expect(screen.queryByRole('navigation', { name: 'Secciones de Stock' })).toBeNull();
+  });
+
   it('muestra contacto, dirección, RUT y notas cuando están presentes', () => {
     configurarProveedor(
       estadoOkDoc(

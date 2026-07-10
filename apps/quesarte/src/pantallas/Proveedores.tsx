@@ -12,7 +12,14 @@ import {
 import { Button, CampoBusqueda, normalizarBusqueda, useToasts } from '@gestion/ui';
 import { db } from '../firebase';
 import { ModalProveedor } from './ModalProveedor';
+import { itemsSelectorStock, SelectorSeccion } from '../componentes/stock/SelectorSeccion';
 import { useHeader } from '../componentes/header/ContextoHeader';
+
+// Ítems del selector de sección con "Proveedores" siempre incluido: esta
+// pantalla YA está protegida por `RutaSoloAdmin` en App.tsx (solo un admin
+// llega acá), a diferencia de Stock/Productos que sirven ambos roles y
+// necesitan el flag real de `useAuth`.
+const ITEMS_SELECTOR = itemsSelectorStock(true);
 
 // Mismas clases que la acción "Agregar" de `Clientes.tsx`/`Productos.tsx`
 // (docs/06-ui-ux.md §2, 2026-07-10: la acción de AGREGAR es SIEMPRE un "+"
@@ -98,7 +105,8 @@ export function Proveedores() {
 
   useHeader({
     titulo: 'Proveedores',
-    volverA: { etiqueta: 'Stock', a: '/stock' },
+    // Ya no declara `volverA` (docs/06-ui-ux.md §2, 2026-07-10): el
+    // `SelectorSeccion` de abajo es la navegación entre hermanas de Stock.
     acciones: (
       <button
         type="button"
@@ -202,6 +210,8 @@ export function Proveedores() {
 
   return (
     <div className="flex flex-col gap-4">
+      <SelectorSeccion items={ITEMS_SELECTOR} />
+
       {!enLinea && (
         <div
           role="status"

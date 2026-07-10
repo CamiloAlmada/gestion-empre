@@ -193,6 +193,16 @@ describe('DetalleProductoPantalla - header contextual', () => {
     expect(screen.getByTestId('titulo-header').textContent).toBe('Queso Colonia');
     expect(screen.getByTestId('volver-header').textContent).toBe('Stock:/stock');
   });
+
+  it('no muestra el SelectorSeccion (es un drill-down, no una raíz de sección — docs/06 §2)', () => {
+    configurarAuth('admin');
+    const prod = producto({ id: 'p1', nombre: 'Queso Colonia', modoStock: 'fraccionado_por_pieza' });
+    configurarCollections({ productos: estadoOk([prod]), piezas: estadoOk([]) });
+
+    renderizar();
+
+    expect(screen.queryByRole('navigation', { name: 'Secciones de Stock' })).toBeNull();
+  });
 });
 
 describe('DetalleProductoPantalla - permisos y acciones', () => {

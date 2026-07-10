@@ -116,14 +116,25 @@ describe('Proveedores', () => {
     estadoProveedores = { datos: [], cargando: false, error: null };
   });
 
-  it('header contextual: título "Proveedores", volver a Stock y acción "Agregar proveedor"', () => {
+  it('header contextual: título "Proveedores", sin volverA (docs/06 §2) y acción "Agregar proveedor"', () => {
     configurarCollection({ datos: [] });
 
     renderizar();
 
     expect(screen.getByTestId('titulo-header').textContent).toBe('Proveedores');
-    expect(screen.getByTestId('volver-header').textContent).toBe('Stock:/stock');
+    expect(screen.getByTestId('volver-header').textContent).toBe('');
     expect(screen.getAllByRole('button', { name: 'Agregar proveedor' }).length).toBeGreaterThan(0);
+  });
+
+  it('muestra el SelectorSeccion con Stock, Catálogo y Proveedores activo', () => {
+    configurarCollection({ datos: [] });
+
+    renderizar();
+
+    expect(screen.getByRole('navigation', { name: 'Secciones de Stock' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Stock' }).getAttribute('href')).toBe('/stock');
+    expect(screen.getByRole('link', { name: 'Catálogo' }).getAttribute('href')).toBe('/stock/productos');
+    expect(screen.getByRole('link', { name: 'Proveedores' }).getAttribute('aria-current')).toBe('page');
   });
 
   it('la acción de agregar es un "+" cuadrado con aria-label, sin el texto largo "Agregar proveedor" visible en el cluster (docs/06-ui-ux.md §2, 2026-07-10)', () => {

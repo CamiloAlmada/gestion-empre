@@ -16,6 +16,7 @@ import { contarAlertas, filtrarPorAlerta, type TipoAlerta } from '../componentes
 import { FranjaAlertas } from '../componentes/stock/FranjaAlertas';
 import { ListaProductosAgrupada } from '../componentes/stock/ListaProductosAgrupada';
 import { agruparPiezasPorProducto, calcularResumen, type ResumenStock } from '../componentes/stock/resumen';
+import { itemsSelectorStock, SelectorSeccion } from '../componentes/stock/SelectorSeccion';
 import { useHeader } from '../componentes/header/ContextoHeader';
 
 /**
@@ -111,33 +112,11 @@ export function Stock() {
     [productosFiltrados, categorias.datos],
   );
 
-  useHeader({
-    titulo: 'Stock',
-    // min-h-[48px]: estas acciones ahora también flotan sobre la tab bar en
-    // mobile (zona del pulgar, docs/06-ui-ux.md §2 y §5 — targets ≥48px).
-    // "Proveedores" solo para admin (docs/07-clientes-proveedores.md: "el
-    // vendedor no ve datos bancarios ni costos de proveedor" — acá se oculta
-    // la entrada, la ruta además queda protegida por `RutaSoloAdmin` en
-    // App.tsx si un vendedor navega a mano).
-    acciones: (
-      <>
-        <Link
-          to="/stock/productos"
-          className="inline-flex min-h-[48px] items-center justify-center rounded-control border border-borde bg-superficie px-3 text-sm font-medium text-texto hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
-        >
-          Catálogo
-        </Link>
-        {esAdmin && (
-          <Link
-            to="/stock/proveedores"
-            className="inline-flex min-h-[48px] items-center justify-center rounded-control border border-borde bg-superficie px-3 text-sm font-medium text-texto hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
-          >
-            Proveedores
-          </Link>
-        )}
-      </>
-    ),
-  });
+  // Stock ya NO declara acciones de navegación en el header (docs/06-ui-ux.md
+  // §2, 2026-07-10): el `SelectorSeccion` de abajo las reemplaza. Sin
+  // acciones contextuales propias, el cluster flotante queda libre para las
+  // de la sección activa.
+  useHeader({ titulo: 'Stock' });
 
   function reintentar() {
     setIntento((n) => n + 1);
@@ -166,7 +145,7 @@ export function Stock() {
           to="/stock/productos"
           className="inline-flex min-h-[44px] items-center justify-center rounded-control bg-primary-600 px-4 font-medium text-white hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2 focus-visible:ring-offset-superficie"
         >
-          Ir a Productos
+          Ir a Catálogo
         </Link>
       </div>
     );
@@ -183,5 +162,10 @@ export function Stock() {
     );
   }
 
-  return <div className="flex flex-col gap-4">{contenido}</div>;
+  return (
+    <div className="flex flex-col gap-4">
+      <SelectorSeccion items={itemsSelectorStock(esAdmin)} />
+      {contenido}
+    </div>
+  );
 }

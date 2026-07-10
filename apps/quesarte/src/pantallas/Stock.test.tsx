@@ -170,39 +170,44 @@ describe('Stock - estados', () => {
     expect(() => fireEvent.click(boton)).not.toThrow();
   });
 
-  it('vacío: mensaje y link a Productos', () => {
+  it('vacío: mensaje y link a Catálogo', () => {
     configurarAuth('admin');
     configurarCollections({ productos: estadoOk([]), piezas: estadoOk([]) });
 
     renderizar();
 
     expect(screen.getByText('Sin productos — creá el catálogo primero.')).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Ir a Productos' }).getAttribute('href')).toBe('/stock/productos');
+    expect(screen.getByRole('link', { name: 'Ir a Catálogo' }).getAttribute('href')).toBe('/stock/productos');
   });
 });
 
 describe('Stock - header contextual', () => {
-  it('setea el título "Stock" y una acción "Catálogo" que linkea a /stock/productos', () => {
+  it('setea el título "Stock" y no declara acciones de navegación (el SelectorSeccion las reemplaza, docs/06 §2)', () => {
     configurarAuth('admin');
     configurarCollections({ productos: estadoOk([]), piezas: estadoOk([]) });
 
     renderizar();
 
-    const link = screen.getByRole('link', { name: 'Catálogo' });
-    expect(link.getAttribute('href')).toBe('/stock/productos');
+    expect(screen.getByTestId('acciones').textContent).toBe('');
   });
+});
 
-  it('admin: además ve la acción "Proveedores" que linkea a /stock/proveedores', () => {
+describe('Stock - SelectorSeccion', () => {
+  it('admin: ve Stock, Catálogo y Proveedores, con "Stock" marcado activo (aria-current)', () => {
     configurarAuth('admin');
     configurarCollections({ productos: estadoOk([]), piezas: estadoOk([]) });
 
     renderizar();
 
-    const link = screen.getByRole('link', { name: 'Proveedores' });
-    expect(link.getAttribute('href')).toBe('/stock/proveedores');
+    const nav = screen.getByRole('navigation', { name: 'Secciones de Stock' });
+    expect(nav).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Catálogo' }).getAttribute('href')).toBe('/stock/productos');
+    expect(screen.getByRole('link', { name: 'Proveedores' }).getAttribute('href')).toBe('/stock/proveedores');
+    expect(screen.getByRole('link', { name: 'Stock' }).getAttribute('aria-current')).toBe('page');
+    expect(screen.getByRole('link', { name: 'Catálogo' }).getAttribute('aria-current')).toBeNull();
   });
 
-  it('vendedor: no ve la acción "Proveedores" (solo admin, docs/07)', () => {
+  it('vendedor: no ve el ítem "Proveedores" (solo admin, docs/07)', () => {
     configurarAuth('vendedor');
     configurarCollections({ productos: estadoOk([]), piezas: estadoOk([]) });
 

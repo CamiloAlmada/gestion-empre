@@ -26,6 +26,7 @@ import {
   type DatosProductoFormulario,
 } from './ModalProducto';
 import { ModalCategorias } from './ModalCategorias';
+import { itemsSelectorStock, SelectorSeccion } from '../componentes/stock/SelectorSeccion';
 import { useHeader } from '../componentes/header/ContextoHeader';
 
 // Acciones compactas del header (docs/06-ui-ux.md §2, hasta 2 por pantalla):
@@ -142,8 +143,11 @@ export function Productos() {
   const [intentoIdCategorias, setIntentoIdCategorias] = useState(0);
 
   useHeader({
-    titulo: 'Productos',
-    volverA: { etiqueta: 'Stock', a: '/stock' },
+    // Título "Catálogo" (docs/06-ui-ux.md §2, 2026-07-10): coincide con el
+    // ítem del `SelectorSeccion` de abajo. Ya no declara `volverA` — el
+    // selector ES la navegación entre hermanas dentro de Stock; el back del
+    // sistema sigue funcionando por history.
+    titulo: 'Catálogo',
     acciones: esAdmin ? (
       <>
         <button type="button" onClick={() => setModalCategoriasAbierto(true)} className={CLASE_ACCION_SECUNDARIA}>
@@ -327,6 +331,8 @@ export function Productos() {
 
   return (
     <div className="flex flex-col gap-4">
+      <SelectorSeccion items={itemsSelectorStock(esAdmin)} />
+
       {!enLinea && (
         <div
           role="status"

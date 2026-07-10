@@ -211,14 +211,34 @@ describe('Productos', () => {
     estadoCategorias = { datos: [], cargando: false, error: null };
   });
 
-  it('header contextual: título "Productos" (≠ "Stock") y volver a Stock', () => {
+  it('header contextual: título "Catálogo" (coincide con el ítem del SelectorSeccion) y sin volverA (docs/06 §2)', () => {
     configurarAuth();
     configurarCollection({ datos: [] });
 
     renderizar();
 
-    expect(screen.getByTestId('titulo-header').textContent).toBe('Productos');
-    expect(screen.getByTestId('volver-header').textContent).toBe('Stock:/stock');
+    expect(screen.getByTestId('titulo-header').textContent).toBe('Catálogo');
+    expect(screen.getByTestId('volver-header').textContent).toBe('');
+  });
+
+  it('muestra el SelectorSeccion con "Catálogo" activo', () => {
+    configurarAuth();
+    configurarCollection({ datos: [] });
+
+    renderizar();
+
+    expect(screen.getByRole('navigation', { name: 'Secciones de Stock' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Stock' }).getAttribute('href')).toBe('/stock');
+    expect(screen.getByRole('link', { name: 'Proveedores' }).getAttribute('href')).toBe('/stock/proveedores');
+  });
+
+  it('vendedor: el SelectorSeccion no muestra "Proveedores"', () => {
+    configurarAuth({ perfil: { ...authPorDefecto().perfil, rol: 'vendedor' } });
+    configurarCollection({ datos: [] });
+
+    renderizar();
+
+    expect(screen.queryByRole('link', { name: 'Proveedores' })).toBeNull();
   });
 
   it('admin: el header contextual expone las acciones "Agregar" y "Categorías"', () => {
