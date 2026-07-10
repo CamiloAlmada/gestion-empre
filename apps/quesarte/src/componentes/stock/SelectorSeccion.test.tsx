@@ -11,9 +11,9 @@ describe('itemsSelectorStock', () => {
     expect(items.map((i) => i.etiqueta)).toEqual(['Stock', 'Catálogo']);
   });
 
-  it('admin: suma Proveedores', () => {
+  it('admin: suma Compras y Proveedores', () => {
     const items = itemsSelectorStock(true);
-    expect(items.map((i) => i.etiqueta)).toEqual(['Stock', 'Catálogo', 'Proveedores']);
+    expect(items.map((i) => i.etiqueta)).toEqual(['Stock', 'Catálogo', 'Compras', 'Proveedores']);
   });
 });
 
@@ -39,6 +39,7 @@ describe('SelectorSeccion', () => {
 
     expect(screen.getByRole('link', { name: 'Stock' }).getAttribute('href')).toBe('/stock');
     expect(screen.getByRole('link', { name: 'Catálogo' }).getAttribute('href')).toBe('/stock/productos');
+    expect(screen.getByRole('link', { name: 'Compras' }).getAttribute('href')).toBe('/stock/compras');
     expect(screen.getByRole('link', { name: 'Proveedores' }).getAttribute('href')).toBe('/stock/proveedores');
   });
 
@@ -61,9 +62,10 @@ describe('SelectorSeccion', () => {
     expect(nav.getByRole('link', { name: 'Catálogo' }).getAttribute('aria-current')).toBeNull();
   });
 
-  it('vendedor: no ve el ítem "Proveedores"', () => {
+  it('vendedor: no ve los ítems "Compras" ni "Proveedores"', () => {
     renderizar('/stock', false);
 
+    expect(screen.queryByRole('link', { name: 'Compras' })).toBeNull();
     expect(screen.queryByRole('link', { name: 'Proveedores' })).toBeNull();
   });
 

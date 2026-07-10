@@ -32,6 +32,10 @@ const DetalleProductoPantalla = lazy(() =>
     default: m.DetalleProductoPantalla,
   })),
 );
+const Compras = lazy(() => import('./pantallas/Compras').then((m) => ({ default: m.Compras })));
+const CompraPantalla = lazy(() =>
+  import('./pantallas/CompraPantalla').then((m) => ({ default: m.CompraPantalla })),
+);
 const Proveedores = lazy(() =>
   import('./pantallas/Proveedores').then((m) => ({ default: m.Proveedores })),
 );
@@ -85,6 +89,22 @@ export function App() {
           <Route path="stock" element={<Stock />} />
           <Route path="stock/productos" element={<Productos />} />
           <Route path="stock/producto/:id" element={<DetalleProductoPantalla />} />
+          <Route
+            path="stock/compras"
+            element={
+              <RutaSoloAdmin>
+                <Compras />
+              </RutaSoloAdmin>
+            }
+          />
+          <Route
+            path="stock/compra/:id"
+            element={
+              <RutaSoloAdmin>
+                <CompraPantalla />
+              </RutaSoloAdmin>
+            }
+          />
           <Route
             path="stock/proveedores"
             element={
