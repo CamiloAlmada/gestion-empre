@@ -63,15 +63,37 @@ tech lead; no se ignora en silencio.
   "secondary tabs" de Material 3; los chips NO se usan para navegar, solo para
   filtrar): dentro del tab **Stock**, las pantallas raíz de sección muestran
   bajo el header una fila horizontal scrolleable
-  `Stock | Catálogo | Compras | Proveedores | Precios` (filtrada por rol: el
-  vendedor ve `Stock | Catálogo`; Compras/Precios aparecen cuando existan —
-  F2-F). Semántica de pestañas sobre **rutas reales** (back del sistema
-  funciona, cada sección linkeable, ítem activo resaltado y anunciado como
+  `Stock | Catálogo | Compras | Proveedores | Precios | Categorías` (filtrada
+  por rol: el vendedor ve `Stock | Catálogo`). **Categorías** (tanda UI-4,
+  2026-07-10, pedido del dueño) dejó de ser modal de Catálogo: es una sección
+  más, listado común solo-admin, al final por baja frecuencia de uso.
+  Semántica de pestañas sobre **rutas reales** (back del sistema funciona,
+  cada sección linkeable, ítem activo resaltado y anunciado como
   seleccionado), presentación de fila contenida en superficie redondeada —
   deliberadamente DISTINTA de los chips de filtro. En drill-down (fichas) el
   selector desaparece y rige la flecha `‹`. Stock ya NO declara acciones de
   navegación en el header: el cluster flotante queda para las acciones
   contextuales de la sección activa (p. ej. su "+").
+  - **Layout compartido** (UI-4): las secciones raíz de Stock viven bajo un
+    layout route que renderiza el selector UNA vez sobre un `Outlet` — el
+    selector no se remonta al cambiar de sección (conserva su scroll
+    horizontal) y es el único dueño del gesto de swipe. Las fichas de detalle
+    (producto, compra, proveedor) quedan FUERA del layout: sin selector y sin
+    swipe.
+  - **Swipe entre secciones** (UI-4, pedido del dueño): deslizar horizontal
+    sobre el contenido navega a la sección vecina (respetando el filtro por
+    rol). Discriminación de gesto obligatoria: solo dispara si el movimiento
+    es claramente horizontal (umbral de distancia + dominancia de eje, mismo
+    criterio que el arrastre del carrito §6) y NUNCA si el gesto nace en un
+    contenedor con scroll horizontal propio (el selector mismo, tablas). En
+    los extremos no hay wrap-around.
+  - **Píldora animada** (UI-4): la transición del ítem activo del selector se
+    anima con la **View Transitions API** nativa (`view-transition-name` en la
+    píldora + navegación con `viewTransition` de react-router): el navegador
+    hace el morph de posición/tamaño sin JS de animación. Firefox degrada a
+    cambio instantáneo; `prefers-reduced-motion: reduce` la desactiva. Esta es
+    la única animación de navegación aprobada — no extender a otras rutas sin
+    decisión explícita.
   - Hasta **2 acciones contextuales** por pantalla (las de más frecuencia);
     más que eso → menú "⋮". Acciones fuera de contexto: prohibidas.
   - **Orden y forma consistentes** (2026-07-10, feedback del dueño): la acción
@@ -119,7 +141,11 @@ tech lead; no se ignora en silencio.
   "Nombre, alias o teléfono"). Forma por token propio: Minimalista mantiene la
   redondez de los inputs actuales; Cálido es píldora completa (como la tab
   bar). La normalización de búsqueda (acento-insensible) vive en UN helper
-  compartido, no duplicada por pantalla.
+  compartido, no duplicada por pantalla. **Ancho completo SIEMPRE** (UI-4,
+  2026-07-10, feedback del dueño): el campo ocupa todo el ancho del contenido
+  en su propia fila, como en Venta — prohibido el wrapper `max-w-*` heredado
+  del patrón viejo de `Input` con label. Los controles secundarios (chips,
+  acciones de filtro) van en filas debajo, nunca al costado de la búsqueda.
 - **Chips de filtro** (2026-07-10): píldoras sueltas bajo la búsqueda,
   scrolleables en horizontal; activo con relleno primario y texto en par
   aprobado (§7), inactivo tenue. Se usan SOLO para filtrar lo visible
