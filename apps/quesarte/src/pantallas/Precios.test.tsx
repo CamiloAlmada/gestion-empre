@@ -421,6 +421,60 @@ describe('Precios', () => {
     });
   });
 
+  describe('M2 (review Fase 2): pieza_entera/fraccionado_por_pieza con modoPrecio "por_unidad"', () => {
+    function productoPiezaPorUnidad(over: Partial<Producto> = {}): Producto {
+      return productoDe({
+        id: 'p1',
+        nombre: 'Salame tandilero',
+        modoStock: 'pieza_entera',
+        modoPrecio: 'por_unidad',
+        costoPromedioCents: money(30000), // $300/kg (compras SIEMPRE acumulan pieza en $/kg)
+        precioVentaCents: money(50000), // $500/unidad — precio fijo (400-300 sería "bajo" un objetivo mal calculado)
+        margenObjetivoBps: 4000,
+        ...over,
+      });
+    }
+
+    it('el costo se rotula "/kg" (no "/u" del modoPrecio) y el margen actual es "—"', () => {
+      configurarCollection({ datos: [productoPiezaPorUnidad()] });
+      renderizar();
+
+      const fila = tabla().getByText('Salame tandilero').closest('tr') as HTMLElement;
+      expect(within(fila).getByText('$ 300,00 /kg')).toBeTruthy();
+      expect(within(fila).getByText('$ 500,00 /u')).toBeTruthy(); // precio: unidad de VENTA, sin cambios
+      expect(within(fila).getByText('—')).toBeTruthy(); // margen actual, único "—" en la fila
+    });
+
+    it('no dispara la alerta "Bajo objetivo" aunque el margen crudo (kg vs. unidad) daría por debajo del objetivo', () => {
+      configurarCollection({ datos: [productoPiezaPorUnidad()] });
+      renderizar();
+
+      const fila = tabla().getByText('Salame tandilero').closest('tr') as HTMLElement;
+      expect(within(fila).queryByText('Bajo objetivo')).toBeNull();
+    });
+
+    it('no entra a "Aplicar sugeridos": el botón cuenta 0 candidatos con este único producto', () => {
+      configurarCollection({ datos: [productoPiezaPorUnidad()] });
+      renderizar();
+
+      const boton = screen.getByRole('button', { name: 'Aplicar sugeridos (0)' }) as HTMLButtonElement;
+      expect(boton.disabled).toBe(true);
+    });
+
+    it('el editor de margen objetivo del modal queda deshabilitado con su nota', () => {
+      configurarCollection({ datos: [productoPiezaPorUnidad()] });
+      renderizar();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Editar' }));
+
+      const input = screen.getByLabelText('Margen objetivo (%)') as HTMLInputElement;
+      expect(input.disabled).toBe(true);
+      expect(
+        screen.getByText('Costo por kg y precio por unidad no son comparables sin el peso de la pieza.'),
+      ).toBeTruthy();
+    });
+  });
+
   it('gate de admin: la ruta /stock/precios está protegida por RutaSoloAdmin en App.tsx (no hay lógica de rol dentro de Precios.tsx)', () => {
     // Precios.tsx en sí no rama por rol (a diferencia de Productos.tsx): esta
     // pantalla asume que solo llega un admin, gateado en App.tsx. El test de

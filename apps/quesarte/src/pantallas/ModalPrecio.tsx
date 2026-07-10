@@ -9,7 +9,7 @@ import {
   type Money,
   type Producto,
 } from '@gestion/core';
-import { MULTIPLO_REDONDEO_CENTS_DEFAULT } from '../componentes/stock/margenes';
+import { MULTIPLO_REDONDEO_CENTS_DEFAULT, margenComparable, unidadCosto } from '../componentes/stock/margenes';
 
 /** Datos validados que salen del formulario hacia `Precios.tsx`. `undefined`
  * en `margenObjetivoBps` significa "borrar el campo" (mismo criterio que
@@ -147,6 +147,15 @@ function CampoPorcentaje({
  * se omiten los bloques de margen actual/sugerido, pero el precio se sigue
  * pudiendo editar (y el margen objetivo se puede seguir cargando de
  * antemano, para cuando el producto tenga costo).
+ *
+ * Mismo tratamiento (nota + bloques omitidos) cuando el costo y el precio
+ * están en unidades distintas (`!margenComparable`, hallazgo **M2** del
+ * review de Fase 2): un producto `fraccionado_por_pieza`/`pieza_entera` con
+ * `modoPrecio: 'por_unidad'` (combinación legítima para la venta, p. ej. un
+ * salame a precio fijo) tiene costo SIEMPRE en $/kg (`unidadCosto`) — acá
+ * además el editor de margen objetivo queda deshabilitado con una nota
+ * corta (no tiene sentido cargar un objetivo que nunca va a poder sugerir
+ * un precio sin el peso de la pieza de por medio).
  */
 export function ModalPrecio({ abierto, producto, guardando, onGuardar, onCerrar }: ModalPrecioProps) {
   const [precio, setPrecio] = useState<Money | null>(null);
@@ -187,17 +196,23 @@ export function ModalPrecio({ abierto, producto, guardando, onGuardar, onCerrar 
 
   const costoCents = productoMostrado.costoPromedioCents;
   const tieneCosto = costoCents > 0;
-  const etiquetaUnidad = productoMostrado.modoPrecio === 'por_kg' ? 'por kg' : 'por unidad';
+  // Unidad del PRECIO de venta (etiqueta del MoneyInput) vs. unidad del
+  // COSTO (línea "Costo promedio" más abajo): son campos independientes —
+  // confundirlas es exactamente el hallazgo M2 (ver JSDoc de `unidadCosto`).
+  const etiquetaUnidadPrecio = productoMostrado.modoPrecio === 'por_kg' ? 'por kg' : 'por unidad';
+  const etiquetaUnidadCosto = unidadCosto(productoMostrado) === 'kg' ? 'por kg' : 'por unidad';
+  const comparable = margenComparable(productoMostrado);
+  const puedeCalcularMargen = tieneCosto && comparable;
 
-  const margenActualBps = tieneCosto && precio !== null ? margenDesdePrecio(costoCents, precio) : null;
-  const markupActualBps = tieneCosto && precio !== null ? markupDesdePrecio(costoCents, precio) : null;
+  const margenActualBps = puedeCalcularMargen && precio !== null ? margenDesdePrecio(costoCents, precio) : null;
+  const markupActualBps = puedeCalcularMargen && precio !== null ? markupDesdePrecio(costoCents, precio) : null;
 
   const margenObjetivoParseado = normalizarPorcentaje(margenObjetivoTexto);
   const margenObjetivoTextoInvalido = margenObjetivoTexto.trim() !== '' && margenObjetivoParseado === null;
   const margenObjetivoFueraDeRango = margenObjetivoParseado !== null && margenObjetivoParseado >= BPS_TOTAL;
 
   let sugerido: { precio: Money; margenEfectivoBps: number | null } | null = null;
-  if (tieneCosto && margenObjetivoParseado !== null && !margenObjetivoFueraDeRango) {
+  if (puedeCalcularMargen && margenObjetivoParseado !== null && !margenObjetivoFueraDeRango) {
     const precioCalc = precioSugerido(costoCents, margenObjetivoParseado, MULTIPLO_REDONDEO_CENTS_DEFAULT);
     sugerido = { precio: precioCalc, margenEfectivoBps: margenDesdePrecio(costoCents, precioCalc) };
   }
@@ -247,17 +262,17 @@ export function ModalPrecio({ abierto, producto, guardando, onGuardar, onCerrar 
     >
       <div className="flex flex-col gap-4">
         <p className="text-sm text-texto-secundario">
-          Costo promedio: {tieneCosto ? `${formatearMoney(costoCents)} ${etiquetaUnidad}` : '—'}
+          Costo promedio: {tieneCosto ? `${formatearMoney(costoCents)} ${etiquetaUnidadCosto}` : '—'}
         </p>
 
         <MoneyInput
-          label={`Precio de venta ${etiquetaUnidad}`}
+          label={`Precio de venta ${etiquetaUnidadPrecio}`}
           value={precio}
           onChange={setPrecio}
           error={errores.precio}
         />
 
-        {tieneCosto ? (
+        {puedeCalcularMargen ? (
           <p className="text-sm text-texto-secundario">
             Margen actual:{' '}
             <span className="font-medium text-texto">
@@ -269,10 +284,12 @@ export function ModalPrecio({ abierto, producto, guardando, onGuardar, onCerrar 
               {markupActualBps !== null ? formatearBps(markupActualBps) : '—'}
             </span>
           </p>
-        ) : (
+        ) : !tieneCosto ? (
           <p className="text-sm text-texto-secundario">
             Sin costo cargado aún: no se puede calcular margen para este producto.
           </p>
+        ) : (
+          <p className="text-sm text-texto-secundario">Margen actual: —</p>
         )}
 
         <CampoPorcentaje
@@ -280,8 +297,14 @@ export function ModalPrecio({ abierto, producto, guardando, onGuardar, onCerrar 
           value={margenObjetivoTexto}
           onChange={setMargenObjetivoTexto}
           error={errores.margenObjetivo}
+          disabled={!comparable}
           placeholder="Ej: 40"
         />
+        {!comparable && (
+          <p className="text-sm text-texto-secundario">
+            Costo por kg y precio por unidad no son comparables sin el peso de la pieza.
+          </p>
+        )}
 
         {sugerido !== null && (
           <div className="flex flex-col gap-2 rounded-elemento border border-borde p-3">
