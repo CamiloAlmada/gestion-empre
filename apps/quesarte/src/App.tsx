@@ -7,6 +7,8 @@ import { DetalleProductoPantalla } from './pantallas/DetalleProductoPantalla';
 import { Proveedores } from './pantallas/Proveedores';
 import { DetalleProveedorPantalla } from './pantallas/DetalleProveedorPantalla';
 import { Historial } from './pantallas/Historial';
+import { Clientes } from './pantallas/Clientes';
+import { DetalleClientePantalla } from './pantallas/DetalleClientePantalla';
 import { Reportes } from './pantallas/Reportes';
 import { Ajustes } from './pantallas/Ajustes';
 import { Usuarios } from './pantallas/Usuarios';
@@ -51,6 +53,8 @@ export function App() {
             }
           />
           <Route path="historial" element={<Historial />} />
+          <Route path="historial/clientes" element={<Clientes />} />
+          <Route path="historial/cliente/:id" element={<DetalleClientePantalla />} />
           <Route
             path="reportes"
             element={

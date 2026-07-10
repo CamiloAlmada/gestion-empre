@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router';
 import type { FirestoreError } from 'firebase/firestore';
 import { money, type Venta } from '@gestion/core';
 import { ProveedorToasts } from '@gestion/ui';
-import { ProveedorHeader } from '../componentes/header/ContextoHeader';
+import { ProveedorHeader, useHeaderActual } from '../componentes/header/ContextoHeader';
 import {
   LIMITE_INICIAL_VENTAS,
   INCREMENTO_LIMITE_VENTAS,
@@ -104,13 +105,21 @@ function configurarVentas(estado: EstadoFalso<Venta>) {
   });
 }
 
+function VisorAcciones() {
+  const config = useHeaderActual();
+  return <div data-testid="acciones">{config?.acciones}</div>;
+}
+
 function renderizar() {
   return render(
-    <ProveedorToasts>
-      <ProveedorHeader>
-        <Historial />
-      </ProveedorHeader>
-    </ProveedorToasts>,
+    <MemoryRouter>
+      <ProveedorToasts>
+        <ProveedorHeader>
+          <VisorAcciones />
+          <Historial />
+        </ProveedorHeader>
+      </ProveedorToasts>
+    </MemoryRouter>,
   );
 }
 
@@ -119,6 +128,18 @@ afterEach(() => {
   vi.clearAllMocks();
   mocks.useOnlineStatus.mockReturnValue(true);
   mocks.useDoc.mockReturnValue({ datos: null, cargando: false, error: null });
+});
+
+describe('Historial - header', () => {
+  it('expone la acción "Clientes", que enlaza al listado de clientes', () => {
+    configurarAuth('admin');
+    configurarVentas(estadoOk([]));
+
+    renderizar();
+
+    const enlace = within(screen.getByTestId('acciones')).getByRole('link', { name: 'Clientes' });
+    expect(enlace.getAttribute('href')).toBe('/historial/clientes');
+  });
 });
 
 describe('Historial - estados', () => {
