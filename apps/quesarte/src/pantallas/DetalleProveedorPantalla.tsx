@@ -54,10 +54,17 @@ function TarjetaPago({ pago }: { pago: DatosPago }) {
  * "Inactivo" cuando corresponde.
  *
  * Trae datos completos + cuentas de pago (para copiar fácil al transferir) y
- * un placeholder de historial de compras (Fase 2, no implementado acá). Las
- * acciones de escritura (editar / desactivar / reactivar) viven en el header,
- * como `DetalleProductoPantalla` — toda la ruta ya es solo-admin
- * (`RutaSoloAdmin`), no hace falta re-chequear el rol acá adentro.
+ * un placeholder de historial de compras (Fase 2, no implementado acá).
+ *
+ * "Editar" vive en el header (no depende de estado mutable más allá de
+ * `proveedor !== null`, ver `ContextoHeader`). Desactivar/Reactivar viven en
+ * el CUERPO, igual que `DetalleClientePantalla` (fix M1, review Fase 2): el
+ * efecto de `useHeader` solo se re-dispara si cambian `titulo`/`volverA` —
+ * `acciones` queda capturado del closure de ese render, así que un botón de
+ * header que dependa de `proveedor.activo`/`reactivando` queda con estado
+ * viejo hasta que algo más fuerce un re-render del efecto (footgun
+ * documentado de `ContextoHeader`). En el cuerpo no hay ese problema: es
+ * JSX normal, re-renderiza con cada cambio de estado.
  */
 export function DetalleProveedorPantalla() {
   const { id } = useParams<{ id: string }>();
@@ -84,24 +91,9 @@ export function DetalleProveedorPantalla() {
     volverA: { etiqueta: 'Proveedores', a: '/stock/proveedores' },
     acciones:
       proveedor !== null ? (
-        <>
-          <Button onClick={() => setModal('editar')} className="min-h-[48px]">
-            Editar
-          </Button>
-          {proveedor.activo ? (
-            <Button variante="secundaria" onClick={() => setModal('desactivar')} className="min-h-[48px]">
-              Desactivar
-            </Button>
-          ) : (
-            <Button
-              onClick={() => void handleReactivar()}
-              disabled={reactivando}
-              className="min-h-[48px]"
-            >
-              {reactivando ? 'Reactivando…' : 'Reactivar'}
-            </Button>
-          )}
-        </>
+        <Button onClick={() => setModal('editar')} className="min-h-[48px]">
+          Editar
+        </Button>
       ) : undefined,
   });
 
@@ -252,6 +244,20 @@ export function DetalleProveedorPantalla() {
         <h2 className="text-lg font-semibold text-texto">Historial de compras</h2>
         <p className="text-texto-secundario">Disponible con el módulo de compras (Fase 2).</p>
       </section>
+
+      {proveedor.activo ? (
+        <div className="flex justify-end">
+          <Button variante="secundaria" onClick={() => setModal('desactivar')}>
+            Desactivar
+          </Button>
+        </div>
+      ) : (
+        <div className="flex justify-end">
+          <Button onClick={() => void handleReactivar()} disabled={reactivando}>
+            {reactivando ? 'Reactivando…' : 'Reactivar'}
+          </Button>
+        </div>
+      )}
 
       <ModalProveedor
         abierto={modal === 'editar'}

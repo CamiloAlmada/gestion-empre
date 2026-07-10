@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import type { FirestoreError } from 'firebase/firestore';
 import { ProveedorToasts } from '@gestion/ui';
@@ -320,6 +320,21 @@ describe('DetalleProveedorPantalla', () => {
     });
   });
 
+  describe('header vs cuerpo (fix M1, review Fase 2)', () => {
+    it('el header solo tiene "Editar" (estable); Desactivar/Reactivar viven en el cuerpo, no en el header', () => {
+      configurarProveedor(estadoOkDoc(proveedorDe({ id: 'p1', nombre: 'Quesos del Norte' })));
+
+      renderizar('p1');
+
+      const header = within(screen.getByTestId('acciones-header'));
+      expect(header.getByRole('button', { name: 'Editar' })).toBeTruthy();
+      expect(header.queryByRole('button', { name: 'Desactivar' })).toBeNull();
+      expect(header.queryByRole('button', { name: 'Reactivar' })).toBeNull();
+      // Sí están en el documento (en el cuerpo):
+      expect(screen.getByRole('button', { name: 'Desactivar' })).toBeTruthy();
+    });
+  });
+
   describe('reactivación (tarea RE-1)', () => {
     it('proveedor inactivo: la ficha es visible (useDoc, no filtra por activo), con badge "Inactivo"', () => {
       configurarProveedor(
@@ -332,7 +347,7 @@ describe('DetalleProveedorPantalla', () => {
       expect(screen.getByText('Inactivo')).toBeTruthy();
     });
 
-    it('proveedor inactivo: el header ofrece "Reactivar" en vez de "Desactivar"', () => {
+    it('proveedor inactivo: el cuerpo ofrece "Reactivar" en vez de "Desactivar"', () => {
       configurarProveedor(
         estadoOkDoc(proveedorDe({ id: 'p1', nombre: 'Quesos del Norte', activo: false })),
       );
@@ -378,6 +393,55 @@ describe('DetalleProveedorPantalla', () => {
       expect(
         await screen.findByText('Guardado sin conexión. Se sincronizará al reconectar.'),
       ).toBeTruthy();
+    });
+
+    it('fix M1: al tocar "Reactivar" se ve "Reactivando…" deshabilitado AL INSTANTE (antes, en el header, quedaba con el estado viejo por el closure de useHeader)', async () => {
+      configurarProveedor(
+        estadoOkDoc(proveedorDe({ id: 'p1', nombre: 'Quesos del Norte', activo: false })),
+      );
+      let resolverEscritura!: () => void;
+      mocks.reactivarProveedor.mockReturnValue(
+        new Promise<void>((resolve) => {
+          resolverEscritura = resolve;
+        }),
+      );
+
+      renderizar('p1');
+      fireEvent.click(screen.getByRole('button', { name: 'Reactivar' }));
+
+      const boton = screen.getByRole('button', { name: 'Reactivando…' });
+      expect(boton).toBeTruthy();
+      expect(boton.hasAttribute('disabled')).toBe(true);
+
+      resolverEscritura();
+      await waitFor(() => expect(mocks.reactivarProveedor).toHaveBeenCalledTimes(1));
+    });
+
+    it('fix M1: tras reactivar con éxito, el botón visible pasa a "Desactivar" SIN navegar (antes el header seguía ofreciendo "Reactivar" hasta navegar)', async () => {
+      let estadoProveedor = estadoOkDoc(
+        proveedorDe({ id: 'p1', nombre: 'Quesos del Norte', activo: false }),
+      );
+      mocks.useDoc.mockImplementation((ref: RefFalsa | null) =>
+        ref === null ? { datos: null, cargando: false, error: null } : estadoProveedor,
+      );
+      mocks.reactivarProveedor.mockImplementation(async () => {
+        // Simula lo que haría el listener real de Firestore (onSnapshot) tras el
+        // ack: el documento vuelve con activo:true. El componente vuelve a
+        // renderizar solo porque `handleReactivar` hace `setReactivando` en su
+        // `finally` — sin ese re-render el mock no se re-invocaría.
+        estadoProveedor = estadoOkDoc(
+          proveedorDe({ id: 'p1', nombre: 'Quesos del Norte', activo: true }),
+        );
+      });
+
+      renderizar('p1');
+      fireEvent.click(screen.getByRole('button', { name: 'Reactivar' }));
+
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Desactivar' })).toBeTruthy());
+      expect(screen.queryByRole('button', { name: 'Reactivar' })).toBeNull();
+      // No navegó: seguimos en la ficha, no en el listado.
+      expect(screen.queryByText('Listado de proveedores')).toBeNull();
+      expect(screen.getByTestId('titulo-header').textContent).toBe('Quesos del Norte');
     });
   });
 });
