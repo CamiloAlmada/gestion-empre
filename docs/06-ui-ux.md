@@ -48,11 +48,30 @@ tech lead; no se ignora en silencio.
 - **Visibilidad por rol**: `vendedor` no ve Reportes; dentro de Stock no ve
   costos ni edición de precios (además del bloqueo real por reglas). `admin` ve
   todo. Los tabs se filtran por rol, nunca se muestran deshabilitados.
-- **Header contextual** (patrón Material 3 / Apple HIG): `[‹ Padre] Título [1–2 acciones]`.
+- **Header contextual** (patrón Material 3 / Apple HIG; rediseñado 2026-07-10,
+  tanda UI-3 según `docs/inspiraciones/inspo_fase_4/`): **fundido con el
+  fondo** — mismo color que `fondo`, sin borde inferior ni translucidez — con
+  layout `[‹]  Título CENTRADO  [acción]` (grilla de 3 columnas con laterales
+  simétricos para que el título quede óptico-centrado).
   - El título es el de la **vista actual**, no el del tab (en Stock → Productos
     dice "Productos"). Conciso (~15 caracteres).
-  - Subvistas muestran a la izquierda el volver `‹ {Padre}` (ese link ES el
-    breadcrumb en mobile; no hay breadcrumbs multi-nivel).
+  - Subvistas muestran a la izquierda la flecha `‹` SOLA (sin el nombre del
+    padre al lado — el destino lo define `volverA` y el `aria-label` dice
+    "Volver a {Padre}"). Ese botón ES el breadcrumb en mobile; no hay
+    breadcrumbs multi-nivel.
+- **Selector de sección** (2026-07-10, decidido con el dueño — patrón
+  "secondary tabs" de Material 3; los chips NO se usan para navegar, solo para
+  filtrar): dentro del tab **Stock**, las pantallas raíz de sección muestran
+  bajo el header una fila horizontal scrolleable
+  `Stock | Catálogo | Compras | Proveedores | Precios` (filtrada por rol: el
+  vendedor ve `Stock | Catálogo`; Compras/Precios aparecen cuando existan —
+  F2-F). Semántica de pestañas sobre **rutas reales** (back del sistema
+  funciona, cada sección linkeable, ítem activo resaltado y anunciado como
+  seleccionado), presentación de fila contenida en superficie redondeada —
+  deliberadamente DISTINTA de los chips de filtro. En drill-down (fichas) el
+  selector desaparece y rige la flecha `‹`. Stock ya NO declara acciones de
+  navegación en el header: el cluster flotante queda para las acciones
+  contextuales de la sección activa (p. ej. su "+").
   - Hasta **2 acciones contextuales** por pantalla (las de más frecuencia);
     más que eso → menú "⋮". Acciones fuera de contexto: prohibidas.
   - **Orden y forma consistentes** (2026-07-10, feedback del dueño): la acción
@@ -87,11 +106,26 @@ tech lead; no se ignora en silencio.
 - **Espaciado amplio**: mínimo 16px de padding en cards; listas con filas ≥56px.
 - **Tipografía**: cuerpo mínimo 16px; títulos bold con jerarquía clara; números
   de dinero y peso en tabular-nums.
-- **Translucidez SOLO en tab bar y header**: fondo semi-opaco (80-85%) +
+- **Translucidez SOLO en la tab bar** (2026-07-10: el header pasó a fundido
+  con el fondo, opaco — ver §2): fondo semi-opaco (80-85%) +
   `backdrop-filter: blur(16px) saturate(1.4)`. Cards, modales y contenido:
   **siempre opacos** (el POS no puede sacrificar legibilidad).
 - **Fallbacks obligatorios**: `@supports not (backdrop-filter: blur(1px))` →
   superficie sólida; `prefers-reduced-transparency: reduce` → sólida.
+- **Búsqueda unificada** (2026-07-10, tanda UI-3): un solo componente
+  `CampoBusqueda` (`@gestion/ui`) para TODA búsqueda de listado: píldora con
+  el ícono de lupa integrado a la izquierda, SIN label visible arriba (el
+  accesible va en `aria-label`; el placeholder describe qué se busca, p. ej.
+  "Nombre, alias o teléfono"). Forma por token propio: Minimalista mantiene la
+  redondez de los inputs actuales; Cálido es píldora completa (como la tab
+  bar). La normalización de búsqueda (acento-insensible) vive en UN helper
+  compartido, no duplicada por pantalla.
+- **Chips de filtro** (2026-07-10): píldoras sueltas bajo la búsqueda,
+  scrolleables en horizontal; activo con relleno primario y texto en par
+  aprobado (§7), inactivo tenue. Se usan SOLO para filtrar lo visible
+  (categorías en Venta/Catálogo/Stock, "mostrar inactivos" en
+  Clientes/Proveedores) — nunca para navegar (eso es el selector de sección,
+  §2, con otra presentación a propósito).
 - Sombras suaves y bordes sutiles (`--color-borde`); elevación con moderación.
 - **Movimiento**: transiciones 150-200ms ease-out; nada que bloquee al usuario;
   `prefers-reduced-motion: reduce` desactiva animaciones no esenciales.
