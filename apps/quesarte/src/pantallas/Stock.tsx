@@ -6,7 +6,6 @@ import {
   categoriaConverter,
   piezaConverter,
   productoConverter,
-  useAuth,
   useCollection,
 } from '@gestion/firebase-kit';
 import { Button, ChipsFiltro } from '@gestion/ui';
@@ -16,7 +15,6 @@ import { contarAlertas, filtrarPorAlerta, type TipoAlerta } from '../componentes
 import { FranjaAlertas } from '../componentes/stock/FranjaAlertas';
 import { ListaProductosAgrupada } from '../componentes/stock/ListaProductosAgrupada';
 import { agruparPiezasPorProducto, calcularResumen, type ResumenStock } from '../componentes/stock/resumen';
-import { itemsSelectorStock, SelectorSeccion } from '../componentes/stock/SelectorSeccion';
 import { useHeader } from '../componentes/header/ContextoHeader';
 
 /**
@@ -33,8 +31,6 @@ import { useHeader } from '../componentes/header/ContextoHeader';
  */
 export function Stock() {
   const navigate = useNavigate();
-  const { perfil } = useAuth();
-  const esAdmin = perfil?.rol === 'admin';
 
   const [intento, setIntento] = useState(0);
   const [alertaActiva, setAlertaActiva] = useState<TipoAlerta | null>(null);
@@ -135,9 +131,9 @@ export function Stock() {
   );
 
   // Stock ya NO declara acciones de navegación en el header (docs/06-ui-ux.md
-  // §2, 2026-07-10): el `SelectorSeccion` de abajo las reemplaza. Sin
-  // acciones contextuales propias, el cluster flotante queda libre para las
-  // de la sección activa.
+  // §2, 2026-07-10): el `SelectorSeccion` del layout compartido (`StockLayout`,
+  // UI-4) las reemplaza. Sin acciones contextuales propias, el cluster
+  // flotante queda libre para las de la sección activa.
   useHeader({ titulo: 'Stock' });
 
   function reintentar() {
@@ -192,10 +188,5 @@ export function Stock() {
     );
   }
 
-  return (
-    <div className="flex flex-col gap-4">
-      <SelectorSeccion items={itemsSelectorStock(esAdmin)} />
-      {contenido}
-    </div>
-  );
+  return <div className="flex flex-col gap-4">{contenido}</div>;
 }

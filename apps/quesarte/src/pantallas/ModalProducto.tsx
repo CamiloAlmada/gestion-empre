@@ -168,7 +168,7 @@ function CampoCategoria({ categorias, value, onChange, error }: CampoCategoriaPr
       ) : (
         sinOpciones && (
           <p id={idHint} className="text-sm text-texto-secundario">
-            Definí categorías desde Productos → Categorías.
+            Definí categorías desde Stock → Categorías.
           </p>
         )
       )}

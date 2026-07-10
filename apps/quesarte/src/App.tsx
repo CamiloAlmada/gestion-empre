@@ -5,6 +5,7 @@ import { Venta } from './pantallas/Venta';
 import { RutaProtegida } from './rutas/RutaProtegida';
 import { RutaSoloAdmin } from './rutas/RutaSoloAdmin';
 import { Shell } from './Shell';
+import { StockLayout } from './componentes/stock/StockLayout';
 import { AvisoPwa } from './componentes/AvisoPwa';
 import { MetaThemeColor } from './componentes/MetaThemeColor';
 
@@ -40,6 +41,9 @@ const Proveedores = lazy(() =>
   import('./pantallas/Proveedores').then((m) => ({ default: m.Proveedores })),
 );
 const Precios = lazy(() => import('./pantallas/Precios').then((m) => ({ default: m.Precios })));
+const Categorias = lazy(() =>
+  import('./pantallas/Categorias').then((m) => ({ default: m.Categorias })),
+);
 const DetalleProveedorPantalla = lazy(() =>
   import('./pantallas/DetalleProveedorPantalla').then((m) => ({
     default: m.DetalleProveedorPantalla,
@@ -87,17 +91,52 @@ export function App() {
         >
           <Route index element={<Navigate to="/venta" replace />} />
           <Route path="venta" element={<Venta />} />
-          <Route path="stock" element={<Stock />} />
-          <Route path="stock/productos" element={<Productos />} />
+          {/* Layout route pathless de las secciones RAÍZ de Stock (UI-4,
+              docs/06-ui-ux.md §2): renderiza el `SelectorSeccion` UNA vez
+              sobre un `Outlet`, ver StockLayout.tsx. Las fichas de detalle
+              (producto/compra/proveedor) quedan FUERA, como hasta ahora: sin
+              selector ni swipe. */}
+          <Route element={<StockLayout />}>
+            <Route path="stock" element={<Stock />} />
+            <Route path="stock/productos" element={<Productos />} />
+            <Route
+              path="stock/compras"
+              element={
+                <RutaSoloAdmin>
+                  <Compras />
+                </RutaSoloAdmin>
+              }
+            />
+            <Route
+              path="stock/proveedores"
+              element={
+                <RutaSoloAdmin>
+                  <Proveedores />
+                </RutaSoloAdmin>
+              }
+            />
+            {/* Precios y márgenes (F2-F2, docs/03-compras-costos-precios.md):
+                solo admin, mismo criterio que Proveedores. */}
+            <Route
+              path="stock/precios"
+              element={
+                <RutaSoloAdmin>
+                  <Precios />
+                </RutaSoloAdmin>
+              }
+            />
+            {/* Categorías (UI-4, 2026-07-10): dejó de ser el modal de
+                Catálogo para ser una sección más del selector, solo admin. */}
+            <Route
+              path="stock/categorias"
+              element={
+                <RutaSoloAdmin>
+                  <Categorias />
+                </RutaSoloAdmin>
+              }
+            />
+          </Route>
           <Route path="stock/producto/:id" element={<DetalleProductoPantalla />} />
-          <Route
-            path="stock/compras"
-            element={
-              <RutaSoloAdmin>
-                <Compras />
-              </RutaSoloAdmin>
-            }
-          />
           <Route
             path="stock/compra/:id"
             element={
@@ -107,28 +146,10 @@ export function App() {
             }
           />
           <Route
-            path="stock/proveedores"
-            element={
-              <RutaSoloAdmin>
-                <Proveedores />
-              </RutaSoloAdmin>
-            }
-          />
-          <Route
             path="stock/proveedor/:id"
             element={
               <RutaSoloAdmin>
                 <DetalleProveedorPantalla />
-              </RutaSoloAdmin>
-            }
-          />
-          {/* Precios y márgenes (F2-F2, docs/03-compras-costos-precios.md):
-              solo admin, mismo criterio que Proveedores. */}
-          <Route
-            path="stock/precios"
-            element={
-              <RutaSoloAdmin>
-                <Precios />
               </RutaSoloAdmin>
             }
           />

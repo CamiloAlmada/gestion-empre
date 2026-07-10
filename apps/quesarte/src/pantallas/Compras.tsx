@@ -5,15 +5,9 @@ import { formatearMoney, type Compra } from '@gestion/core';
 import { compraConverter, useCollection } from '@gestion/firebase-kit';
 import { Button, Chip } from '@gestion/ui';
 import { db } from '../firebase';
-import { itemsSelectorStock, SelectorSeccion } from '../componentes/stock/SelectorSeccion';
 import { formatearFecha } from '../componentes/stock/resumen';
 import { BadgeEstadoCompra } from '../componentes/compras/BadgeEstadoCompra';
 import { useHeader } from '../componentes/header/ContextoHeader';
-
-// Ítems del selector con "Compras"/"Proveedores" siempre incluidos: esta
-// pantalla ya está protegida por `RutaSoloAdmin` en App.tsx (mismo criterio
-// que `Proveedores.tsx`).
-const ITEMS_SELECTOR = itemsSelectorStock(true);
 
 const CLASE_ACCION_PRIMARIA =
   'inline-flex min-h-[48px] min-w-[48px] items-center justify-center gap-1.5 rounded-control bg-primary-600 px-3 font-medium text-white hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2 focus-visible:ring-offset-superficie';
@@ -134,8 +128,6 @@ export function Compras() {
 
   return (
     <div className="flex flex-col gap-4">
-      <SelectorSeccion items={ITEMS_SELECTOR} />
-
       <div className="flex flex-wrap items-end gap-3">
         <Chip activo={soloBorradores} onClick={() => setSoloBorradores((v) => !v)}>
           Solo borradores

@@ -5,6 +5,7 @@ import type { FirestoreError } from 'firebase/firestore';
 import { money, peso, type Categoria, type Pieza, type Producto } from '@gestion/core';
 import { ProveedorToasts } from '@gestion/ui';
 import { Stock } from './Stock';
+import { StockLayout } from '../componentes/stock/StockLayout';
 import { ProveedorHeader, useHeaderActual } from '../componentes/header/ContextoHeader';
 
 const mocks = vi.hoisted(() => ({
@@ -125,7 +126,9 @@ function arbolStock() {
         <ProveedorHeader>
           <VisorAcciones />
           <Routes>
-            <Route path="/stock" element={<Stock />} />
+            <Route element={<StockLayout />}>
+              <Route path="/stock" element={<Stock />} />
+            </Route>
             <Route path="/stock/producto/:id" element={<PlaceholderDetalle />} />
           </Routes>
         </ProveedorHeader>

@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { MemoryRouter } from 'react-router';
+import { MemoryRouter, Route, Routes } from 'react-router';
 import { ProveedorTema, ProveedorToasts } from '@gestion/ui';
 import { money, type Categoria, type Producto } from '@gestion/core';
 import { Precios } from './Precios';
+import { StockLayout } from '../componentes/stock/StockLayout';
 import { ProveedorHeader } from '../componentes/header/ContextoHeader';
 
 // Mismo criterio que Productos.test.tsx: `DataTable` con `filaCompacta`
@@ -19,15 +20,28 @@ const mocks = vi.hoisted(() => ({
   updateDoc: vi.fn(),
   batchUpdate: vi.fn(),
   batchCommit: vi.fn(),
+  useAuth: vi.fn(),
 }));
 
+// `useAuth` (UI-4): la consume `StockLayout`, que ahora envuelve esta ruta —
+// fija un admin, mismo criterio que `Compras.test.tsx`/`Proveedores.test.tsx`.
 vi.mock('@gestion/firebase-kit', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@gestion/firebase-kit')>();
   return {
     ...actual,
     useOnlineStatus: mocks.useOnlineStatus,
     useCollection: mocks.useCollection,
+    useAuth: mocks.useAuth,
   };
+});
+
+mocks.useAuth.mockReturnValue({
+  usuario: { uid: 'u1' },
+  perfil: { uid: 'u1', nombre: 'Ana', email: 'ana@a.com', rol: 'admin', activo: true },
+  cargando: false,
+  ingresarConEmail: vi.fn(),
+  restablecerPassword: vi.fn(),
+  salir: vi.fn(),
 });
 
 vi.mock('firebase/firestore', async (importOriginal) => {
@@ -90,11 +104,15 @@ function productoDe(over: Partial<Producto> & Pick<Producto, 'id'>): Producto {
 
 function renderizar() {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={['/stock/precios']}>
       <ProveedorTema>
         <ProveedorToasts>
           <ProveedorHeader>
-            <Precios />
+            <Routes>
+              <Route element={<StockLayout />}>
+                <Route path="/stock/precios" element={<Precios />} />
+              </Route>
+            </Routes>
           </ProveedorHeader>
         </ProveedorToasts>
       </ProveedorTema>

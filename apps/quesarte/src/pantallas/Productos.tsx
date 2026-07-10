@@ -25,9 +25,7 @@ import {
   ETIQUETAS_MODO_STOCK,
   type DatosProductoFormulario,
 } from './ModalProducto';
-import { ModalCategorias } from './ModalCategorias';
 import { categoriasVisibles } from '../componentes/stock/agrupacion';
-import { itemsSelectorStock, SelectorSeccion } from '../componentes/stock/SelectorSeccion';
 import { useHeader } from '../componentes/header/ContextoHeader';
 
 // Acciones compactas del header (docs/06-ui-ux.md §2, hasta 2 por pantalla):
@@ -38,8 +36,6 @@ import { useHeader } from '../componentes/header/ContextoHeader';
 // ≥48px ahí).
 const CLASE_ACCION_PRIMARIA =
   'inline-flex min-h-[48px] min-w-[48px] items-center justify-center gap-1.5 rounded-control bg-primary-600 px-3 font-medium text-white hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2 focus-visible:ring-offset-superficie';
-const CLASE_ACCION_SECUNDARIA =
-  'inline-flex min-h-[48px] items-center justify-center rounded-control border border-borde bg-superficie px-3 text-sm font-medium text-texto hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600';
 
 type EstadoModal = { tipo: 'cerrado' } | { tipo: 'alta' } | { tipo: 'edicion'; producto: Producto };
 
@@ -137,29 +133,22 @@ export function Productos() {
   const [categoriaFiltro, setCategoriaFiltro] = useState<string | null>(null);
   const [estadoModal, setEstadoModal] = useState<EstadoModal>({ tipo: 'cerrado' });
   const [guardando, setGuardando] = useState(false);
-  const [modalCategoriasAbierto, setModalCategoriasAbierto] = useState(false);
   // Se incrementa en "Reintentar": cambia la identidad de `consultaProductos`
   // y fuerza a `useCollection` a resuscribirse (ver su doc: resuscribe por
   // identidad de `query`, no por contenido).
   const [intentoId, setIntentoId] = useState(0);
-  const [intentoIdCategorias, setIntentoIdCategorias] = useState(0);
 
   useHeader({
     // Título "Catálogo" (docs/06-ui-ux.md §2, 2026-07-10): coincide con el
-    // ítem del `SelectorSeccion` de abajo. Ya no declara `volverA` — el
-    // selector ES la navegación entre hermanas dentro de Stock; el back del
-    // sistema sigue funcionando por history.
+    // ítem del `SelectorSeccion` del layout compartido (`StockLayout`, UI-4).
+    // Ya no declara `volverA` — el selector ES la navegación entre hermanas
+    // dentro de Stock; el back del sistema sigue funcionando por history.
     titulo: 'Catálogo',
     acciones: esAdmin ? (
-      <>
-        <button type="button" onClick={() => setModalCategoriasAbierto(true)} className={CLASE_ACCION_SECUNDARIA}>
-          Categorías
-        </button>
-        <button type="button" onClick={abrirAlta} aria-label="Agregar producto" className={CLASE_ACCION_PRIMARIA}>
-          <span aria-hidden="true">＋</span>
-          <span className="hidden md:inline">Agregar</span>
-        </button>
-      </>
+      <button type="button" onClick={abrirAlta} aria-label="Agregar producto" className={CLASE_ACCION_PRIMARIA}>
+        <span aria-hidden="true">＋</span>
+        <span className="hidden md:inline">Agregar</span>
+      </button>
     ) : undefined,
   });
 
@@ -169,18 +158,14 @@ export function Productos() {
   );
   const { datos: productos, cargando, error } = useCollection(consultaProductos);
 
-  // Una sola suscripción a `categorias` (colección chica) compartida por el
-  // select de `ModalProducto` y el listado de `ModalCategorias`: evita dos
-  // listeners en vivo para el mismo puñado de documentos.
-  const consultaCategorias = useMemo(
-    () => query(coleccionCategorias, orderBy('orden')),
-    [intentoIdCategorias],
-  );
-  const {
-    datos: categorias,
-    cargando: categoriasCargando,
-    error: categoriasError,
-  } = useCollection(consultaCategorias);
+  // Categorías (una sola suscripción, colección chica): solo alimentan el
+  // select de `ModalProducto` y los chips de filtro de abajo. La gestión del
+  // vocabulario (alta/renombrar/reordenar) se mudó a su propia pantalla
+  // (`Categorias.tsx`, UI-4, docs/06-ui-ux.md §2) con su propia suscripción —
+  // ya no hace falta cargando/error/reintentar acá (mismo criterio que
+  // `Precios.tsx`).
+  const consultaCategorias = useMemo(() => query(coleccionCategorias, orderBy('orden')), []);
+  const { datos: categorias } = useCollection(consultaCategorias);
 
   const productosPorBusqueda = useMemo(() => {
     const consulta = normalizarBusqueda(busqueda.trim());
@@ -225,10 +210,6 @@ export function Productos() {
 
   function reintentar() {
     setIntentoId((n) => n + 1);
-  }
-
-  function reintentarCategorias() {
-    setIntentoIdCategorias((n) => n + 1);
   }
 
   /**
@@ -353,18 +334,6 @@ export function Productos() {
 
   return (
     <div className="flex flex-col gap-4">
-      <SelectorSeccion items={itemsSelectorStock(esAdmin)} />
-
-      {!enLinea && (
-        <div
-          role="status"
-          className="flex items-center gap-2 rounded-elemento border border-borde bg-superficie px-4 py-3 text-sm text-advertencia"
-        >
-          <span aria-hidden="true">⚠</span>
-          <span>Sin conexión: no se pueden gestionar categorías hasta reconectar.</span>
-        </div>
-      )}
-
       <CampoBusqueda
         valor={busqueda}
         onChange={setBusqueda}
@@ -417,25 +386,14 @@ export function Productos() {
       )}
 
       {esAdmin && (
-        <>
-          <ModalProducto
-            abierto={estadoModal.tipo !== 'cerrado'}
-            producto={estadoModal.tipo === 'edicion' ? estadoModal.producto : null}
-            guardando={guardando}
-            categorias={categorias}
-            onGuardar={handleGuardar}
-            onCerrar={cerrarModal}
-          />
-          <ModalCategorias
-            abierto={modalCategoriasAbierto}
-            categorias={categorias}
-            cargando={categoriasCargando}
-            error={categoriasError}
-            productos={productos}
-            onReintentar={reintentarCategorias}
-            onCerrar={() => setModalCategoriasAbierto(false)}
-          />
-        </>
+        <ModalProducto
+          abierto={estadoModal.tipo !== 'cerrado'}
+          producto={estadoModal.tipo === 'edicion' ? estadoModal.producto : null}
+          guardando={guardando}
+          categorias={categorias}
+          onGuardar={handleGuardar}
+          onCerrar={cerrarModal}
+        />
       )}
     </div>
   );

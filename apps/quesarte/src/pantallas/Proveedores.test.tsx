@@ -4,12 +4,14 @@ import { MemoryRouter, Route, Routes, useParams } from 'react-router';
 import { ProveedorToasts } from '@gestion/ui';
 import type { Proveedor } from '@gestion/core';
 import { Proveedores } from './Proveedores';
+import { StockLayout } from '../componentes/stock/StockLayout';
 import { ProveedorHeader, useHeaderActual } from '../componentes/header/ContextoHeader';
 
 const mocks = vi.hoisted(() => ({
   useOnlineStatus: vi.fn(() => true),
   useCollection: vi.fn(),
   crearProveedor: vi.fn(),
+  useAuth: vi.fn(),
 }));
 
 // Mismo criterio que Productos.test.tsx/Usuarios.test.tsx: `proveedorConverter`
@@ -17,6 +19,8 @@ const mocks = vi.hoisted(() => ({
 // única operación de I/O de la pantalla (`crearProveedor`, ya provista por
 // packages/firebase-kit — CP-A). La query se arma con las funciones REALES
 // de 'firebase/firestore' (mockeadas más abajo para no requerir un `db` real).
+// `useAuth` (UI-4): la consume `StockLayout`, que ahora envuelve esta ruta —
+// fija un admin, mismo criterio que `Compras.test.tsx`/`Precios.test.tsx`.
 vi.mock('@gestion/firebase-kit', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@gestion/firebase-kit')>();
   return {
@@ -24,7 +28,17 @@ vi.mock('@gestion/firebase-kit', async (importOriginal) => {
     useOnlineStatus: mocks.useOnlineStatus,
     useCollection: mocks.useCollection,
     crearProveedor: mocks.crearProveedor,
+    useAuth: mocks.useAuth,
   };
+});
+
+mocks.useAuth.mockReturnValue({
+  usuario: { uid: 'u1' },
+  perfil: { uid: 'u1', nombre: 'Ana', email: 'ana@a.com', rol: 'admin', activo: true },
+  cargando: false,
+  ingresarConEmail: vi.fn(),
+  restablecerPassword: vi.fn(),
+  salir: vi.fn(),
 });
 
 vi.mock('../firebase', () => ({ db: {} }));
@@ -99,7 +113,9 @@ function renderizar() {
         <ProveedorHeader>
           <VisorHeader />
           <Routes>
-            <Route path="/stock/proveedores" element={<Proveedores />} />
+            <Route element={<StockLayout />}>
+              <Route path="/stock/proveedores" element={<Proveedores />} />
+            </Route>
             <Route path="/stock/proveedor/:id" element={<PlaceholderFicha />} />
           </Routes>
         </ProveedorHeader>
