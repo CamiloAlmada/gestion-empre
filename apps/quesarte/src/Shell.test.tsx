@@ -27,6 +27,13 @@ function configurarAuth(rol: 'admin' | 'vendedor') {
   });
 }
 
+/** Pantalla de prueba que lanza en el render (simula un crash real de
+ * pantalla, como el hallazgo B1 de `CompraPantalla`), para probar
+ * `ErrorBoundaryRuta`. */
+function PantallaQueRompe(): never {
+  throw new Error('boom de prueba');
+}
+
 /** Pantalla de prueba que setea su propio header contextual, como haría
  * cualquier pantalla real con `useHeader()`. */
 function PantallaConHeader({
@@ -62,6 +69,7 @@ function renderizarEn(ruta: string) {
               path="stock/productos"
               element={<PantallaConHeader titulo="Productos" volverA={{ etiqueta: 'Stock', a: '/stock' }} />}
             />
+            <Route path="stock/roto" element={<PantallaQueRompe />} />
           </Route>
         </Routes>
       </ProveedorToasts>
@@ -433,6 +441,40 @@ describe('Shell', () => {
       renderizarEn('/venta');
 
       expect(screen.queryByRole('link', { name: 'Historial' })).toBeNull();
+    });
+  });
+
+  describe('ErrorBoundaryRuta (hallazgo B1, review de Fase 2)', () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('un hijo que lanza en render muestra el mensaje de error y el resto del shell sigue (header + tab bar)', () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      configurarAuth('admin');
+
+      renderizarEn('/stock/roto');
+
+      // El contenido ruteado se reemplaza por el fallback del boundary...
+      expect(screen.getByRole('alert').textContent).toContain('Algo salió mal.');
+      // ...pero el resto del Shell (fuera del boundary) sigue vivo y usable:
+      // tab bar con todos sus botones, incluido el de Stock marcado activo.
+      expect(screen.getByRole('button', { name: /Stock/ }).getAttribute('aria-current')).toBe('page');
+      expect(screen.getByRole('button', { name: 'Venta' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: /Reportes/ })).toBeTruthy();
+    });
+
+    it('navegar a otra ruta (tocar un tab) sale del estado de error: se ve la pantalla nueva', () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      configurarAuth('admin');
+
+      renderizarEn('/stock/roto');
+      expect(screen.getByRole('alert')).toBeTruthy();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Venta' }));
+
+      expect(screen.getByText('Contenido de Venta')).toBeTruthy();
+      expect(screen.queryByRole('alert')).toBeNull();
     });
   });
 });

@@ -9,6 +9,7 @@ import {
   IconoStock,
   IconoVenta,
 } from './componentes/iconos';
+import { ErrorBoundaryRuta } from './componentes/ErrorBoundaryRuta';
 import { FallbackPantalla } from './componentes/FallbackPantalla';
 import { ProveedorHeader, useHeaderActual } from './componentes/header/ContextoHeader';
 import { ProveedorCarrito } from './componentes/venta/ContextoCarrito';
@@ -207,10 +208,19 @@ function ShellInterior() {
         {/* Suspense de las pantallas lazy (F2-D0, docs/04): acá y no en
             App.tsx a propósito — header y `BarraPestanas` de este Shell
             quedan montados durante la carga, solo este `<main>` muestra el
-            fallback (docs/06-ui-ux.md §1.3). */}
-        <Suspense fallback={<FallbackPantalla />}>
-          <Outlet />
-        </Suspense>
+            fallback (docs/06-ui-ux.md §1.3).
+            `ErrorBoundaryRuta` AFUERA del `Suspense` (contiene también un
+            fallo al cargar el chunk, no solo errores de render de la
+            pantalla ya cargada) — hallazgo B1 del review de Fase 2: sin
+            esto, un error de render en cualquier pantalla desmontaba TODA la
+            app (pantalla blanca), no solo el contenido ruteado. `key` por
+            ruta: navegar a otra pantalla remonta el boundary y limpia el
+            error, así que "Volver a Venta" funciona sin recargar. */}
+        <ErrorBoundaryRuta key={location.pathname}>
+          <Suspense fallback={<FallbackPantalla />}>
+            <Outlet />
+          </Suspense>
+        </ErrorBoundaryRuta>
       </main>
       {/* Cluster flotante de acciones (mobile, ver CLASES_CLUSTER_ACCIONES):
           DESPUÉS del `<main>` en el DOM a propósito — los lectores de
