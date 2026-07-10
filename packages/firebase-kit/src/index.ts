@@ -26,12 +26,14 @@ export {
   crearCliente,
   actualizarCliente,
   desactivarCliente,
+  reactivarCliente,
   type DatosCliente,
 } from './clientes';
 export {
   crearProveedor,
   actualizarProveedor,
   desactivarProveedor,
+  reactivarProveedor,
   type DatosProveedor,
 } from './proveedores';
 export {

@@ -111,3 +111,8 @@ export async function actualizarProveedor(
 export async function desactivarProveedor(db: Firestore, proveedorId: string): Promise<void> {
   await updateDoc(doc(db, 'proveedores', proveedorId), { activo: false });
 }
+
+/** Reactiva un proveedor (`activo: true`). Inversa de `desactivarProveedor`. */
+export async function reactivarProveedor(db: Firestore, proveedorId: string): Promise<void> {
+  await updateDoc(doc(db, 'proveedores', proveedorId), { activo: true });
+}

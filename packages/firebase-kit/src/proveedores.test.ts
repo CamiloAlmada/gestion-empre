@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { crearProveedor, actualizarProveedor, desactivarProveedor } from './proveedores';
+import {
+  crearProveedor,
+  actualizarProveedor,
+  desactivarProveedor,
+  reactivarProveedor,
+} from './proveedores';
 import { ProveedorInvalidoError } from './errores';
 
 // Mock de `firebase/firestore` como en clientes.test.ts.
@@ -94,5 +99,14 @@ describe('desactivarProveedor', () => {
     const [ref, cambios] = mocks.updateDoc.mock.calls[0] as [RefFalsa, Record<string, unknown>];
     expect(ref.path).toBe('proveedores/prov-1');
     expect(cambios).toEqual({ activo: false });
+  });
+});
+
+describe('reactivarProveedor', () => {
+  it('escribe solo activo:true (inversa de desactivarProveedor)', async () => {
+    await reactivarProveedor(db, 'prov-1');
+    const [ref, cambios] = mocks.updateDoc.mock.calls[0] as [RefFalsa, Record<string, unknown>];
+    expect(ref.path).toBe('proveedores/prov-1');
+    expect(cambios).toEqual({ activo: true });
   });
 });

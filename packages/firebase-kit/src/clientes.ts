@@ -126,3 +126,8 @@ export async function actualizarCliente(
 export async function desactivarCliente(db: Firestore, clienteId: string): Promise<void> {
   await updateDoc(doc(db, 'clientes', clienteId), { activo: false });
 }
+
+/** Reactiva un cliente (`activo: true`). Inversa de `desactivarCliente`. */
+export async function reactivarCliente(db: Firestore, clienteId: string): Promise<void> {
+  await updateDoc(doc(db, 'clientes', clienteId), { activo: true });
+}
