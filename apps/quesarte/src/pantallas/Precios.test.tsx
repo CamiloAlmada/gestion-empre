@@ -1,0 +1,433 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router';
+import { ProveedorTema, ProveedorToasts } from '@gestion/ui';
+import { money, type Categoria, type Producto } from '@gestion/core';
+import { Precios } from './Precios';
+import { ProveedorHeader } from '../componentes/header/ContextoHeader';
+
+// Mismo criterio que Productos.test.tsx: `DataTable` con `filaCompacta`
+// renderiza SIEMPRE tabla + lista compacta (visibilidad la decide CSS
+// responsive, que jsdom no evalúa) — se scopea a la tabla para no ambigüar.
+function tabla() {
+  return within(screen.getByRole('table'));
+}
+
+const mocks = vi.hoisted(() => ({
+  useOnlineStatus: vi.fn(() => true),
+  useCollection: vi.fn(),
+  updateDoc: vi.fn(),
+  batchUpdate: vi.fn(),
+  batchCommit: vi.fn(),
+}));
+
+vi.mock('@gestion/firebase-kit', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@gestion/firebase-kit')>();
+  return {
+    ...actual,
+    useOnlineStatus: mocks.useOnlineStatus,
+    useCollection: mocks.useCollection,
+  };
+});
+
+vi.mock('firebase/firestore', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('firebase/firestore')>();
+  return {
+    ...actual,
+    updateDoc: mocks.updateDoc,
+    writeBatch: () => ({
+      update: mocks.batchUpdate,
+      commit: mocks.batchCommit,
+    }),
+  };
+});
+
+interface EstadoColeccionFalso<T> {
+  datos: T[];
+  cargando: boolean;
+  error: unknown;
+}
+
+let estadoProductos: EstadoColeccionFalso<Producto> = { datos: [], cargando: false, error: null };
+let estadoCategorias: EstadoColeccionFalso<Categoria> = { datos: [], cargando: false, error: null };
+
+/** Mismo truco que Productos.test.tsx: distingue las dos `useCollection` por
+ * el nombre de colección de la query real armada con `collection`/`query`. */
+function nombreColeccion(query: unknown): string | undefined {
+  const interna = (query as { _query?: { path?: { segments?: string[] } } })._query;
+  return interna?.path?.segments?.[0];
+}
+
+mocks.useCollection.mockImplementation((query: unknown) =>
+  nombreColeccion(query) === 'categorias' ? estadoCategorias : estadoProductos,
+);
+
+function configurarCollection(overrides: { datos?: Producto[]; cargando?: boolean; error?: unknown }) {
+  estadoProductos = {
+    datos: overrides.datos ?? [],
+    cargando: overrides.cargando ?? false,
+    error: overrides.error ?? null,
+  };
+}
+
+function configurarCategorias(overrides: { datos?: Categoria[] } = {}) {
+  estadoCategorias = { datos: overrides.datos ?? [], cargando: false, error: null };
+}
+
+function productoDe(over: Partial<Producto> & Pick<Producto, 'id'>): Producto {
+  return {
+    nombre: 'Producto',
+    categoria: 'Categoría',
+    modoPrecio: 'por_kg',
+    modoStock: 'granel',
+    precioVentaCents: money(50000),
+    costoPromedioCents: money(30000),
+    activo: true,
+    actualizadoEn: new Date('2026-01-01'),
+    ...over,
+  };
+}
+
+function renderizar() {
+  return render(
+    <MemoryRouter>
+      <ProveedorTema>
+        <ProveedorToasts>
+          <ProveedorHeader>
+            <Precios />
+          </ProveedorHeader>
+        </ProveedorToasts>
+      </ProveedorTema>
+    </MemoryRouter>,
+  );
+}
+
+describe('Precios', () => {
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+    mocks.useOnlineStatus.mockReturnValue(true);
+    estadoProductos = { datos: [], cargando: false, error: null };
+    estadoCategorias = { datos: [], cargando: false, error: null };
+  });
+
+  it('muestra el SelectorSeccion con "Precios" disponible', () => {
+    configurarCollection({ datos: [] });
+    renderizar();
+
+    expect(screen.getByRole('link', { name: 'Precios' }).getAttribute('href')).toBe('/stock/precios');
+  });
+
+  it('estado cargando', () => {
+    configurarCollection({ cargando: true });
+    renderizar();
+    expect(screen.getByText('Cargando productos…')).toBeTruthy();
+  });
+
+  it('estado error muestra mensaje y botón de reintento', () => {
+    configurarCollection({ error: new Error('boom') });
+    renderizar();
+
+    expect(screen.getByRole('alert').textContent).toContain('No se pudieron cargar los productos.');
+    expect(screen.getByRole('button', { name: 'Reintentar' })).toBeTruthy();
+  });
+
+  it('estado vacío', () => {
+    configurarCollection({ datos: [] });
+    renderizar();
+    expect(screen.getByText('No hay productos todavía. Cargalos desde Catálogo.')).toBeTruthy();
+  });
+
+  describe('tabla: costo, precio y margen', () => {
+    it('producto con costo: muestra costo, precio y margen actual calculados', () => {
+      configurarCollection({
+        datos: [
+          productoDe({
+            id: 'p1',
+            nombre: 'Queso Añejo',
+            modoPrecio: 'por_kg',
+            costoPromedioCents: money(30000),
+            precioVentaCents: money(50000),
+          }),
+        ],
+      });
+      renderizar();
+
+      expect(tabla().getByText('Queso Añejo')).toBeTruthy();
+      expect(tabla().getByText('$ 300,00 /kg')).toBeTruthy();
+      expect(tabla().getByText('$ 500,00 /kg')).toBeTruthy();
+      expect(tabla().getByText('40,00 %')).toBeTruthy(); // margen actual
+    });
+
+    it('producto sin costo (0): costo y margen actual son "—", sin división basura', () => {
+      configurarCollection({
+        datos: [productoDe({ id: 'p1', nombre: 'Nuez nueva', costoPromedioCents: money(0) })],
+      });
+      renderizar();
+
+      const fila = tabla().getByText('Nuez nueva').closest('tr') as HTMLElement;
+      expect(within(fila).getAllByText('—').length).toBeGreaterThanOrEqual(2); // costo y margen actual
+    });
+
+    it('con margen objetivo definido, lo muestra en su columna', () => {
+      configurarCollection({
+        datos: [productoDe({ id: 'p1', nombre: 'Queso Añejo', margenObjetivoBps: 4500 })],
+      });
+      renderizar();
+
+      expect(tabla().getByText('45,00 %')).toBeTruthy();
+    });
+
+    it('sin margen objetivo definido, la columna muestra "—"', () => {
+      configurarCollection({ datos: [productoDe({ id: 'p1', nombre: 'Queso Añejo' })] });
+      renderizar();
+
+      const fila = tabla().getByText('Queso Añejo').closest('tr') as HTMLElement;
+      expect(within(fila).getByText('—')).toBeTruthy();
+    });
+  });
+
+  describe('alerta de margen', () => {
+    it('producto bajo objetivo: badge "Bajo objetivo" en su fila', () => {
+      configurarCollection({
+        datos: [
+          // margen actual 40 % < objetivo 50 %
+          productoDe({
+            id: 'p1',
+            nombre: 'Queso Añejo',
+            costoPromedioCents: money(30000),
+            precioVentaCents: money(50000),
+            margenObjetivoBps: 5000,
+          }),
+        ],
+      });
+      renderizar();
+
+      const fila = tabla().getByText('Queso Añejo').closest('tr') as HTMLElement;
+      expect(within(fila).getByText('Bajo objetivo')).toBeTruthy();
+    });
+
+    it('producto por encima del objetivo: sin badge', () => {
+      configurarCollection({
+        datos: [
+          productoDe({
+            id: 'p1',
+            nombre: 'Queso Añejo',
+            costoPromedioCents: money(30000),
+            precioVentaCents: money(50000), // margen 40 %
+            margenObjetivoBps: 3000, // objetivo 30 %
+          }),
+        ],
+      });
+      renderizar();
+
+      const fila = tabla().getByText('Queso Añejo').closest('tr') as HTMLElement;
+      expect(within(fila).queryByText('Bajo objetivo')).toBeNull();
+    });
+
+    it('chip "Solo bajo objetivo" filtra la tabla a los que están bajo objetivo', () => {
+      configurarCollection({
+        datos: [
+          productoDe({
+            id: 'p1',
+            nombre: 'Bajo objetivo SA',
+            costoPromedioCents: money(30000),
+            precioVentaCents: money(50000), // 40 %
+            margenObjetivoBps: 5000, // objetivo 50 % → bajo
+          }),
+          productoDe({
+            id: 'p2',
+            nombre: 'En objetivo SA',
+            costoPromedioCents: money(30000),
+            precioVentaCents: money(50000), // 40 %
+            margenObjetivoBps: 3000, // objetivo 30 % → OK
+          }),
+        ],
+      });
+      renderizar();
+
+      expect(tabla().getByText('Bajo objetivo SA')).toBeTruthy();
+      expect(tabla().getByText('En objetivo SA')).toBeTruthy();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Solo bajo objetivo' }));
+
+      expect(tabla().getByText('Bajo objetivo SA')).toBeTruthy();
+      expect(tabla().queryByText('En objetivo SA')).toBeNull();
+    });
+  });
+
+  describe('búsqueda y filtro por categoría', () => {
+    it('la búsqueda filtra por nombre o categoría', () => {
+      configurarCollection({
+        datos: [
+          productoDe({ id: 'p1', nombre: 'Queso Añejo', categoria: 'Quesos' }),
+          productoDe({ id: 'p2', nombre: 'Miel 500g', categoria: 'Miel' }),
+        ],
+      });
+      renderizar();
+
+      fireEvent.change(screen.getByLabelText('Buscar producto'), { target: { value: 'miel' } });
+
+      expect(tabla().getByText('Miel 500g')).toBeTruthy();
+      expect(tabla().queryByText('Queso Añejo')).toBeNull();
+    });
+
+    it('con dos o más categorías, los chips filtran la tabla', () => {
+      configurarCollection({
+        datos: [
+          productoDe({ id: 'p1', nombre: 'Queso Añejo', categoria: 'Quesos' }),
+          productoDe({ id: 'p2', nombre: 'Miel 500g', categoria: 'Miel' }),
+        ],
+      });
+      configurarCategorias({
+        datos: [
+          { id: 'c1', nombre: 'Quesos', orden: 0 },
+          { id: 'c2', nombre: 'Miel', orden: 1 },
+        ],
+      });
+      renderizar();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Quesos' }));
+
+      expect(tabla().getByText('Queso Añejo')).toBeTruthy();
+      expect(tabla().queryByText('Miel 500g')).toBeNull();
+    });
+  });
+
+  describe('edición individual', () => {
+    it('tocar "Editar" abre el modal de ese producto', () => {
+      configurarCollection({ datos: [productoDe({ id: 'p1', nombre: 'Queso Añejo' })] });
+      renderizar();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Editar' }));
+
+      expect(screen.getByText('Editar precio · Queso Añejo')).toBeTruthy();
+    });
+
+    it('guardar llama a updateDoc con el precio y el margen objetivo, y muestra el toast de éxito', async () => {
+      configurarCollection({ datos: [productoDe({ id: 'p1', nombre: 'Queso Añejo' })] });
+      mocks.updateDoc.mockResolvedValue(undefined);
+      renderizar();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Editar' }));
+      fireEvent.change(screen.getByLabelText('Precio de venta por kg'), { target: { value: '600,00' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+      await waitFor(() => expect(mocks.updateDoc).toHaveBeenCalledTimes(1));
+      const [, cambios] = mocks.updateDoc.mock.calls[0] as [unknown, Record<string, unknown>];
+      expect(cambios.precioVentaCents).toBe(money(60000));
+      expect(await screen.findByText('Precio actualizado.')).toBeTruthy();
+    });
+
+    it('sin conexión: cierra el modal al instante y avisa que falta sincronizar', async () => {
+      configurarCollection({ datos: [productoDe({ id: 'p1', nombre: 'Queso Añejo' })] });
+      mocks.useOnlineStatus.mockReturnValue(false);
+      mocks.updateDoc.mockResolvedValue(undefined);
+      renderizar();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Editar' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+      const dialog = document.querySelectorAll('dialog')[0] as HTMLDialogElement;
+      expect(dialog.open).toBe(false);
+      expect(
+        await screen.findByText('Guardado sin conexión. Se sincronizará al reconectar.'),
+      ).toBeTruthy();
+    });
+
+    it('error al guardar: muestra toast de error', async () => {
+      configurarCollection({ datos: [productoDe({ id: 'p1', nombre: 'Queso Añejo' })] });
+      mocks.updateDoc.mockRejectedValue(new Error('offline'));
+      renderizar();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Editar' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+      expect(await screen.findByText('No se pudo actualizar el precio. Intentá de nuevo.')).toBeTruthy();
+    });
+  });
+
+  describe('aplicar sugeridos (masivo)', () => {
+    function productoBajoObjetivoConSugerido(id: string, nombre: string): Producto {
+      // costo $300, precio $400 (margen 25 %), objetivo 40 % → bajo objetivo,
+      // con precio sugerido calculable (precioDesdeMargen(30000,4000)=50000 exacto).
+      return productoDe({
+        id,
+        nombre,
+        costoPromedioCents: money(30000),
+        precioVentaCents: money(40000),
+        margenObjetivoBps: 4000,
+      });
+    }
+
+    it('el botón muestra la cantidad de candidatos visibles y arranca deshabilitado sin ninguno', () => {
+      configurarCollection({ datos: [productoDe({ id: 'p1', nombre: 'En objetivo' })] });
+      renderizar();
+
+      const boton = screen.getByRole('button', { name: 'Aplicar sugeridos (0)' }) as HTMLButtonElement;
+      expect(boton.disabled).toBe(true);
+    });
+
+    it('con candidatos visibles, habilita el botón con la cuenta correcta', () => {
+      configurarCollection({
+        datos: [productoBajoObjetivoConSugerido('p1', 'Queso Añejo'), productoBajoObjetivoConSugerido('p2', 'Queso Colonia')],
+      });
+      renderizar();
+
+      const boton = screen.getByRole('button', { name: 'Aplicar sugeridos (2)' }) as HTMLButtonElement;
+      expect(boton.disabled).toBe(false);
+    });
+
+    it('abre la confirmación con el detalle actual → sugerido, y confirmar llama al batch con TODOS los candidatos', async () => {
+      configurarCollection({
+        datos: [productoBajoObjetivoConSugerido('p1', 'Queso Añejo'), productoBajoObjetivoConSugerido('p2', 'Queso Colonia')],
+      });
+      mocks.batchCommit.mockResolvedValue(undefined);
+      renderizar();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Aplicar sugeridos (2)' }));
+
+      expect(screen.getByText('Aplicar precios sugeridos')).toBeTruthy();
+      expect(screen.getAllByText('$ 400,00 → $ 500,00').length).toBe(2);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Aplicar a 2 producto(s)' }));
+
+      await waitFor(() => expect(mocks.batchCommit).toHaveBeenCalledTimes(1));
+      expect(mocks.batchUpdate).toHaveBeenCalledTimes(2);
+      expect(await screen.findByText('Se actualizaron los precios de 2 productos.')).toBeTruthy();
+    });
+
+    it('cancelar la confirmación no llama al batch', () => {
+      configurarCollection({ datos: [productoBajoObjetivoConSugerido('p1', 'Queso Añejo')] });
+      renderizar();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Aplicar sugeridos (1)' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+
+      expect(mocks.batchCommit).not.toHaveBeenCalled();
+    });
+
+    it('un producto bajo objetivo pero sin costo (sin sugerido posible) no cuenta como candidato', () => {
+      const sinCosto = productoDe({
+        id: 'p1',
+        nombre: 'Sin costo',
+        costoPromedioCents: money(0),
+        margenObjetivoBps: 4000,
+      });
+      configurarCollection({ datos: [sinCosto] });
+      renderizar();
+
+      expect(screen.getByRole('button', { name: 'Aplicar sugeridos (0)' })).toBeTruthy();
+    });
+  });
+
+  it('gate de admin: la ruta /stock/precios está protegida por RutaSoloAdmin en App.tsx (no hay lógica de rol dentro de Precios.tsx)', () => {
+    // Precios.tsx en sí no rama por rol (a diferencia de Productos.tsx): esta
+    // pantalla asume que solo llega un admin, gateado en App.tsx. El test de
+    // gate real (redirect a /venta para un vendedor) vive a nivel de ruta,
+    // no acá — se documenta la decisión para que quede explícita en la suite.
+    configurarCollection({ datos: [] });
+    renderizar();
+    expect(screen.getByRole('link', { name: 'Precios' })).toBeTruthy();
+  });
+});

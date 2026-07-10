@@ -19,10 +19,17 @@ export function itemsSelectorStock(esAdmin: boolean): ItemSelectorSeccion[] {
   return [
     { id: 'stock', etiqueta: 'Stock', a: '/stock' },
     { id: 'catalogo', etiqueta: 'Catálogo', a: '/stock/productos' },
-    // Compras (F2-F1, doc 03): solo admin, entre Catálogo y Proveedores
-    // (docs/06-ui-ux.md §2: "Stock | Catálogo | Compras | Proveedores | Precios").
-    ...(esAdmin ? [{ id: 'compras', etiqueta: 'Compras', a: '/stock/compras' }] : []),
-    ...(esAdmin ? [{ id: 'proveedores', etiqueta: 'Proveedores', a: '/stock/proveedores' }] : []),
+    // Secciones solo-admin (docs/06-ui-ux.md §2: "Stock | Catálogo | Compras |
+    // Proveedores | Precios"): el vendedor no ve compras, datos de proveedor
+    // ni costos/edición de precios (docs/07 y docs/06 §2); las rutas además
+    // quedan protegidas server-side por `RutaSoloAdmin` en App.tsx.
+    ...(esAdmin
+      ? [
+          { id: 'compras', etiqueta: 'Compras', a: '/stock/compras' },
+          { id: 'proveedores', etiqueta: 'Proveedores', a: '/stock/proveedores' },
+          { id: 'precios', etiqueta: 'Precios', a: '/stock/precios' },
+        ]
+      : []),
   ];
 }
 
