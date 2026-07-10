@@ -116,7 +116,14 @@ genérico — se poblaron los 3 índices compuestos prescritos en doc 02 y los h
 de firebase-kit ahora loguean el `FirestoreError` a consola (trae el link de
 creación del índice faltante).
 
-## Fase 1.5 — Clientes y proveedores (modelo + CRUD + cliente en POS)
+## Fase 1.5 — Clientes y proveedores (modelo + CRUD + cliente en POS) — CERRADA
+
+CERRADA 2026-07-10: los 6 criterios validados por el dueño en producción.
+Incluyó además (feedback de uso real): navegación reorganizada (tab Clientes;
+Historial cuelga de Venta con atajo de icono en su header), orden consistente
+de acciones (+ a la derecha), arrastre del carrito sin tope intermedio, e
+índice compuesto de proveedores (incidente en prod: query con where+orderBy
+sin índice declarado — ver la lección en los checklists de review).
 
 Objetivo: conocer a quién se le vende y a quién se le compra (ver doc 07, que
 es el contrato de este tramo). Va ANTES de Fase 2 a propósito: si `proveedores`

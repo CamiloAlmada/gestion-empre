@@ -60,9 +60,11 @@ pnpm turbo lint                       # lint de todo
 
 ## Estado actual
 
-Fases 0 y 1 CERRADAS (2026-07-08, criterios verificados por el dueño en producción:
-https://quesarte-uy.web.app). El MVP está operativo: POS con FIFO + override + pieza
-entera + cobro offline, Stock (ingreso, ajustes, merma), Productos, Historial con
-anulación, Usuarios por invitación, Ajustes con tema. 761 tests. Siguiente: Fase 2
-(compras, prorrateo de gastos, márgenes) — leer las notas arrastradas de los reviews
-de Fase 1 al inicio de esa sección en `docs/04-plan-fases.md`.
+Fases 0, 1 y 1.5 CERRADAS (Fase 1.5 el 2026-07-10, criterios verificados por el
+dueño en producción: https://quesarte-uy.web.app). Operativo: POS con FIFO +
+override + pieza entera + cobro offline + cliente opcional en el carrito, Stock
+(ingreso, ajustes, merma), Productos con categorías, Clientes (tab propio, ficha
+con stats), Proveedores (solo admin), Historial con anulación (cuelga de Venta),
+Usuarios por invitación, dos estilos de tema (Minimalista/Cálido). 895+ tests.
+EN CURSO: Fase 2 (compras, prorrateo de gastos, márgenes, doc 03) — leer las
+notas arrastradas al inicio de esa sección en `docs/04-plan-fases.md`.
