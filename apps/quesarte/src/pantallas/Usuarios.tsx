@@ -331,9 +331,7 @@ export function Usuarios() {
         </div>
       )}
 
-      <div className="w-full max-w-xs">
-        <CampoBusqueda valor={busqueda} onChange={setBusqueda} ariaLabel="Buscar usuario" placeholder="Nombre o correo" />
-      </div>
+      <CampoBusqueda valor={busqueda} onChange={setBusqueda} ariaLabel="Buscar usuario" placeholder="Nombre o correo" />
 
       {cargando ? (
         <div className="flex min-h-[40vh] items-center justify-center">

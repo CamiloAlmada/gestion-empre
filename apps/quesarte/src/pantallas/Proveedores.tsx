@@ -222,10 +222,8 @@ export function Proveedores() {
         </div>
       )}
 
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="w-full max-w-xs">
-          <CampoBusqueda valor={busqueda} onChange={setBusqueda} ariaLabel="Buscar proveedor" placeholder="Nombre" />
-        </div>
+      <CampoBusqueda valor={busqueda} onChange={setBusqueda} ariaLabel="Buscar proveedor" placeholder="Nombre" />
+      <div className="flex flex-wrap gap-3">
         <Chip activo={mostrarInactivos} onClick={() => setMostrarInactivos((v) => !v)}>
           Mostrar inactivos
         </Chip>

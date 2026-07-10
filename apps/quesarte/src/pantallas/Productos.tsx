@@ -365,14 +365,12 @@ export function Productos() {
         </div>
       )}
 
-      <div className="w-full max-w-xs">
-        <CampoBusqueda
-          valor={busqueda}
-          onChange={setBusqueda}
-          ariaLabel="Buscar producto"
-          placeholder="Nombre o categoría"
-        />
-      </div>
+      <CampoBusqueda
+        valor={busqueda}
+        onChange={setBusqueda}
+        ariaLabel="Buscar producto"
+        placeholder="Nombre o categoría"
+      />
 
       {opcionesCategoria.length > 1 && (
         <ChipsFiltro
