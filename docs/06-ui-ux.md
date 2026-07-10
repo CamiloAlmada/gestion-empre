@@ -30,15 +30,17 @@ tech lead; no se ignora en silencio.
 - **Venta es el tab central y prominente**: botón circular elevado con el color
   primario (patrón FAB central). Es el home de la app: al abrir, cae en Venta.
 - **Productos** se gestiona como sección interna del tab Stock (no tiene tab).
-- **Historial** (2026-07-10) es sección interna del tab Clientes (jerarquía:
-  su `‹ volver` lleva a Clientes; el tab Clientes queda activo mientras se está
-  en él) y tiene un **atajo desde Venta**: icono de historial (reloj con flecha
-  antihoraria "rebobinando") arriba a la derecha del header — el flujo natural
-  de "acabo de cobrar, quiero ver/anular la última venta". Es la ÚNICA acción
-  que se renderiza en el header también en pantalla angosta (excepción
-  documentada: la zona inferior de Venta pertenece al carrito, no puede recibir
-  flotantes; un icono en el header no compite con la zona del pulgar porque es
-  consulta ocasional, no operación de venta).
+- **Historial** (2026-07-10, ajustado tras uso real del dueño) es el historial
+  DE VENTAS: cuelga del tab **Venta** (su `‹ volver` lleva a Venta; el tab
+  Venta queda activo mientras se está en él o en el detalle de una venta). Dos
+  entradas: el icono de historial (reloj con flecha antihoraria "rebobinando")
+  arriba a la derecha del header de Venta — el flujo natural de "acabo de
+  cobrar, quiero ver/anular la última venta" — y la acción "Historial" del
+  listado de Clientes (consulta cruzada frecuente). El icono de Venta es la
+  ÚNICA acción que se renderiza en el header también en pantalla angosta
+  (excepción documentada: la zona inferior de Venta pertenece al carrito, no
+  puede recibir flotantes; un icono en el header no compite con la zona del
+  pulgar porque es consulta ocasional, no operación de venta).
 - **Compras** (Fase 2) se accede desde Stock. **Gestión de usuarios**, desde Ajustes.
 - Labels **siempre visibles** bajo cada ícono (nunca ícono solo). Tab activo:
   color primario + realce tipo pill; inactivo: texto secundario.
@@ -53,6 +55,14 @@ tech lead; no se ignora en silencio.
     breadcrumb en mobile; no hay breadcrumbs multi-nivel).
   - Hasta **2 acciones contextuales** por pantalla (las de más frecuencia);
     más que eso → menú "⋮". Acciones fuera de contexto: prohibidas.
+  - **Orden y forma consistentes** (2026-07-10, feedback del dueño): la acción
+    de AGREGAR es un botón "+" cuadrado (solo icono, con `aria-label`
+    descriptivo) y ocupa SIEMPRE el extremo derecho — en el cluster flotante
+    mobile y en el header desktop por igual. Las acciones de navegación
+    interna (Catálogo, Categorías, Proveedores, Historial…) van con etiqueta
+    de texto, justo a su izquierda. Nada de botones de agregar con texto largo
+    ("Agregar proveedor") en el cluster: el texto vive en el estado vacío y en
+    el `aria-label`.
   - **Dónde se renderizan** (ergonomía de pulgar, decidido 2026-07-09): en
     pantalla angosta van como **píldoras flotantes sobre la tab bar** (zona del
     pulgar, una mano); en `md:`+ van a la derecha del header (mouse). La
