@@ -1,4 +1,8 @@
-import { money, redondearHalfUp, type Money, type StatsCliente } from '@gestion/core';
+import {
+  calcularTicketPromedio as ticketPromedioCents,
+  type Money,
+  type StatsCliente,
+} from '@gestion/core';
 
 /**
  * Estadísticas derivadas de `Cliente.stats` que la ficha del cliente calcula
@@ -8,21 +12,17 @@ import { money, redondearHalfUp, type Money, type StatsCliente } from '@gestion/
  * puede dividir ni recalcular una resta contra "ahora".
  *
  * Pura y sin Firebase: toma el `StatsCliente` ya leído por `useDoc` y devuelve
- * valores de UI. Vive en la app (no en `packages/core`) porque la tarea CP-B
- * tiene prohibido tocar `core`/`firebase-kit` — ver nota en el reporte de la
- * tarea: idealmente `calcularTicketPromedio` sería un helper de `Money` más
- * en core, junto a `multiplicarMoney`.
+ * valores de UI. La aritmética de plata (el ticket promedio) vive en core
+ * (regla de oro 1); acá queda solo el adapter que le pasa los campos de
+ * `StatsCliente` y el cálculo de "días desde la última compra", que no es plata.
  */
 
 /**
- * Ticket promedio: `totalHistoricoCents / cantidadVentas`, redondeado
- * half-up con el mismo helper de core que usa `multiplicarMoney` (nunca se
- * inventa una regla de redondeo nueva acá). `null` si el cliente todavía no
- * tiene ventas — evita la división por cero en vez de propagar `NaN`/`Infinity`.
+ * Ticket promedio de un cliente: adapta `StatsCliente` al helper de `Money` de
+ * core (`calcularTicketPromedio`). `null` si el cliente todavía no tiene ventas.
  */
 export function calcularTicketPromedio(stats: StatsCliente): Money | null {
-  if (stats.cantidadVentas <= 0) return null;
-  return money(redondearHalfUp(stats.totalHistoricoCents / stats.cantidadVentas));
+  return ticketPromedioCents(stats.totalHistoricoCents, stats.cantidadVentas);
 }
 
 const MS_POR_DIA = 24 * 60 * 60 * 1000;

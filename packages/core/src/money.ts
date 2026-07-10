@@ -43,6 +43,24 @@ export function multiplicarMoney(m: Money, escalar: number): Money {
 }
 
 /**
+ * Ticket promedio: `totalHistoricoCents / cantidadVentas`, redondeado half-up con
+ * el mismo helper que `multiplicarMoney` (nunca una regla de redondeo nueva).
+ * Devuelve `null` cuando el cliente todavía no tiene ventas (`cantidadVentas <= 0`):
+ * evita la división por cero en vez de propagar `NaN`/`Infinity`.
+ *
+ * Es aritmética de plata (regla de oro 1): vive en core, junto a los demás
+ * helpers de `Money`, y la UI solo la consume. Toma los dos escalares (en vez de
+ * `StatsCliente`) para no acoplar este módulo de primitivas al modelo de dominio.
+ */
+export function calcularTicketPromedio(
+  totalHistoricoCents: Money,
+  cantidadVentas: number,
+): Money | null {
+  if (cantidadVentas <= 0) return null;
+  return money(redondearHalfUp(totalHistoricoCents / cantidadVentas));
+}
+
+/**
  * Convierte un monto en pesos (con decimales, como lo ingresa la UI) a `Money`
  * en centésimos, redondeando half-up. Frontera UI → dominio.
  *

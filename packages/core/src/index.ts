@@ -4,6 +4,7 @@ export {
   money,
   sumarMoney,
   multiplicarMoney,
+  calcularTicketPromedio,
   moneyDesdePesos,
   formatearMoney,
 } from './money.js';

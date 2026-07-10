@@ -6,30 +6,19 @@ function stats(over: Partial<StatsCliente> = {}): StatsCliente {
   return { cantidadVentas: 0, totalHistoricoCents: money(0), ...over };
 }
 
-describe('calcularTicketPromedio', () => {
-  it('sin ventas (cantidadVentas === 0): devuelve null en vez de dividir por cero', () => {
+// La aritmética exhaustiva (redondeo half-up, división por cero) se testea en
+// core (`money.test.ts`, `calcularTicketPromedio`); acá solo se verifica que el
+// adapter mapea bien los campos de `StatsCliente` al helper de core.
+describe('calcularTicketPromedio (adapter sobre StatsCliente)', () => {
+  it('sin ventas (cantidadVentas === 0): devuelve null', () => {
     expect(calcularTicketPromedio(stats({ cantidadVentas: 0, totalHistoricoCents: money(0) }))).toBeNull();
   });
 
-  it('divide el total histórico entre la cantidad de ventas', () => {
+  it('delega en el helper de core con el total y la cantidad de las stats', () => {
     const resultado = calcularTicketPromedio(
       stats({ cantidadVentas: 4, totalHistoricoCents: money(200000) }),
     );
     expect(resultado).toBe(money(50000));
-  });
-
-  it('redondea half-up cuando la división no es exacta', () => {
-    // 1000 / 3 = 333.33...  → redondea a 333
-    const resultado = calcularTicketPromedio(
-      stats({ cantidadVentas: 3, totalHistoricoCents: money(1000) }),
-    );
-    expect(resultado).toBe(money(333));
-
-    // 1001 / 3 = 333.66... → redondea a 334
-    const resultadoDos = calcularTicketPromedio(
-      stats({ cantidadVentas: 3, totalHistoricoCents: money(1001) }),
-    );
-    expect(resultadoDos).toBe(money(334));
   });
 });
 

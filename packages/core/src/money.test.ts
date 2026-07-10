@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { money, sumarMoney, multiplicarMoney, moneyDesdePesos, formatearMoney } from './money.js';
+import {
+  money,
+  sumarMoney,
+  multiplicarMoney,
+  calcularTicketPromedio,
+  moneyDesdePesos,
+  formatearMoney,
+} from './money.js';
 
 describe('money (constructor)', () => {
   it('acepta 0, positivos y negativos enteros', () => {
@@ -74,6 +81,31 @@ describe('multiplicarMoney', () => {
   it('lanza RangeError con escalar no finito', () => {
     expect(() => multiplicarMoney(money(100), NaN)).toThrow(RangeError);
     expect(() => multiplicarMoney(money(100), Infinity)).toThrow(RangeError);
+  });
+});
+
+describe('calcularTicketPromedio', () => {
+  it('sin ventas (cantidadVentas <= 0): devuelve null en vez de dividir por cero', () => {
+    expect(calcularTicketPromedio(money(0), 0)).toBeNull();
+    expect(calcularTicketPromedio(money(5000), 0)).toBeNull();
+    // Defensa extra: un contador negativo (dato corrupto) tampoco divide.
+    expect(calcularTicketPromedio(money(5000), -1)).toBeNull();
+  });
+
+  it('divide el total histórico entre la cantidad de ventas (exacto)', () => {
+    expect(calcularTicketPromedio(money(200000), 4)).toBe(200000 / 4);
+    expect(calcularTicketPromedio(money(200000), 4)).toBe(50000);
+  });
+
+  it('redondea half-up cuando la división no es exacta', () => {
+    // 1000 / 3 = 333.33… → 333
+    expect(calcularTicketPromedio(money(1000), 3)).toBe(333);
+    // 1001 / 3 = 333.66… → 334
+    expect(calcularTicketPromedio(money(1001), 3)).toBe(334);
+  });
+
+  it('el resultado es siempre un entero de centésimos (Money)', () => {
+    expect(Number.isInteger(calcularTicketPromedio(money(1000), 3))).toBe(true);
   });
 });
 
