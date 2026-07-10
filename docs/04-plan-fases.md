@@ -155,18 +155,16 @@ estimadas — NO va acá: extiende Fase 3):
    ficha con datos de pago; el historial de compras de la ficha se completa
    solo cuando Fase 2 exista.
 
-Deuda consciente (CP-B/CP-D, 2026-07-09): no existe `reactivarCliente` /
-`reactivarProveedor` — desactivar es irreversible desde la UI (el modal de
-confirmación lo dice honestamente). Si un cliente/proveedor se desactiva por
-error, hoy solo se recupera por consola. Habilitarlo requiere las funciones en
-firebase-kit + entrada de UI (Clientes ya tiene toggle "mostrar inactivos";
-Proveedores los oculta del todo). Decidir con el dueño si entra en Fase 2.
-Del review integral del tramo (mismo tema): la ficha de proveedor usa
-`useCollection` filtrada por activos (un inactivo no tiene ficha visible)
-mientras la de cliente usa `useDoc` + badge "Inactivo" — al resolver la
-reactivación, unificar al patrón de cliente (visibilidad honesta). También:
-`normalizar` (búsqueda acento-insensible) está cuadruplicado en la app —
-extraer a un helper compartido cuando se toque ese código.
+Deuda CERRADA (RE-1, 2026-07-10, decidido con el dueño): `reactivarCliente` /
+`reactivarProveedor` en firebase-kit + botón "Reactivar" en ambas fichas;
+Proveedores ganó el toggle "mostrar inactivos" y su ficha pasó a `useDoc` +
+badge "Inactivo" (patrón unificado al de Clientes). Nota: el índice compuesto
+`proveedores (activo, nombre)` quedó SIN consumidor (la query dejó de filtrar
+por activo) — se deja declarado a propósito: borrarlo obligaría a verificar el
+comportamiento de `firebase deploy --only firestore` no-interactivo ante
+eliminaciones y el costo de mantenerlo es despreciable. Pendiente aún:
+`normalizar` (búsqueda acento-insensible) cuadruplicado en la app — extraer a
+un helper compartido cuando se toque ese código (candidato: tanda visual UI-3).
 
 Decisión consciente (CP-A, 2026-07-09): las reglas exigen que una venta con
 cliente SUBA estrictamente `stats.totalHistoricoCents` — asociar cliente a una
