@@ -26,3 +26,33 @@
 body {
   @apply bg-fondo text-texto;
 }
+
+/*
+ * Píldora animada del selector de sección de Stock (docs/06-ui-ux.md §2/§3,
+ * UI-4c): única animación de navegación aprobada del proyecto — no extender
+ * a otras rutas sin decisión explícita. `pill-seccion` es el
+ * `view-transition-name` que `SelectorSeccion.tsx` asigna SOLO al ítem
+ * activo; react-router envuelve la navegación en
+ * `document.startViewTransition()` vía la prop `viewTransition` de `Link`.
+ * `::view-transition-group()` (no `-old`/`-new`) es el pseudo-elemento que
+ * anima la CAJA contenedora (posición + tamaño) durante el morph — así se
+ * logra el desplazamiento/resize de la píldora en vez de un crossfade.
+ * El resto de la navegación de la app usa el crossfade default del root
+ * (::view-transition-old/-new sin nombre): breve y sin animación custom acá,
+ * a propósito.
+ */
+::view-transition-group(pill-seccion) {
+  animation-duration: 180ms;
+  animation-timing-function: ease-out;
+}
+
+/* `prefers-reduced-motion` desactiva TODA animación de view transition (no
+ * solo la píldora): con la preferencia activa, la navegación entre secciones
+ * de Stock cambia de forma instantánea, sin morph ni crossfade. */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}
