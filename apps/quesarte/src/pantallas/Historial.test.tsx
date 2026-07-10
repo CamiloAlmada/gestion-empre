@@ -105,9 +105,15 @@ function configurarVentas(estado: EstadoFalso<Venta>) {
   });
 }
 
-function VisorAcciones() {
+function VisorHeader() {
   const config = useHeaderActual();
-  return <div data-testid="acciones">{config?.acciones}</div>;
+  return (
+    <div>
+      <p data-testid="volver-header">
+        {config?.volverA ? `${config.volverA.etiqueta}:${config.volverA.a}` : ''}
+      </p>
+    </div>
+  );
 }
 
 function renderizar() {
@@ -115,7 +121,7 @@ function renderizar() {
     <MemoryRouter>
       <ProveedorToasts>
         <ProveedorHeader>
-          <VisorAcciones />
+          <VisorHeader />
           <Historial />
         </ProveedorHeader>
       </ProveedorToasts>
@@ -131,14 +137,13 @@ afterEach(() => {
 });
 
 describe('Historial - header', () => {
-  it('expone la acción "Clientes", que enlaza al listado de clientes', () => {
+  it('vuelve a Clientes (docs/06-ui-ux.md §2, 2026-07-10: Historial cuelga de Clientes)', () => {
     configurarAuth('admin');
     configurarVentas(estadoOk([]));
 
     renderizar();
 
-    const enlace = within(screen.getByTestId('acciones')).getByRole('link', { name: 'Clientes' });
-    expect(enlace.getAttribute('href')).toBe('/historial/clientes');
+    expect(screen.getByTestId('volver-header').textContent).toBe('Clientes:/clientes');
   });
 });
 

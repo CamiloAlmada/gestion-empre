@@ -119,12 +119,12 @@ function VisorHeader() {
 
 function renderizar(id = 'c1') {
   return render(
-    <MemoryRouter initialEntries={[`/historial/cliente/${id}`]}>
+    <MemoryRouter initialEntries={[`/clientes/cliente/${id}`]}>
       <ProveedorToasts>
         <ProveedorHeader>
           <VisorHeader />
           <Routes>
-            <Route path="/historial/cliente/:id" element={<DetalleClientePantalla />} />
+            <Route path="/clientes/cliente/:id" element={<DetalleClientePantalla />} />
           </Routes>
         </ProveedorHeader>
       </ProveedorToasts>
@@ -168,7 +168,8 @@ describe('DetalleClientePantalla - estados', () => {
     renderizar();
 
     expect(screen.getByText('No encontramos ese cliente. Puede haberse desactivado.')).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Volver a Clientes' })).toBeTruthy();
+    const enlace = screen.getByRole('link', { name: 'Volver a Clientes' });
+    expect(enlace.getAttribute('href')).toBe('/clientes');
   });
 });
 
@@ -183,7 +184,7 @@ describe('DetalleClientePantalla - header', () => {
     renderizar();
 
     expect(screen.getByTestId('titulo-header').textContent).toBe('Ana Pérez');
-    expect(screen.getByTestId('volver-header').textContent).toBe('Clientes:/historial/clientes');
+    expect(screen.getByTestId('volver-header').textContent).toBe('Clientes:/clientes');
   });
 });
 

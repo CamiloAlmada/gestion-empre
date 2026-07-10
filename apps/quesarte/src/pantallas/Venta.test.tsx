@@ -6,8 +6,18 @@ import { money, peso, type Cliente, type Pieza, type Producto } from '@gestion/c
 import { StockInsuficienteError, type EntradaVenta } from '@gestion/firebase-kit';
 import { ProveedorToasts } from '@gestion/ui';
 import { Venta } from './Venta';
-import { ProveedorHeader } from '../componentes/header/ContextoHeader';
+import { ProveedorHeader, useHeaderActual } from '../componentes/header/ContextoHeader';
 import { ProveedorCarrito } from '../componentes/venta/ContextoCarrito';
+
+/** `accionHeader` (docs/06-ui-ux.md §2, 2026-07-10) solo lo renderiza `Shell`
+ * (fuera del árbol de este test file, ver Shell.test.tsx para su mecánica de
+ * dual-visibilidad); acá alcanza con exponerlo para asertar que Venta lo
+ * declara con el contenido esperado, mismo patrón que `VisorHeader` en
+ * Historial.test.tsx/Clientes.test.tsx. */
+function VisorAccionHeader() {
+  const config = useHeaderActual();
+  return <div>{config?.accionHeader}</div>;
+}
 
 const mocks = vi.hoisted(() => ({
   useAuth: vi.fn(),
@@ -157,6 +167,7 @@ function renderizar() {
     <MemoryRouter>
       <ProveedorToasts>
         <ProveedorHeader>
+          <VisorAccionHeader />
           <ProveedorCarrito>
             <Venta />
           </ProveedorCarrito>
@@ -254,6 +265,17 @@ describe('Venta - estados', () => {
     expect(screen.getByRole('link', { name: 'Ir a Productos' }).getAttribute('href')).toBe('/stock/productos');
   });
 
+});
+
+describe('Venta - atajo a Historial (docs/06-ui-ux.md §2, 2026-07-10)', () => {
+  it('declara accionHeader: ícono con aria-label "Historial" que enlaza a /historial', () => {
+    configurarAuth();
+    configurarCollections({ productos: estadoOk([]), piezas: estadoOk([]) });
+    renderizar();
+
+    const enlace = screen.getByRole('link', { name: 'Historial' });
+    expect(enlace.getAttribute('href')).toBe('/historial');
+  });
 });
 
 describe('Venta - agregar al carrito por modo', () => {

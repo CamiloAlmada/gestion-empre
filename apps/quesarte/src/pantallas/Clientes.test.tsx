@@ -90,13 +90,13 @@ function PlaceholderFicha() {
 
 function renderizar() {
   return render(
-    <MemoryRouter initialEntries={['/historial/clientes']}>
+    <MemoryRouter initialEntries={['/clientes']}>
       <ProveedorToasts>
         <ProveedorHeader>
           <VisorHeader />
           <Routes>
-            <Route path="/historial/clientes" element={<Clientes />} />
-            <Route path="/historial/cliente/:id" element={<PlaceholderFicha />} />
+            <Route path="/clientes" element={<Clientes />} />
+            <Route path="/clientes/cliente/:id" element={<PlaceholderFicha />} />
           </Routes>
         </ProveedorHeader>
       </ProveedorToasts>
@@ -111,12 +111,12 @@ afterEach(() => {
 });
 
 describe('Clientes - header', () => {
-  it('título "Clientes" (≠ "Historial") y volver a Historial', () => {
+  it('título "Clientes", sin volver (raíz del tab, docs/06-ui-ux.md §2, 2026-07-10)', () => {
     configurarClientes(estadoOk([]));
     renderizar();
 
     expect(screen.getByTestId('titulo-header').textContent).toBe('Clientes');
-    expect(screen.getByTestId('volver-header').textContent).toBe('Historial:/historial');
+    expect(screen.getByTestId('volver-header').textContent).toBe('');
   });
 
   it('expone la acción "Agregar cliente" (accesible tanto a vendedor como a admin)', () => {
@@ -128,6 +128,14 @@ describe('Clientes - header', () => {
     renderizar();
 
     expect(screen.getByRole('button', { name: 'Agregar cliente' })).toBeTruthy();
+  });
+
+  it('expone la acción "Historial", que enlaza al Historial general (invierte la acción que antes declaraba Historial)', () => {
+    configurarClientes(estadoOk([cliente({ id: 'c1', nombre: 'Ana Pérez' })]));
+    renderizar();
+
+    const enlace = screen.getByRole('link', { name: 'Historial' });
+    expect(enlace.getAttribute('href')).toBe('/historial');
   });
 });
 

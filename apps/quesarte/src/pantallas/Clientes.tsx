@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import { collection, orderBy, query } from 'firebase/firestore';
 import { Button, Input, useToasts } from '@gestion/ui';
 import { clienteConverter, crearCliente, useCollection, useOnlineStatus } from '@gestion/firebase-kit';
@@ -18,12 +18,15 @@ const CLASE_ACCION_PRIMARIA =
   'inline-flex min-h-[48px] min-w-[48px] items-center justify-center gap-1.5 rounded-control bg-primary-600 px-3 font-medium text-white hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2 focus-visible:ring-offset-superficie';
 
 /**
- * Listado de Clientes (sección interna del tab Historial, docs/06-ui-ux.md
- * §2 y doc 07 — mismo patrón que Productos dentro de Stock). Trae TODA la
- * colección `clientes` con UNA `useCollection` memoizada (ordenada por
- * nombre; colección chica, sin queries por prefijo) y filtra client-side por
- * búsqueda (nombre/alias/teléfono) y por `activo` — el toggle "Mostrar
- * inactivos" no cambia la query, solo el filtro (ver `filtrarClientes`).
+ * Listado de Clientes: RAÍZ del tab (docs/06-ui-ux.md §2, 2026-07-10 —
+ * decisión del dueño: con el módulo de clientes recién lanzado, es la
+ * entrada de uso diario; el Historial general pasa a colgar de acá, ver
+ * `pantallas/Historial.tsx`). Sin `volverA`: es tab raíz, igual que
+ * `Stock.tsx`/`Venta.tsx`. Trae TODA la colección `clientes` con UNA
+ * `useCollection` memoizada (ordenada por nombre; colección chica, sin
+ * queries por prefijo) y filtra client-side por búsqueda (nombre/alias/
+ * teléfono) y por `activo` — el toggle "Mostrar inactivos" no cambia la
+ * query, solo el filtro (ver `filtrarClientes`).
  *
  * El alta la puede disparar tanto `vendedor` como `admin` (doc 07: alta
  * rápida de mostrador con las reglas ya lo permiten); la edición y la
@@ -45,17 +48,27 @@ export function Clientes() {
 
   useHeader({
     titulo: 'Clientes',
-    volverA: { etiqueta: 'Historial', a: '/historial' },
     acciones: (
-      <button
-        type="button"
-        onClick={() => setAltaAbierta(true)}
-        aria-label="Agregar cliente"
-        className={CLASE_ACCION_PRIMARIA}
-      >
-        <span aria-hidden="true">＋</span>
-        <span className="hidden md:inline">Agregar</span>
-      </button>
+      <>
+        <button
+          type="button"
+          onClick={() => setAltaAbierta(true)}
+          aria-label="Agregar cliente"
+          className={CLASE_ACCION_PRIMARIA}
+        >
+          <span aria-hidden="true">＋</span>
+          <span className="hidden md:inline">Agregar</span>
+        </button>
+        {/* Historial general (docs/06-ui-ux.md §2, 2026-07-10): acción
+            invertida respecto de antes (era Historial quien enlazaba acá).
+            Mismo estilo que tenía esa acción. */}
+        <Link
+          to="/historial"
+          className="inline-flex min-h-[48px] items-center justify-center rounded-control border border-borde bg-superficie px-3 text-sm font-medium text-texto hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
+        >
+          Historial
+        </Link>
+      </>
     ),
   });
 
@@ -135,7 +148,7 @@ export function Clientes() {
     contenido = (
       <ListaClientes
         clientes={clientesFiltrados}
-        onSeleccionar={(cliente) => navigate(`/historial/cliente/${cliente.id}`)}
+        onSeleccionar={(cliente) => navigate(`/clientes/cliente/${cliente.id}`)}
       />
     );
   }

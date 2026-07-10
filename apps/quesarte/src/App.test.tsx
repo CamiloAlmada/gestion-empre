@@ -98,20 +98,29 @@ vi.mock('./pantallas/DetalleProveedorPantalla', () => ({
   DetalleProveedorPantalla: () => <div>Contenido de DetalleProveedorPantalla</div>,
 }));
 
-// Clientes (pantalla de /historial/clientes) también arma su query de
-// Firestore al importarse (`collection(db, 'clientes')`, ver Clientes.tsx),
-// mismo motivo que Productos/Usuarios arriba: se mockea entera
-// (Clientes.test.tsx cubre su contenido), este suite solo prueba que la ruta
-// existe y llega ahí.
+// Clientes (pantalla de /clientes, raíz del tab desde 2026-07-10) también
+// arma su query de Firestore al importarse (`collection(db, 'clientes')`, ver
+// Clientes.tsx), mismo motivo que Productos/Usuarios arriba: se mockea
+// entera (Clientes.test.tsx cubre su contenido), este suite solo prueba que
+// la ruta existe y llega ahí.
 vi.mock('./pantallas/Clientes', () => ({
   Clientes: () => <div>Contenido de Clientes</div>,
 }));
 
-// DetalleClientePantalla (pantalla de /historial/cliente/:id): mismo motivo
+// DetalleClientePantalla (pantalla de /clientes/cliente/:id): mismo motivo
 // que DetalleProductoPantalla arriba (DetalleClientePantalla.test.tsx cubre
 // su contenido).
 vi.mock('./pantallas/DetalleClientePantalla', () => ({
   DetalleClientePantalla: () => <div>Contenido de DetalleClientePantalla</div>,
+}));
+
+// Historial (pantalla de /historial, sin cambios de URL — 2026-07-10 pasó a
+// colgar de Clientes en la jerarquía, ver docs/06-ui-ux.md §2) también arma
+// su query de Firestore al importarse: mismo motivo que arriba, se mockea
+// entera (Historial.test.tsx cubre su contenido), este suite solo prueba
+// ruteo y el gate de rol (no está protegida por RutaSoloAdmin).
+vi.mock('./pantallas/Historial', () => ({
+  Historial: () => <div>Contenido de Historial</div>,
 }));
 
 function configurarAuth(rol: 'admin' | 'vendedor') {
@@ -265,27 +274,64 @@ describe('App - rutas', () => {
     expect(screen.getByText('Contenido de DetalleProveedorPantalla')).toBeTruthy();
   });
 
-  it('navega a /historial/clientes (sección Clientes, ruta real)', () => {
+  it('navega a /clientes (raíz del tab desde 2026-07-10, ruta real)', () => {
     configurarAuth('admin');
 
-    renderizarEn('/historial/clientes');
+    renderizarEn('/clientes');
 
     expect(screen.getByText('Contenido de Clientes')).toBeTruthy();
   });
 
-  it('vendedor también puede navegar a /historial/clientes (no es solo-admin, doc 07)', () => {
+  it('vendedor también puede navegar a /clientes (no es solo-admin, doc 07)', () => {
     configurarAuth('vendedor');
 
-    renderizarEn('/historial/clientes');
+    renderizarEn('/clientes');
 
     expect(screen.getByText('Contenido de Clientes')).toBeTruthy();
   });
 
-  it('navega a /historial/cliente/:id (ficha de cliente, ruta real)', () => {
+  it('navega a /clientes/cliente/:id (ficha de cliente, ruta real)', () => {
     configurarAuth('admin');
 
-    renderizarEn('/historial/cliente/abc123');
+    renderizarEn('/clientes/cliente/abc123');
 
     expect(screen.getByText('Contenido de DetalleClientePantalla')).toBeTruthy();
+  });
+
+  it('navega a /historial (Historial general, URL sin cambios) y el tab activo es Clientes', () => {
+    configurarAuth('admin');
+
+    renderizarEn('/historial');
+
+    expect(screen.getByText('Contenido de Historial')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Clientes/ }).getAttribute('aria-current')).toBe(
+      'page',
+    );
+  });
+
+  it('vendedor también puede navegar a /historial (no está gateada a admin)', () => {
+    configurarAuth('vendedor');
+
+    renderizarEn('/historial');
+
+    expect(screen.getByText('Contenido de Historial')).toBeTruthy();
+  });
+
+  describe('redirects de rutas viejas de Clientes (vivían bajo /historial, PWAs con deep links instalados)', () => {
+    it('/historial/clientes redirige a /clientes', () => {
+      configurarAuth('admin');
+
+      renderizarEn('/historial/clientes');
+
+      expect(screen.getByText('Contenido de Clientes')).toBeTruthy();
+    });
+
+    it('/historial/cliente/:id redirige a /clientes/cliente/:id preservando el id', () => {
+      configurarAuth('admin');
+
+      renderizarEn('/historial/cliente/abc123');
+
+      expect(screen.getByText('Contenido de DetalleClientePantalla')).toBeTruthy();
+    });
   });
 });

@@ -29,12 +29,29 @@ export function IconoStock({ className = 'h-6 w-6' }: IconoProps) {
   );
 }
 
-/** Reloj: sección Historial. */
+/** Dos personas: sección Clientes (tab bar, 2026-07-10 — reemplaza al tab
+ * Historial, ver docs/06-ui-ux.md §2). */
+export function IconoClientes({ className = 'h-6 w-6' }: IconoProps) {
+  return (
+    <svg {...PROPS_BASE} className={className}>
+      <circle cx="9" cy="8" r="3" />
+      <path d="M3.5 19c0-3 2.46-5.2 5.5-5.2s5.5 2.2 5.5 5.2" />
+      <circle cx="17.5" cy="9.2" r="2.3" />
+      <path d="M14.9 19c0-2.55 1.83-4.4 4.2-4.4" />
+    </svg>
+  );
+}
+
+/** Reloj con flecha antihoraria ("rebobinar tiempo", ícono clásico de
+ * "history"): atajo a Historial desde el header de Venta (docs/06-ui-ux.md
+ * §2, 2026-07-10 — única acción que se renderiza en el header también en
+ * pantalla angosta). Ya no vive en la tab bar (ver `IconoClientes`). */
 export function IconoHistorial({ className = 'h-6 w-6' }: IconoProps) {
   return (
     <svg {...PROPS_BASE} className={className}>
-      <circle cx="12" cy="12" r="8.5" />
-      <path d="M12 7.5V12l3 2" />
+      <polyline points="2.5 4.5 2.5 9.5 7.5 9.5" />
+      <path d="M4.1 14.5a8.5 8.5 0 1 0 2.02-8.83L2.5 9.5" />
+      <path d="M12 8.2v4.3l2.8 1.7" />
     </svg>
   );
 }

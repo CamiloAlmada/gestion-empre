@@ -34,7 +34,7 @@ function textoDiasDesdeUltimaCompra(dias: number | null): string {
 }
 
 /**
- * Ficha de UN cliente, en su propia ruta (`/historial/cliente/:id`, ver
+ * Ficha de UN cliente, en su propia ruta (`/clientes/cliente/:id`, ver
  * App.tsx) — mismo patrón que `DetalleProductoPantalla` en Stock: subvista
  * con contenido propio en ruta real (docs/06-ui-ux.md §2), no estado interno,
  * para que el back del sistema funcione siempre.
@@ -86,7 +86,7 @@ export function DetalleClientePantalla() {
 
   useHeader({
     titulo: tituloHeader,
-    volverA: { etiqueta: 'Clientes', a: '/historial/clientes' },
+    volverA: { etiqueta: 'Clientes', a: '/clientes' },
     acciones:
       esAdmin && cliente.datos !== null ? (
         <Button onClick={() => setModal('edicion')} className="min-h-[48px]">
@@ -152,7 +152,7 @@ export function DetalleClientePantalla() {
           No encontramos ese cliente. Puede haberse desactivado.
         </p>
         <Link
-          to="/historial/clientes"
+          to="/clientes"
           className="inline-flex min-h-[44px] items-center justify-center rounded-control bg-primary-600 px-4 font-medium text-white hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2 focus-visible:ring-offset-superficie"
         >
           Volver a Clientes

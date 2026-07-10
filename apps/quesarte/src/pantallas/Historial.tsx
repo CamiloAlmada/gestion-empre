@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router';
 import { collection, limit, orderBy, query } from 'firebase/firestore';
 import type { Venta } from '@gestion/core';
 import { useAuth, useCollection, useOnlineStatus, ventaConverter } from '@gestion/firebase-kit';
@@ -22,6 +21,12 @@ import { useHeader } from '../componentes/header/ContextoHeader';
  * vez de paginar por cursor (ver `constantes.ts`, suficiente para Fase 1).
  * La anulación (solo admin) se dispara desde el detalle pero el modal de
  * confirmación se orquesta acá, igual que los modales de escritura de Stock.
+ *
+ * Sección interna del tab Clientes (docs/06-ui-ux.md §2, 2026-07-10 — antes
+ * era tab propio): su `‹ volver` lleva a Clientes y el tab Clientes queda
+ * activo mientras se está acá (ver `TAB_POR_SEGMENTO` en Shell.tsx). Ya no
+ * declara la acción "Clientes" (quedó invertida: ahora es Clientes quien
+ * declara la acción "Historial", ver `pantallas/Clientes.tsx`).
  */
 export function Historial() {
   const { perfil } = useAuth();
@@ -30,16 +35,7 @@ export function Historial() {
 
   useHeader({
     titulo: 'Historial',
-    // min-h-[48px]: flota sobre la tab bar en mobile (docs/06-ui-ux.md §2 y
-    // §5 — targets ≥48px ahí), mismo estilo que "Catálogo" en Stock.tsx.
-    acciones: (
-      <Link
-        to="/historial/clientes"
-        className="inline-flex min-h-[48px] items-center justify-center rounded-control border border-borde bg-superficie px-3 text-sm font-medium text-texto hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
-      >
-        Clientes
-      </Link>
-    ),
+    volverA: { etiqueta: 'Clientes', a: '/clientes' },
   });
 
   const [intento, setIntento] = useState(0);

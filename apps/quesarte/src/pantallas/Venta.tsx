@@ -19,6 +19,7 @@ import {
 } from '@gestion/firebase-kit';
 import { Button, useToasts } from '@gestion/ui';
 import { db } from '../firebase';
+import { IconoHistorial } from '../componentes/iconos';
 import { agruparPiezasPorProducto } from '../componentes/stock/resumen';
 import { Carrito } from '../componentes/venta/Carrito';
 import { useCarrito } from '../componentes/venta/ContextoCarrito';
@@ -90,7 +91,24 @@ export function Venta() {
   const enLinea = useOnlineStatus();
   const { mostrarToast } = useToasts();
 
-  useHeader({ titulo: 'Venta' });
+  useHeader({
+    titulo: 'Venta',
+    // Atajo a Historial (docs/06-ui-ux.md §2, 2026-07-10): única acción que
+    // se renderiza en el header también en pantalla angosta (`accionHeader`,
+    // ver ContextoHeader.tsx) — la zona inferior de Venta es del carrito y no
+    // puede recibir el cluster flotante de `acciones`, pero esta consulta
+    // ocasional ("acabo de cobrar, quiero ver/anular la última venta") no
+    // compite con la zona del pulgar. min-h/min-w 44px (checklist doc06 §5).
+    accionHeader: (
+      <Link
+        to="/historial"
+        aria-label="Historial"
+        className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-control text-texto-secundario hover:bg-fondo hover:text-texto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
+      >
+        <IconoHistorial className="h-6 w-6" />
+      </Link>
+    ),
+  });
 
   // La venta en curso vive en `ProveedorCarrito` (docs/06-ui-ux.md §6,
   // montado en Shell.tsx por encima del Outlet), no en estado local: así

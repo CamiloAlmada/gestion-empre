@@ -101,6 +101,28 @@ describe('useHeader / ProveedorHeader', () => {
     expect(screen.getByTestId('titulo').textContent).toBe('Productos');
   });
 
+  it('accionHeader con identidad inestable (JSX literal nuevo en cada render) no dispara un loop infinito', () => {
+    let renders = 0;
+    function PantallaAccionHeaderInestable() {
+      renders += 1;
+      // A propósito: un literal JSX nuevo en cada render, igual que el caso
+      // de `acciones` de arriba — `accionHeader` (2026-07-10, atajo a
+      // Historial en Venta) sigue el mismo patrón de exclusión de deps.
+      useHeader({ titulo: 'Venta', accionHeader: <a href="/historial">Historial</a> });
+      return <p>Contenido</p>;
+    }
+
+    render(
+      <ProveedorHeader>
+        <VisorHeader />
+        <PantallaAccionHeaderInestable />
+      </ProveedorHeader>,
+    );
+
+    expect(renders).toBeLessThan(5);
+    expect(screen.getByTestId('titulo').textContent).toBe('Venta');
+  });
+
   it('useHeader fuera de un ProveedorHeader explota con un mensaje claro', () => {
     // Silencia el log de error esperado de React al capturar la excepción.
     const consoleError = console.error;

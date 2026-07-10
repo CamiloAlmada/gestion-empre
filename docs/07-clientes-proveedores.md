@@ -81,10 +81,13 @@ productos/{id} → + proveedorPrincipalId?          // default al armar compras;
 
 ## Pantallas (encaje en la navegación del doc 06 §2 — sin tabs nuevos)
 
-1. **Clientes**: sección interna del tab **Historial** (mismo patrón que
-   Productos dentro de Stock). Listado con búsqueda (nombre/alias/teléfono),
-   ficha con datos + stats + historial de ventas del cliente. Alta rápida
-   (solo nombre) y alta completa. Subvistas en rutas reales (doc 06 §2).
+1. **Clientes**: tab propio de la barra inferior (decisión del dueño
+   2026-07-10, invierte la jerarquía original: reemplaza al tab Historial, y el
+   Historial general pasa a ser sección interna de Clientes + atajo con icono
+   en el header de Venta — ver doc 06 §2). Listado con búsqueda
+   (nombre/alias/teléfono), ficha con datos + stats + historial de ventas del
+   cliente. Alta rápida (solo nombre) y alta completa. Subvistas en rutas
+   reales (doc 06 §2).
 2. **POS**: control "Cliente" opcional **dentro del carrito/ticket** — Venta
    no declara acciones de header (doc 06 §2) y su zona inferior es del
    carrito. Buscar o alta rápida en el lugar. La venta anónima conserva el

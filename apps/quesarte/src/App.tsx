@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from 'react-router';
+import { Navigate, Route, Routes, useParams } from 'react-router';
 import { Login } from './pantallas/Login';
 import { Venta } from './pantallas/Venta';
 import { Stock } from './pantallas/Stock';
@@ -17,6 +17,14 @@ import { RutaSoloAdmin } from './rutas/RutaSoloAdmin';
 import { Shell } from './Shell';
 import { AvisoPwa } from './componentes/AvisoPwa';
 import { MetaThemeColor } from './componentes/MetaThemeColor';
+
+/** Redirect de la ficha de cliente vieja (`/historial/cliente/:id`, PWAs con
+ * ese deep link instalado) a su nueva ruta (`/clientes/cliente/:id`),
+ * preservando el `:id` — `<Navigate>` no interpola params por sí solo. */
+function RedirigirFichaClienteVieja() {
+  const { id } = useParams<{ id: string }>();
+  return <Navigate to={`/clientes/cliente/${id}`} replace />;
+}
 
 export function App() {
   return (
@@ -52,9 +60,18 @@ export function App() {
               </RutaSoloAdmin>
             }
           />
+          {/* Clientes es la raíz del tab (docs/06-ui-ux.md §2, 2026-07-10);
+              Historial general cuelga de él en la jerarquía (volverA + tab
+              activo, ver Shell.tsx) pero su URL no cambió: hay PWAs
+              instaladas con ese deep link ("ver/anular la última venta"). */}
+          <Route path="clientes" element={<Clientes />} />
+          <Route path="clientes/cliente/:id" element={<DetalleClientePantalla />} />
           <Route path="historial" element={<Historial />} />
-          <Route path="historial/clientes" element={<Clientes />} />
-          <Route path="historial/cliente/:id" element={<DetalleClientePantalla />} />
+          {/* Redirects de las rutas viejas de Clientes (vivían bajo
+              /historial antes de que el tab se invirtiera) — mismo motivo,
+              deep links viejos en PWAs instaladas. */}
+          <Route path="historial/clientes" element={<Navigate to="/clientes" replace />} />
+          <Route path="historial/cliente/:id" element={<RedirigirFichaClienteVieja />} />
           <Route
             path="reportes"
             element={

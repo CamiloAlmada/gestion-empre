@@ -33,12 +33,14 @@ function PantallaConHeader({
   titulo,
   volverA,
   acciones,
+  accionHeader,
 }: {
   titulo: string;
   volverA?: { etiqueta: string; a: string };
   acciones?: ReactNode;
+  accionHeader?: ReactNode;
 }) {
-  useHeader({ titulo, volverA, acciones });
+  useHeader({ titulo, volverA, acciones, accionHeader });
   return <div>Contenido de {titulo}</div>;
 }
 
@@ -50,6 +52,11 @@ function renderizarEn(ruta: string) {
           <Route element={<Shell />}>
             <Route path="venta" element={<div>Contenido de Venta</div>} />
             <Route path="stock" element={<div>Contenido de Stock</div>} />
+            <Route path="clientes" element={<div>Contenido de Clientes</div>} />
+            <Route
+              path="historial"
+              element={<PantallaConHeader titulo="Historial" volverA={{ etiqueta: 'Clientes', a: '/clientes' }} />}
+            />
             <Route path="reportes" element={<div>Contenido de Reportes</div>} />
             <Route
               path="stock/productos"
@@ -107,6 +114,47 @@ describe('Shell', () => {
     expect(screen.getByRole('button', { name: /Stock/ }).getAttribute('aria-current')).toBe(
       'page',
     );
+  });
+
+  describe('tab Clientes (docs/06-ui-ux.md §2, 2026-07-10: reemplaza a Historial)', () => {
+    it('la tab bar muestra "Clientes" y no "Historial"', () => {
+      configurarAuth('admin');
+
+      renderizarEn('/clientes');
+
+      expect(screen.getByRole('button', { name: /Clientes/ })).toBeTruthy();
+      expect(screen.queryByRole('button', { name: /^Historial$/ })).toBeNull();
+    });
+
+    it('parado en /clientes, el tab Clientes está activo', () => {
+      configurarAuth('admin');
+
+      renderizarEn('/clientes');
+
+      expect(screen.getByRole('button', { name: /Clientes/ }).getAttribute('aria-current')).toBe(
+        'page',
+      );
+    });
+
+    it('parado en el Historial general (/historial), el tab activo es Clientes, no Venta', () => {
+      configurarAuth('admin');
+
+      renderizarEn('/historial');
+
+      expect(screen.getByRole('button', { name: /Clientes/ }).getAttribute('aria-current')).toBe(
+        'page',
+      );
+      expect(screen.getByRole('button', { name: 'Venta' }).getAttribute('aria-current')).toBeNull();
+      expect(screen.getByRole('heading', { name: 'Historial', level: 1 })).toBeTruthy();
+    });
+
+    it('vendedor sigue viendo el tab Clientes (no está gateado a admin)', () => {
+      configurarAuth('vendedor');
+
+      renderizarEn('/clientes');
+
+      expect(screen.getByRole('button', { name: /Clientes/ })).toBeTruthy();
+    });
   });
 
   it('sin título contextual seteado, usa el fallback por tab', () => {
@@ -268,6 +316,53 @@ describe('Shell', () => {
       expect(main?.className).toBe(
         'mx-auto max-w-5xl p-4 pb-[calc(var(--altura-zona-inferior)+2rem)]',
       );
+    });
+  });
+
+  describe('accionHeader: acción de header-siempre (docs/06-ui-ux.md §2, 2026-07-10)', () => {
+    it('se renderiza en el header sin depender de md: (visible también en mobile, a diferencia de acciones)', () => {
+      configurarAuth('admin');
+
+      render(
+        <MemoryRouter initialEntries={['/venta']}>
+          <ProveedorToasts>
+            <Routes>
+              <Route element={<Shell />}>
+                <Route
+                  path="venta"
+                  element={
+                    <PantallaConHeader
+                      titulo="Venta"
+                      accionHeader={
+                        <a href="/historial" aria-label="Historial">
+                          Ir a Historial
+                        </a>
+                      }
+                    />
+                  }
+                />
+              </Route>
+            </Routes>
+          </ProveedorToasts>
+        </MemoryRouter>,
+      );
+
+      const enlace = screen.getByRole('link', { name: 'Historial' });
+      expect(enlace).toBeTruthy();
+      // A diferencia del dual-render de `acciones`, `accionHeader` no tiene
+      // una segunda copia en el cluster flotante ni clases `md:`/`hidden`
+      // condicionando su visibilidad: un solo nodo, siempre visible.
+      expect(screen.getAllByRole('link', { name: 'Historial' })).toHaveLength(1);
+      expect(enlace.closest('div')?.className).not.toContain('hidden');
+      expect(enlace.closest('div')?.className).not.toContain('md:flex');
+    });
+
+    it('sin accionHeader, no agrega ningún slot extra al header', () => {
+      configurarAuth('admin');
+
+      renderizarEn('/venta');
+
+      expect(screen.queryByRole('link', { name: 'Historial' })).toBeNull();
     });
   });
 });

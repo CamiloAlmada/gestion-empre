@@ -23,6 +23,14 @@ export interface ConfigHeader {
   volverA?: VolverA;
   /** Hasta 2 acciones contextuales de la pantalla, renderizadas a la derecha. */
   acciones?: ReactNode;
+  /** Acción de header-SIEMPRE (docs/06-ui-ux.md §2, 2026-07-10): a diferencia
+   * de `acciones` (dual-render: header en `md:`+, cluster flotante en
+   * mobile), esto se renderiza ÚNICAMENTE en el header, en TODAS las
+   * anchuras. Excepción documentada para Venta: su zona inferior es del
+   * carrito y no puede recibir el cluster flotante, pero el atajo a
+   * Historial es consulta ocasional, no operación de venta — no compite con
+   * la zona del pulgar. Hoy solo la usa `pantallas/Venta.tsx`. */
+  accionHeader?: ReactNode;
 }
 
 interface EstadoHeaderContexto {
@@ -91,8 +99,11 @@ export function useHeaderActual(): ConfigHeader | null {
  * (`useState` setters, siempre estables) — el patrón que siguen todas las
  * pantallas del proyecto; si alguna futura necesita que `acciones` cambie por
  * otro motivo, hay que reflejarlo en `titulo`/`volverA` o extender este hook.
+ * `accionHeader` (2026-07-10) es un `ReactNode` con el mismo problema de
+ * identidad inestable, así que se lo trata IGUAL: fuera del array de
+ * dependencias, leído del closure más reciente.
  */
-export function useHeader({ titulo, volverA, acciones }: ConfigHeader): void {
+export function useHeader({ titulo, volverA, acciones, accionHeader }: ConfigHeader): void {
   const { setConfig } = useContextoHeader();
   const etiquetaVolver = volverA?.etiqueta;
   const destinoVolver = volverA?.a;
@@ -104,8 +115,9 @@ export function useHeader({ titulo, volverA, acciones }: ConfigHeader): void {
         ? { etiqueta: etiquetaVolver, a: destinoVolver }
         : undefined,
       acciones,
+      accionHeader,
     });
     return () => setConfig(null);
-    // acciones deliberadamente fuera del array: ver comentario arriba.
+    // acciones/accionHeader deliberadamente fuera del array: ver comentario arriba.
   }, [titulo, etiquetaVolver, destinoVolver, setConfig]);
 }

@@ -19,15 +19,26 @@ tech lead; no se ignora en silencio.
 
 ## 2. Navegación
 
-- **Bottom tab bar fija** con 5 tabs, en este orden:
+- **Bottom tab bar fija** con 5 tabs, en este orden (2026-07-10: el tab
+  Historial pasó a ser **Clientes** — con el módulo del doc 07, clientes es la
+  entrada de uso diario y el historial es consulta puntual):
 
   ```
-  Stock | Historial | ●Venta | Reportes | Ajustes
+  Stock | Clientes | ●Venta | Reportes | Ajustes
   ```
 
 - **Venta es el tab central y prominente**: botón circular elevado con el color
   primario (patrón FAB central). Es el home de la app: al abrir, cae en Venta.
 - **Productos** se gestiona como sección interna del tab Stock (no tiene tab).
+- **Historial** (2026-07-10) es sección interna del tab Clientes (jerarquía:
+  su `‹ volver` lleva a Clientes; el tab Clientes queda activo mientras se está
+  en él) y tiene un **atajo desde Venta**: icono de historial (reloj con flecha
+  antihoraria "rebobinando") arriba a la derecha del header — el flujo natural
+  de "acabo de cobrar, quiero ver/anular la última venta". Es la ÚNICA acción
+  que se renderiza en el header también en pantalla angosta (excepción
+  documentada: la zona inferior de Venta pertenece al carrito, no puede recibir
+  flotantes; un icono en el header no compite con la zona del pulgar porque es
+  consulta ocasional, no operación de venta).
 - **Compras** (Fase 2) se accede desde Stock. **Gestión de usuarios**, desde Ajustes.
 - Labels **siempre visibles** bajo cada ícono (nunca ícono solo). Tab activo:
   color primario + realce tipo pill; inactivo: texto secundario.
@@ -46,7 +57,9 @@ tech lead; no se ignora en silencio.
     pantalla angosta van como **píldoras flotantes sobre la tab bar** (zona del
     pulgar, una mano); en `md:`+ van a la derecha del header (mouse). La
     pantalla declara sus acciones UNA vez (`useHeader`); el Shell decide dónde
-    mostrarlas. Venta no declara acciones (su zona inferior es del carrito).
+    mostrarlas. Venta no declara acciones flotantes (su zona inferior es del
+    carrito); su única acción es el icono de historial fijo al header (ver
+    arriba), declarado como acción de header-siempre.
   - Las subvistas con contenido propio (detalle de producto) viven en **rutas
     reales**, no en estado interno: el back del sistema debe funcionar siempre.
 - **Conexión: se señala solo la ausencia.** Con conexión el header no muestra

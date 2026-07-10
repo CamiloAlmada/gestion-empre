@@ -4,7 +4,7 @@ import { BarraPestanas, useToasts, type ItemBarraPestanas } from '@gestion/ui';
 import { useAuth, useOnlineStatus } from '@gestion/firebase-kit';
 import {
   IconoAjustes,
-  IconoHistorial,
+  IconoClientes,
   IconoReportes,
   IconoStock,
   IconoVenta,
@@ -15,9 +15,23 @@ import { ProveedorCarrito } from './componentes/venta/ContextoCarrito';
 const TITULOS_POR_TAB: Record<string, string> = {
   venta: 'Venta',
   stock: 'Stock',
-  historial: 'Historial',
+  clientes: 'Clientes',
   reportes: 'Reportes',
   ajustes: 'Ajustes',
+};
+
+// Primer segmento de ruta -> tab que debe iluminarse en la barra. Coincide
+// 1:1 con `TITULOS_POR_TAB` salvo `historial`: el Historial general cuelga de
+// Clientes en la jerarquía (docs/06-ui-ux.md §2, 2026-07-10) aunque su URL
+// siga siendo `/historial` (no se movió: hay PWAs instaladas con ese deep
+// link — ver App.tsx).
+const TAB_POR_SEGMENTO: Record<string, string> = {
+  venta: 'venta',
+  stock: 'stock',
+  clientes: 'clientes',
+  historial: 'clientes',
+  reportes: 'reportes',
+  ajustes: 'ajustes',
 };
 
 // Misma translucidez que BarraPestanas (docs/06-ui-ux.md §3): tab bar y
@@ -51,11 +65,12 @@ const CLASE_VOLVER =
   'flex min-h-[44px] shrink-0 items-center gap-1 rounded px-1 text-sm font-medium text-texto-secundario ' +
   'hover:text-texto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600';
 
-/** Primer segmento de la ruta actual, o 'venta' (home de la app) si no
- * matchea ninguna sección conocida. */
+/** Tab que debe quedar activo para la ruta actual (ver `TAB_POR_SEGMENTO`),
+ * o 'venta' (home de la app) si el primer segmento no matchea ninguna
+ * sección conocida. */
 function obtenerTabActiva(pathname: string): string {
   const segmento = pathname.split('/')[1] ?? '';
-  return segmento in TITULOS_POR_TAB ? segmento : 'venta';
+  return TAB_POR_SEGMENTO[segmento] ?? 'venta';
 }
 
 /** Chip "Sin conexión" (docs/06-ui-ux.md §2): con conexión el header no
@@ -127,13 +142,14 @@ function ShellInterior() {
 
   const items: ItemBarraPestanas[] = [
     { id: 'stock', etiqueta: 'Stock', icono: <IconoStock /> },
-    { id: 'historial', etiqueta: 'Historial', icono: <IconoHistorial /> },
+    { id: 'clientes', etiqueta: 'Clientes', icono: <IconoClientes /> },
     { id: 'venta', etiqueta: 'Venta', icono: <IconoVenta />, central: true },
     ...(esAdmin ? [{ id: 'reportes', etiqueta: 'Reportes', icono: <IconoReportes /> }] : []),
     { id: 'ajustes', etiqueta: 'Ajustes', icono: <IconoAjustes /> },
   ];
 
   const hayAcciones = config?.acciones !== undefined;
+  const hayAccionHeader = config?.accionHeader !== undefined;
 
   return (
     <div className="min-h-screen bg-fondo">
@@ -155,6 +171,11 @@ function ShellInterior() {
           {hayAcciones && (
             <div className="hidden shrink-0 items-center gap-2 md:flex">{config?.acciones}</div>
           )}
+          {/* Acción de header-siempre (docs/06-ui-ux.md §2, 2026-07-10): a
+              diferencia de `acciones`, esta NO tiene contraparte en el
+              cluster flotante — se renderiza acá en TODAS las anchuras (hoy
+              solo la usa Venta, para el atajo a Historial). */}
+          {hayAccionHeader && <div className="flex shrink-0 items-center">{config?.accionHeader}</div>}
         </div>
       </header>
       {/* Padding inferior base (`--altura-zona-inferior` + 2rem = 6rem de
