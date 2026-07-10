@@ -426,17 +426,20 @@ describe('Carrito', () => {
       expect(hoja.style.transform).toBe('');
     });
 
-    it('durante el arrastre el <ul> de ítems recibe estilo inline de altura, recortado y sin transición', () => {
+    it('durante el arrastre el BLOQUE colapsable (fila Cliente + <ul>) recibe estilo inline de altura, recortado y sin transición — el <ul> NO', () => {
       instalarMatchMediaFalso(false);
       renderCarrito({ items: [itemUnico()] });
       fireEvent.click(screen.getByRole('button', { name: /1 ítem/ }));
 
-      const hoja = screen.getByTestId('hoja-carrito-mobil');
+      const bloque = screen.getByTestId('bloque-colapsable-carrito');
       const agarre = screen.getByTestId('agarre-carrito');
-      const lista = hoja.querySelector('ul');
-      if (!lista) throw new Error('no se encontró el <ul> de ítems dentro de la hoja mobile');
+      const lista = bloque.querySelector('ul');
+      if (!lista) throw new Error('no se encontró el <ul> de ítems dentro del bloque colapsable');
 
-      // En reposo, sin estilo inline: rige la clase `max-h-[40vh] overflow-y-auto`.
+      // En reposo, sin estilo inline en ninguno de los dos: el bloque se
+      // dimensiona por su contenido y el `<ul>` rige por su clase
+      // `max-h-[40vh] overflow-y-auto`.
+      expect(bloque.style.height).toBe('');
       expect(lista.style.height).toBe('');
 
       fireEvent.pointerDown(agarre, { pointerId: 1, clientY: 0 });
@@ -444,10 +447,25 @@ describe('Carrito', () => {
 
       // jsdom no hace layout real: `getBoundingClientRect().height` mide 0,
       // así que la altura resultante es `max(0, 0 - 40) = 0`; lo relevante
-      // acá es que el estilo inline lo recibe el `<ul>`, no la hoja.
-      expect(lista.style.height).toBe('0px');
-      expect(lista.style.overflow).toBe('hidden');
-      expect(lista.style.transition).toBe('none');
+      // acá es que el estilo inline lo recibe el BLOQUE (wrapper de fila
+      // Cliente + `<ul>`), no la hoja ni el `<ul>` directamente.
+      expect(bloque.style.height).toBe('0px');
+      expect(bloque.style.overflow).toBe('hidden');
+      expect(bloque.style.transition).toBe('none');
+      expect(lista.style.height).toBe('');
+    });
+
+    it('la fila Cliente queda DENTRO del bloque que colapsa: es descendiente del nodo que recibe el height', () => {
+      renderCarrito({ items: [itemUnico()] });
+      fireEvent.click(screen.getByRole('button', { name: /1 ítem/ }));
+
+      const bloque = screen.getByTestId('bloque-colapsable-carrito');
+      // "+ Cliente" de la hoja mobile: la segunda instancia en el DOM (la
+      // primera es la del panel desktop, siempre montada — mismo criterio
+      // que el test de "control Cliente" de más arriba).
+      const botonCliente = screen.getAllByText('+ Cliente')[1]!;
+
+      expect(bloque.contains(botonCliente)).toBe(true);
     });
 
     it('arrastre real bajo el umbral: al soltar pasa por "volviendo" (con transición) antes de limpiarse', () => {
@@ -455,10 +473,8 @@ describe('Carrito', () => {
       renderCarrito({ items: [itemUnico()] });
       fireEvent.click(screen.getByRole('button', { name: /1 ítem/ }));
 
-      const hoja = screen.getByTestId('hoja-carrito-mobil');
+      const bloque = screen.getByTestId('bloque-colapsable-carrito');
       const agarre = screen.getByTestId('agarre-carrito');
-      const lista = hoja.querySelector('ul');
-      if (!lista) throw new Error('no se encontró el <ul> de ítems dentro de la hoja mobile');
 
       fireEvent.pointerDown(agarre, { pointerId: 1, clientY: 0 });
       fireEvent.pointerMove(agarre, { pointerId: 1, clientY: 40 });
@@ -467,25 +483,23 @@ describe('Carrito', () => {
       // Hubo encogimiento real (arrastreY llegó a valer 40 > 0): entra a
       // "volviendo", CON transición activa, antes de que dispare
       // `transitionend` (docs/06-ui-ux.md §6).
-      expect(lista.style.height).toBe('0px');
-      expect(lista.style.overflow).toBe('hidden');
-      expect(lista.style.transition).toBe('height 180ms ease-out');
+      expect(bloque.style.height).toBe('0px');
+      expect(bloque.style.overflow).toBe('hidden');
+      expect(bloque.style.transition).toBe('height 180ms ease-out');
 
       // Al terminar la transición (simulada acá; jsdom no la corre de
       // verdad) recién ahí se limpia el estilo inline.
-      fireEvent.transitionEnd(lista, { propertyName: 'height' });
-      expect(lista.style.height).toBe('');
+      fireEvent.transitionEnd(bloque, { propertyName: 'height' });
+      expect(bloque.style.height).toBe('');
     });
 
-    it('tap seco en el agarre (pointerdown+pointerup sin mover el dedo): el <ul> no queda con estilo inline pegado', () => {
+    it('tap seco en el agarre (pointerdown+pointerup sin mover el dedo): el bloque no queda con estilo inline pegado', () => {
       instalarMatchMediaFalso(false);
       renderCarrito({ items: [itemUnico()] });
       fireEvent.click(screen.getByRole('button', { name: /1 ítem/ }));
 
-      const hoja = screen.getByTestId('hoja-carrito-mobil');
+      const bloque = screen.getByTestId('bloque-colapsable-carrito');
       const agarre = screen.getByTestId('agarre-carrito');
-      const lista = hoja.querySelector('ul');
-      if (!lista) throw new Error('no se encontró el <ul> de ítems dentro de la hoja mobile');
 
       fireEvent.pointerDown(agarre, { pointerId: 1, clientY: 0 });
       fireEvent.pointerUp(agarre, { pointerId: 1, clientY: 0 });
@@ -494,23 +508,22 @@ describe('Carrito', () => {
       // directo a "ninguna" en vez de quedar en "volviendo" esperando un
       // `transitionend` que nunca va a llegar (la altura no cambió de
       // valor). Si quedara en "volviendo", el `overflow: hidden` pegado le
-      // rompería el scroll a la lista hasta el próximo drag real.
-      expect(lista.style.height).toBe('');
-      expect(lista.style.overflow).toBe('');
+      // rompería el scroll a la lista (y clavaría la altura del bloque)
+      // hasta el próximo drag real.
+      expect(bloque.style.height).toBe('');
+      expect(bloque.style.overflow).toBe('');
 
       const resumen = screen.getByRole('button', { name: /1 ítem/ });
       expect(resumen.getAttribute('aria-expanded')).toBe('true');
     });
 
-    it('arrastre hacia arriba se ignora (clamp a 0): no colapsa ni deja estilo inline pegado en la lista', () => {
+    it('arrastre hacia arriba se ignora (clamp a 0): no colapsa ni deja estilo inline pegado en el bloque', () => {
       instalarMatchMediaFalso(false);
       renderCarrito({ items: [itemUnico()] });
       fireEvent.click(screen.getByRole('button', { name: /1 ítem/ }));
 
-      const hoja = screen.getByTestId('hoja-carrito-mobil');
+      const bloque = screen.getByTestId('bloque-colapsable-carrito');
       const agarre = screen.getByTestId('agarre-carrito');
-      const lista = hoja.querySelector('ul');
-      if (!lista) throw new Error('no se encontró el <ul> de ítems dentro de la hoja mobile');
 
       fireEvent.pointerDown(agarre, { pointerId: 1, clientY: 100 });
       fireEvent.pointerMove(agarre, { pointerId: 1, clientY: 0 });
@@ -521,25 +534,24 @@ describe('Carrito', () => {
 
       // `alMoverPuntero` clampea el delta hacia arriba a 0: mismo caso que
       // el tap seco, sin `height` real que animar de vuelta.
-      expect(lista.style.height).toBe('');
-      expect(lista.style.overflow).toBe('');
+      expect(bloque.style.height).toBe('');
+      expect(bloque.style.overflow).toBe('');
     });
 
-    it('prefers-reduced-motion: sin estilo inline en la lista durante el arrastre, pero el cierre por umbral igual funciona', () => {
+    it('prefers-reduced-motion: sin estilo inline en el bloque durante el arrastre, pero el cierre por umbral igual funciona', () => {
       instalarMatchMediaFalso(true);
       renderCarrito({ items: [itemUnico()] });
       fireEvent.click(screen.getByRole('button', { name: /1 ítem/ }));
 
       const hoja = screen.getByTestId('hoja-carrito-mobil');
+      const bloque = screen.getByTestId('bloque-colapsable-carrito');
       const agarre = screen.getByTestId('agarre-carrito');
-      const lista = hoja.querySelector('ul');
-      if (!lista) throw new Error('no se encontró el <ul> de ítems dentro de la hoja mobile');
 
       fireEvent.pointerDown(agarre, { pointerId: 1, clientY: 0 });
       fireEvent.pointerMove(agarre, { pointerId: 1, clientY: 60 });
 
-      // No hay seguimiento visual: ni la lista ni la hoja reciben estilo inline.
-      expect(lista.style.height).toBe('');
+      // No hay seguimiento visual: ni el bloque ni la hoja reciben estilo inline.
+      expect(bloque.style.height).toBe('');
       expect(hoja.style.transform).toBe('');
 
       fireEvent.pointerUp(agarre, { pointerId: 1, clientY: 120 });
