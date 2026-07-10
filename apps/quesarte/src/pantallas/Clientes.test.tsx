@@ -179,7 +179,7 @@ describe('Clientes - estados', () => {
     configurarClientes(estadoOk([cliente({ id: 'c1', nombre: 'Ana Pérez' })]));
     renderizar();
 
-    fireEvent.change(screen.getByLabelText('Buscar'), { target: { value: 'zzz' } });
+    fireEvent.change(screen.getByLabelText('Buscar cliente'), { target: { value: 'zzz' } });
 
     expect(screen.getByText('No se encontraron clientes para "zzz".')).toBeTruthy();
   });
@@ -214,7 +214,7 @@ describe('Clientes - listado y búsqueda', () => {
     configurarClientes(estadoOk(clientesFalsos));
     renderizar();
 
-    fireEvent.change(screen.getByLabelText('Buscar'), { target: { value: 'nunez' } });
+    fireEvent.change(screen.getByLabelText('Buscar cliente'), { target: { value: 'nunez' } });
 
     expect(screen.getByText('Carlos Núñez')).toBeTruthy();
     expect(screen.queryByText('Ana Pérez')).toBeNull();
@@ -224,7 +224,7 @@ describe('Clientes - listado y búsqueda', () => {
     configurarClientes(estadoOk(clientesFalsos));
     renderizar();
 
-    fireEvent.change(screen.getByLabelText('Buscar'), { target: { value: 'anita' } });
+    fireEvent.change(screen.getByLabelText('Buscar cliente'), { target: { value: 'anita' } });
 
     expect(screen.getByText('Ana Pérez')).toBeTruthy();
     expect(screen.queryByText('Carlos Núñez')).toBeNull();
@@ -235,7 +235,7 @@ describe('Clientes - listado y búsqueda', () => {
     renderizar();
 
     fireEvent.click(screen.getByRole('button', { name: 'Mostrar inactivos' }));
-    fireEvent.change(screen.getByLabelText('Buscar'), { target: { value: '098333444' } });
+    fireEvent.change(screen.getByLabelText('Buscar cliente'), { target: { value: '098333444' } });
 
     expect(screen.getByText('Marta López')).toBeTruthy();
     expect(screen.queryByText('Ana Pérez')).toBeNull();

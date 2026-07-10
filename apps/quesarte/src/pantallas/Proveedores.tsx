@@ -9,7 +9,7 @@ import {
   useOnlineStatus,
   type DatosProveedor,
 } from '@gestion/firebase-kit';
-import { Button, Input, useToasts } from '@gestion/ui';
+import { Button, CampoBusqueda, normalizarBusqueda, useToasts } from '@gestion/ui';
 import { db } from '../firebase';
 import { ModalProveedor } from './ModalProveedor';
 import { useHeader } from '../componentes/header/ContextoHeader';
@@ -21,15 +21,6 @@ import { useHeader } from '../componentes/header/ContextoHeader';
 // el botón del estado vacío, más abajo).
 const CLASE_ACCION_PRIMARIA =
   'inline-flex min-h-[48px] min-w-[48px] items-center justify-center gap-1.5 rounded-control bg-primary-600 px-3 font-medium text-white hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2 focus-visible:ring-offset-superficie';
-
-/** Minúsculas y sin diacríticos, para que la búsqueda ignore acentos (mismo
- * criterio que Productos.tsx). */
-function normalizarTexto(texto: string): string {
-  return texto
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase();
-}
 
 /** Segunda línea de la fila: contacto y/o teléfono, unidos si hay ambos. */
 function textoContacto(proveedor: Proveedor): string {
@@ -128,11 +119,11 @@ export function Proveedores() {
   const { datos: proveedores, cargando, error } = useCollection(consultaProveedores);
 
   const proveedoresFiltrados = useMemo(() => {
-    const consulta = normalizarTexto(busqueda.trim());
+    const consulta = normalizarBusqueda(busqueda.trim());
     return proveedores.filter((p) => {
       if (!mostrarInactivos && !p.activo) return false;
       if (consulta === '') return true;
-      return normalizarTexto(p.nombre).includes(consulta);
+      return normalizarBusqueda(p.nombre).includes(consulta);
     });
   }, [proveedores, busqueda, mostrarInactivos]);
 
@@ -223,7 +214,7 @@ export function Proveedores() {
 
       <div className="flex flex-wrap items-end gap-3">
         <div className="w-full max-w-xs">
-          <Input label="Buscar" value={busqueda} onChange={setBusqueda} placeholder="Nombre" />
+          <CampoBusqueda valor={busqueda} onChange={setBusqueda} ariaLabel="Buscar proveedor" placeholder="Nombre" />
         </div>
         <button
           type="button"

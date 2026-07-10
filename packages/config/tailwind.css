@@ -117,15 +117,26 @@
  * Tokens de forma (radios y sombras). Sin variación por modo en esta capa
  * fundacional; el bloque `[data-estilo='calido']` de más abajo SÍ redefine
  * --radio-card/--radio-elemento/--radio-control/--radio-flotante/
- * --sombra-card/--sombra-flotante (misma regla de orden que arriba: debe
- * declararse después de este :root, no antes — por eso el bloque Cálido
- * vive después de este bloque y no pegado al :root de Capa 1). No redefine
- * --sombra-hoja/--sombra-hoja-expandida (sin valores de Cálido definidos
- * todavía).
+ * --radio-busqueda/--sombra-card/--sombra-flotante (misma regla de orden
+ * que arriba: debe declararse después de este :root, no antes — por eso el
+ * bloque Cálido vive después de este bloque y no pegado al :root de Capa
+ * 1). No redefine --sombra-hoja/--sombra-hoja-expandida (sin valores de
+ * Cálido definidos todavía).
  *
  * Ninguna utilidad generada por estos tokens (rounded-card, shadow-hoja,
  * etc.) está en uso todavía — quedan como no-op hasta que otra tarea migre
  * componentes. Ver @theme inline más abajo.
+ *
+ * --radio-busqueda (tarea UI-3b, docs/06-ui-ux.md §3 "Búsqueda unificada"):
+ * token propio del `CampoBusqueda` de @gestion/ui — NO reutiliza
+ * --radio-control por var() a propósito (Cálido lo lleva a píldora
+ * completa mientras el resto de los controles se queda en 0.875rem; deben
+ * poder divergir). En Minimalista arranca en el MISMO literal que
+ * --radio-control (0.5rem) porque hoy los inputs comparten esa redondez,
+ * pero es una coincidencia de valores, no un acoplamiento — de ahí que se
+ * copie el literal en vez de `var(--radio-control)` (además, Tailwind v4
+ * tree-shakea variables de tema no referenciadas por una utilidad
+ * generada: un var() a un token usado solo acá sería redundante).
  *
  * --sombra-card/--sombra-flotante: copiados LITERALES de --shadow-sm /
  * --shadow-lg de tailwindcss@4.3.2 (node_modules/tailwindcss/theme.css),
@@ -138,6 +149,7 @@
   --radio-elemento: 0.75rem; /* = rounded-xl */
   --radio-control: 0.5rem; /* = rounded-lg */
   --radio-flotante: 1rem;
+  --radio-busqueda: 0.5rem; /* = rounded-lg, mismo literal que --radio-control hoy */
 
   --sombra-card: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1); /* = shadow-sm */
   --sombra-flotante: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1); /* = shadow-lg */
@@ -282,11 +294,14 @@
   --color-primary-950: oklch(0.215 0.054 50);
 
   /* c) Tokens de forma: radios píldora, sombras suaves (look "One UI"
-     cálido, docs/06-ui-ux.md §3-4). */
+     cálido, docs/06-ui-ux.md §3-4). --radio-busqueda: píldora completa,
+     igual que --radio-flotante (la tab bar) — la búsqueda unificada de UI-3b
+     sigue el mismo lenguaje "todo píldora" del estilo Cálido. */
   --radio-card: 1.5rem;
   --radio-elemento: 1rem;
   --radio-control: 0.875rem;
   --radio-flotante: 9999px;
+  --radio-busqueda: 9999px;
 
   --sombra-card: 0 2px 8px -2px oklch(0.35 0.06 55 / 0.12);
   --sombra-flotante:
@@ -373,6 +388,7 @@
   --radius-elemento: var(--radio-elemento);
   --radius-control: var(--radio-control);
   --radius-flotante: var(--radio-flotante);
+  --radius-busqueda: var(--radio-busqueda);
 
   --shadow-card: var(--sombra-card);
   --shadow-flotante: var(--sombra-flotante);

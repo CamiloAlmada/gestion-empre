@@ -9,7 +9,7 @@ import {
   updateDoc,
   type UpdateData,
 } from 'firebase/firestore';
-import { Button, DataTable, Input, useToasts, type ColumnaDataTable } from '@gestion/ui';
+import { Button, CampoBusqueda, DataTable, normalizarBusqueda, useToasts, type ColumnaDataTable } from '@gestion/ui';
 import {
   categoriaConverter,
   productoConverter,
@@ -43,14 +43,6 @@ type EstadoModal = { tipo: 'cerrado' } | { tipo: 'alta' } | { tipo: 'edicion'; p
 
 const coleccionProductos = collection(db, 'productos').withConverter(productoConverter);
 const coleccionCategorias = collection(db, 'categorias').withConverter(categoriaConverter);
-
-/** Minúsculas y sin diacríticos, para que la búsqueda ignore acentos. */
-function normalizarTexto(texto: string): string {
-  return texto
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase();
-}
 
 function etiquetaModo(producto: Producto): string {
   return `${ETIQUETAS_MODO_PRECIO[producto.modoPrecio]} · ${ETIQUETAS_MODO_STOCK[producto.modoStock]}`;
@@ -185,11 +177,11 @@ export function Productos() {
   } = useCollection(consultaCategorias);
 
   const productosFiltrados = useMemo(() => {
-    const consulta = normalizarTexto(busqueda.trim());
+    const consulta = normalizarBusqueda(busqueda.trim());
     if (consulta === '') return productos;
     return productos.filter(
       (p) =>
-        normalizarTexto(p.nombre).includes(consulta) || normalizarTexto(p.categoria).includes(consulta),
+        normalizarBusqueda(p.nombre).includes(consulta) || normalizarBusqueda(p.categoria).includes(consulta),
     );
   }, [productos, busqueda]);
 
@@ -346,7 +338,12 @@ export function Productos() {
       )}
 
       <div className="w-full max-w-xs">
-        <Input label="Buscar" value={busqueda} onChange={setBusqueda} placeholder="Nombre o categoría" />
+        <CampoBusqueda
+          valor={busqueda}
+          onChange={setBusqueda}
+          ariaLabel="Buscar producto"
+          placeholder="Nombre o categoría"
+        />
       </div>
 
       {cargando ? (

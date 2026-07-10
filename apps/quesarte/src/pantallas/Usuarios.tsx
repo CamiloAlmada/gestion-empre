@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { collection, doc, orderBy, query, updateDoc } from 'firebase/firestore';
-import { Button, DataTable, Input, useToasts, type ColumnaDataTable } from '@gestion/ui';
+import { Button, CampoBusqueda, DataTable, useToasts, type ColumnaDataTable } from '@gestion/ui';
 import {
   DatosInvitacionInvalidosError,
   EmailInvalidoError,
@@ -332,7 +332,7 @@ export function Usuarios() {
       )}
 
       <div className="w-full max-w-xs">
-        <Input label="Buscar" value={busqueda} onChange={setBusqueda} placeholder="Nombre o correo" />
+        <CampoBusqueda valor={busqueda} onChange={setBusqueda} ariaLabel="Buscar usuario" placeholder="Nombre o correo" />
       </div>
 
       {cargando ? (
