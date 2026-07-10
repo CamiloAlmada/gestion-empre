@@ -203,13 +203,55 @@ describe('Proveedores', () => {
     expect(screen.getByText('Ficha de p1')).toBeTruthy();
   });
 
-  it('inactivos ocultos: la query filtra activo == true (no depende de un flag client-side)', () => {
+  it('la query NO filtra por activo (tarea RE-1: trae toda la colección, filtro client-side)', () => {
     configurarCollection({ datos: [] });
 
     renderizar();
 
     const llamada = mocks.useCollection.mock.calls[0]![0] as { __clausulas: unknown[] };
-    expect(llamada.__clausulas).toContainEqual({ __tipo: 'where', args: ['activo', '==', true] });
+    expect(llamada.__clausulas).not.toContainEqual(
+      expect.objectContaining({ __tipo: 'where' }),
+    );
+  });
+
+  it('lista los proveedores activos por defecto, oculta los inactivos (tarea RE-1)', () => {
+    configurarCollection({
+      datos: [
+        proveedorDe({ id: 'p1', nombre: 'Quesos del Norte' }),
+        proveedorDe({ id: 'p2', nombre: 'Miel Artesanal', activo: false }),
+      ],
+    });
+
+    renderizar();
+
+    expect(screen.getByText('Quesos del Norte')).toBeTruthy();
+    expect(screen.queryByText('Miel Artesanal')).toBeNull();
+  });
+
+  it('"Mostrar inactivos" revela los proveedores desactivados, con badge "Inactivo" (tarea RE-1)', () => {
+    configurarCollection({
+      datos: [
+        proveedorDe({ id: 'p1', nombre: 'Quesos del Norte' }),
+        proveedorDe({ id: 'p2', nombre: 'Miel Artesanal', activo: false }),
+      ],
+    });
+
+    renderizar();
+    fireEvent.click(screen.getByRole('button', { name: 'Mostrar inactivos' }));
+
+    expect(screen.getByText('Miel Artesanal')).toBeTruthy();
+    expect(screen.getByText('Inactivo')).toBeTruthy();
+  });
+
+  it('el toggle "Mostrar inactivos" expone aria-pressed (mismo patrón que Clientes)', () => {
+    configurarCollection({ datos: [] });
+
+    renderizar();
+    const boton = screen.getByRole('button', { name: 'Mostrar inactivos' });
+    expect(boton.getAttribute('aria-pressed')).toBe('false');
+
+    fireEvent.click(boton);
+    expect(boton.getAttribute('aria-pressed')).toBe('true');
   });
 
   describe('alta', () => {

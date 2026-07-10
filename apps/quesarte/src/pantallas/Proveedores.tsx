@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { collection, orderBy, query, where } from 'firebase/firestore';
+import { collection, orderBy, query } from 'firebase/firestore';
 import type { Proveedor } from '@gestion/core';
 import {
   crearProveedor,
@@ -41,6 +41,9 @@ interface FilaProveedorProps {
   onSeleccionar: () => void;
 }
 
+/** Un proveedor desactivado (`activo: false`, visible solo con el toggle
+ * "Mostrar inactivos") lleva un badge "Inactivo" — mismo criterio visual que
+ * `ListaClientes` (docs/06-ui-ux.md §5: nunca se comunica solo con color). */
 function FilaProveedor({ proveedor, onSeleccionar }: FilaProveedorProps) {
   const contacto = textoContacto(proveedor);
   return (
@@ -51,7 +54,14 @@ function FilaProveedor({ proveedor, onSeleccionar }: FilaProveedorProps) {
         className="flex min-h-[56px] w-full items-center gap-2 rounded-elemento border border-borde bg-superficie p-4 text-left transition-colors hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
       >
         <div className="flex flex-1 flex-col gap-0.5">
-          <span className="font-medium text-texto">{proveedor.nombre}</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-medium text-texto">{proveedor.nombre}</span>
+            {!proveedor.activo && (
+              <span className="rounded-full border border-borde px-2 py-0.5 text-xs text-texto-secundario">
+                Inactivo
+              </span>
+            )}
+          </div>
           {contacto !== '' && <span className="text-sm text-texto-secundario">{contacto}</span>}
         </div>
         <span aria-hidden="true" className="text-texto-secundario">
@@ -66,15 +76,21 @@ function FilaProveedor({ proveedor, onSeleccionar }: FilaProveedorProps) {
  * Listado de proveedores (sección interna del tab Stock, solo admin — la
  * ruta ya está protegida por `RutaSoloAdmin` en App.tsx, mismo patrón que
  * `Usuarios.tsx`: no hace falta re-chequear el rol acá adentro). Orden
- * alfabético, inactivos ocultos (docs/07-clientes-proveedores.md). Los
- * proveedores son pocos: una lista simple con búsqueda por nombre, sin la
- * maquinaria de `DataTable` (no hay columnas que ganarse el lugar, solo
- * nombre + contacto — docs/06-ui-ux.md §1 "ante la duda, menos").
+ * alfabético. Los proveedores son pocos: una lista simple con búsqueda por
+ * nombre, sin la maquinaria de `DataTable` (no hay columnas que ganarse el
+ * lugar, solo nombre + contacto — docs/06-ui-ux.md §1 "ante la duda, menos").
+ *
+ * Toggle "Mostrar inactivos" (unificado al patrón de `Clientes.tsx`, tarea
+ * RE-1): la query trae TODA la colección ordenada por nombre — sin
+ * `where('activo','==',true)` — y el filtro por `activo` es client-side, para
+ * que un proveedor desactivado se pueda encontrar y reactivar desde acá (antes
+ * quedaba invisible sin recurso). El índice compuesto `proveedores (activo,
+ * nombre)` de `firestore.indexes.json` queda sin consumidor tras este cambio
+ * (reportado al tech lead, no se borra desde esta tarea).
  *
  * Tocar una fila navega a su ficha (`/stock/proveedor/:id`, ruta real). El
- * alta se hace acá (acción de header, como Productos); edición y
- * desactivación viven en la ficha (`DetalleProveedorPantalla`), donde ya se
- * ve el detalle completo del proveedor.
+ * alta se hace acá (acción de header, como Productos); edición, desactivación
+ * y reactivación viven en la ficha (`DetalleProveedorPantalla`).
  */
 export function Proveedores() {
   const navigate = useNavigate();
@@ -82,6 +98,7 @@ export function Proveedores() {
   const { mostrarToast } = useToasts();
 
   const [busqueda, setBusqueda] = useState('');
+  const [mostrarInactivos, setMostrarInactivos] = useState(false);
   const [modalAltaAbierto, setModalAltaAbierto] = useState(false);
   const [guardando, setGuardando] = useState(false);
   // Fuerza resuscripción al "Reintentar" (misma técnica que Stock/Productos:
@@ -105,21 +122,19 @@ export function Proveedores() {
   });
 
   const consultaProveedores = useMemo(
-    () =>
-      query(
-        collection(db, 'proveedores').withConverter(proveedorConverter),
-        where('activo', '==', true),
-        orderBy('nombre'),
-      ),
+    () => query(collection(db, 'proveedores').withConverter(proveedorConverter), orderBy('nombre')),
     [intentoId],
   );
   const { datos: proveedores, cargando, error } = useCollection(consultaProveedores);
 
   const proveedoresFiltrados = useMemo(() => {
     const consulta = normalizarTexto(busqueda.trim());
-    if (consulta === '') return proveedores;
-    return proveedores.filter((p) => normalizarTexto(p.nombre).includes(consulta));
-  }, [proveedores, busqueda]);
+    return proveedores.filter((p) => {
+      if (!mostrarInactivos && !p.activo) return false;
+      if (consulta === '') return true;
+      return normalizarTexto(p.nombre).includes(consulta);
+    });
+  }, [proveedores, busqueda, mostrarInactivos]);
 
   function reintentar() {
     setIntentoId((n) => n + 1);
@@ -206,8 +221,23 @@ export function Proveedores() {
         </div>
       )}
 
-      <div className="w-full max-w-xs">
-        <Input label="Buscar" value={busqueda} onChange={setBusqueda} placeholder="Nombre" />
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="w-full max-w-xs">
+          <Input label="Buscar" value={busqueda} onChange={setBusqueda} placeholder="Nombre" />
+        </div>
+        <button
+          type="button"
+          aria-pressed={mostrarInactivos}
+          onClick={() => setMostrarInactivos((v) => !v)}
+          className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-full border px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-1 focus-visible:ring-offset-superficie ${
+            mostrarInactivos
+              ? 'border-2 border-primary-600 text-primary-700 dark:text-primary-300'
+              : 'border-borde text-texto-secundario'
+          }`}
+        >
+          {mostrarInactivos && <span aria-hidden="true">✓</span>}
+          Mostrar inactivos
+        </button>
       </div>
 
       {contenido}

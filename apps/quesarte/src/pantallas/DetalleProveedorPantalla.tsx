@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
-import { collection, orderBy, query, where } from 'firebase/firestore';
+import { doc } from 'firebase/firestore';
 import type { DatosPago } from '@gestion/core';
 import {
   actualizarProveedor,
   proveedorConverter,
-  useCollection,
+  reactivarProveedor,
+  useDoc,
   useOnlineStatus,
   type DatosProveedor,
 } from '@gestion/firebase-kit';
@@ -46,13 +47,17 @@ function TarjetaPago({ pago }: { pago: DatosPago }) {
  * Ficha de UN proveedor, en su propia ruta (`/stock/proveedor/:id`, ver
  * App.tsx — protegida por `RutaSoloAdmin`, docs/07-clientes-proveedores.md:
  * "el vendedor no ve datos bancarios ni costos de proveedor"). Mismo patrón
- * que `DetalleProductoPantalla`: query memoizada de proveedores activos,
- * búsqueda client-side por `id` de la URL.
+ * que `DetalleClientePantalla` (tarea RE-1: antes traía la lista filtrada por
+ * `activo == true` y buscaba por id, así que un proveedor desactivado no
+ * tenía ficha visible — visibilidad deshonesta, doc 04 nota de deuda):
+ * `useDoc` sobre el documento puntual, sin filtrar por `activo`, con badge
+ * "Inactivo" cuando corresponde.
  *
  * Trae datos completos + cuentas de pago (para copiar fácil al transferir) y
  * un placeholder de historial de compras (Fase 2, no implementado acá). Las
- * acciones de escritura (editar / desactivar) viven en el header, como
- * `DetalleProductoPantalla`.
+ * acciones de escritura (editar / desactivar / reactivar) viven en el header,
+ * como `DetalleProductoPantalla` — toda la ruta ya es solo-admin
+ * (`RutaSoloAdmin`), no hace falta re-chequear el rol acá adentro.
  */
 export function DetalleProveedorPantalla() {
   const { id } = useParams<{ id: string }>();
@@ -63,19 +68,14 @@ export function DetalleProveedorPantalla() {
   const [intento, setIntento] = useState(0);
   const [modal, setModal] = useState<Modal>(null);
   const [guardando, setGuardando] = useState(false);
+  const [reactivando, setReactivando] = useState(false);
 
-  const proveedoresQuery = useMemo(
-    () =>
-      query(
-        collection(db, 'proveedores').withConverter(proveedorConverter),
-        where('activo', '==', true),
-        orderBy('nombre'),
-      ),
-    [intento],
+  const proveedorRef = useMemo(
+    () => (id !== undefined ? doc(db, 'proveedores', id).withConverter(proveedorConverter) : null),
+    [id, intento],
   );
-  const { datos: proveedores, cargando, error } = useCollection(proveedoresQuery);
+  const { datos: proveedor, cargando, error } = useDoc(proveedorRef);
 
-  const proveedor = proveedores.find((p) => p.id === id) ?? null;
   const noEncontrado = !cargando && error === null && proveedor === null;
   const tituloHeader = cargando ? 'Proveedor' : (proveedor?.nombre ?? 'Proveedor no encontrado');
 
@@ -88,9 +88,19 @@ export function DetalleProveedorPantalla() {
           <Button onClick={() => setModal('editar')} className="min-h-[48px]">
             Editar
           </Button>
-          <Button variante="secundaria" onClick={() => setModal('desactivar')} className="min-h-[48px]">
-            Desactivar
-          </Button>
+          {proveedor.activo ? (
+            <Button variante="secundaria" onClick={() => setModal('desactivar')} className="min-h-[48px]">
+              Desactivar
+            </Button>
+          ) : (
+            <Button
+              onClick={() => void handleReactivar()}
+              disabled={reactivando}
+              className="min-h-[48px]"
+            >
+              {reactivando ? 'Reactivando…' : 'Reactivar'}
+            </Button>
+          )}
         </>
       ) : undefined,
   });
@@ -135,6 +145,34 @@ export function DetalleProveedorPantalla() {
     }
   }
 
+  /**
+   * Reactivación: acción reversible, sin modal de confirmación (docs/06-ui-ux.md
+   * §6). Mismo patrón híbrido de escrituras offline del proyecto (§8) que el
+   * resto de la ficha.
+   */
+  async function handleReactivar() {
+    if (proveedor === null || reactivando) return;
+    const escritura = reactivarProveedor(db, proveedor.id);
+
+    if (!enLinea) {
+      mostrarToast('Guardado sin conexión. Se sincronizará al reconectar.', 'info');
+      escritura.catch(() => {
+        mostrarToast('No se pudo sincronizar la reactivación del proveedor.', 'error');
+      });
+      return;
+    }
+
+    setReactivando(true);
+    try {
+      await escritura;
+      mostrarToast('Proveedor reactivado.', 'exito');
+    } catch {
+      mostrarToast('No se pudo reactivar el proveedor. Intentá de nuevo.', 'error');
+    } finally {
+      setReactivando(false);
+    }
+  }
+
   if (cargando) {
     return <p className="py-8 text-center text-texto-secundario">Cargando proveedor…</p>;
   }
@@ -168,6 +206,12 @@ export function DetalleProveedorPantalla() {
 
   return (
     <div className="flex flex-col gap-4">
+      {!proveedor.activo && (
+        <span className="w-fit rounded-full border border-borde px-2 py-0.5 text-xs text-texto-secundario">
+          Inactivo
+        </span>
+      )}
+
       <section className="flex flex-col gap-2 rounded-card border border-borde bg-superficie p-4">
         <h2 className="text-lg font-semibold text-texto">Contacto</h2>
         <CampoOpcional etiqueta="Contacto" valor={proveedor.contactoNombre} />

@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   useCollection: vi.fn(),
   actualizarCliente: vi.fn(),
   desactivarCliente: vi.fn(),
+  reactivarCliente: vi.fn(),
 }));
 
 vi.mock('@gestion/firebase-kit', async (importOriginal) => {
@@ -26,6 +27,7 @@ vi.mock('@gestion/firebase-kit', async (importOriginal) => {
     useCollection: mocks.useCollection,
     actualizarCliente: mocks.actualizarCliente,
     desactivarCliente: mocks.desactivarCliente,
+    reactivarCliente: mocks.reactivarCliente,
   };
 });
 
@@ -356,7 +358,7 @@ describe('DetalleClientePantalla - gates de rol', () => {
     expect(screen.getByRole('button', { name: 'Desactivar cliente' })).toBeTruthy();
   });
 
-  it('admin, cliente ya inactivo: no ofrece "Desactivar cliente" de nuevo', () => {
+  it('admin, cliente ya inactivo: no ofrece "Desactivar cliente" de nuevo, sino "Reactivar cliente" (tarea RE-1)', () => {
     configurarAuth('admin');
     configurarCliente(estadoOkDoc(clienteDe({ id: 'c1', nombre: 'Ana Pérez', activo: false })));
     configurarVentas(estadoOkColeccion([]));
@@ -364,6 +366,27 @@ describe('DetalleClientePantalla - gates de rol', () => {
     renderizar();
 
     expect(screen.queryByRole('button', { name: 'Desactivar cliente' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Reactivar cliente' })).toBeTruthy();
+  });
+
+  it('vendedor, cliente inactivo: no ve "Reactivar cliente"', () => {
+    configurarAuth('vendedor');
+    configurarCliente(estadoOkDoc(clienteDe({ id: 'c1', nombre: 'Ana Pérez', activo: false })));
+    configurarVentas(estadoOkColeccion([]));
+
+    renderizar();
+
+    expect(screen.queryByRole('button', { name: 'Reactivar cliente' })).toBeNull();
+  });
+
+  it('admin, cliente activo: no ofrece "Reactivar cliente"', () => {
+    configurarAuth('admin');
+    configurarCliente(estadoOkDoc(clienteDe({ id: 'c1', nombre: 'Ana Pérez' })));
+    configurarVentas(estadoOkColeccion([]));
+
+    renderizar();
+
+    expect(screen.queryByRole('button', { name: 'Reactivar cliente' })).toBeNull();
   });
 });
 
@@ -400,5 +423,46 @@ describe('DetalleClientePantalla - desactivación', () => {
 
     await waitFor(() => expect(mocks.desactivarCliente).toHaveBeenCalledWith({}, 'c1'));
     expect(await screen.findByText('Cliente desactivado.')).toBeTruthy();
+  });
+});
+
+describe('DetalleClientePantalla - reactivación (tarea RE-1)', () => {
+  it('cliente inactivo: muestra el badge "Inactivo"', () => {
+    configurarAuth('admin');
+    configurarCliente(estadoOkDoc(clienteDe({ id: 'c1', nombre: 'Ana Pérez', activo: false })));
+    configurarVentas(estadoOkColeccion([]));
+
+    renderizar();
+
+    expect(screen.getByText('Inactivo')).toBeTruthy();
+  });
+
+  it('admin: reactivar (sin modal de confirmación, doc 06 §6) llama a reactivarCliente y avisa con éxito', async () => {
+    configurarAuth('admin');
+    configurarCliente(estadoOkDoc(clienteDe({ id: 'c1', nombre: 'Ana Pérez', activo: false })));
+    configurarVentas(estadoOkColeccion([]));
+    mocks.reactivarCliente.mockResolvedValue(undefined);
+
+    renderizar();
+    fireEvent.click(screen.getByRole('button', { name: 'Reactivar cliente' }));
+
+    await waitFor(() => expect(mocks.reactivarCliente).toHaveBeenCalledWith({}, 'c1'));
+    expect(await screen.findByText('Cliente reactivado.')).toBeTruthy();
+  });
+
+  it('sin conexión: reactiva sin esperar el ack y avisa que falta sincronizar', async () => {
+    configurarAuth('admin');
+    configurarCliente(estadoOkDoc(clienteDe({ id: 'c1', nombre: 'Ana Pérez', activo: false })));
+    configurarVentas(estadoOkColeccion([]));
+    mocks.useOnlineStatus.mockReturnValue(false);
+    mocks.reactivarCliente.mockResolvedValue(undefined);
+
+    renderizar();
+    fireEvent.click(screen.getByRole('button', { name: 'Reactivar cliente' }));
+
+    expect(mocks.reactivarCliente).toHaveBeenCalledTimes(1);
+    expect(
+      await screen.findByText('Guardado sin conexión. Se sincronizará al reconectar.'),
+    ).toBeTruthy();
   });
 });

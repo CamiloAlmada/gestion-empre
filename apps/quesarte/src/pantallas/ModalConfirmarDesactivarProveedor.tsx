@@ -16,10 +16,11 @@ export interface ModalConfirmarDesactivarProveedorProps {
 }
 
 /**
- * Confirmación de la desactivación de un proveedor: acción destructiva de
- * hecho irreversible desde la UI (no hay `activarProveedor` en la superficie
- * de packages/firebase-kit — ver nota de CP-D al tech lead), así que pide
- * confirmación explícita (docs/06-ui-ux.md §6).
+ * Confirmación de la desactivación de un proveedor: deja de aparecer en el
+ * listado por defecto (sigue visible con "Mostrar inactivos" y desde su
+ * ficha), así que pide confirmación explícita por prudencia (docs/06-ui-ux.md
+ * §6) aunque es reversible (`reactivarProveedor`, botón "Reactivar" en la
+ * ficha, tarea RE-1).
  *
  * Sigue el patrón híbrido de escrituras offline del proyecto (§8): en línea
  * espera el ack antes de avisar y cerrar; sin conexión dispara la escritura
@@ -82,7 +83,8 @@ export function ModalConfirmarDesactivarProveedor({
       }
     >
       <p className="text-texto">
-        Deja de aparecer en el listado de proveedores. No hay forma de reactivarlo desde acá.
+        Deja de aparecer en el listado de proveedores. Se puede reactivar desde su ficha cuando haga
+        falta.
       </p>
     </Modal>
   );

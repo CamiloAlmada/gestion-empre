@@ -5,6 +5,7 @@ import { formatearMoney, type Venta } from '@gestion/core';
 import {
   actualizarCliente,
   clienteConverter,
+  reactivarCliente,
   useAuth,
   useCollection,
   useDoc,
@@ -59,6 +60,7 @@ export function DetalleClientePantalla() {
   const [intento, setIntento] = useState(0);
   const [modal, setModal] = useState<Modal>(null);
   const [guardando, setGuardando] = useState(false);
+  const [reactivando, setReactivando] = useState(false);
 
   const clienteRef = useMemo(
     () => (id !== undefined ? doc(db, 'clientes', id).withConverter(clienteConverter) : null),
@@ -127,6 +129,34 @@ export function DetalleClientePantalla() {
       mostrarToast('No se pudo actualizar el cliente. Intentá de nuevo.', 'error');
     } finally {
       setGuardando(false);
+    }
+  }
+
+  /**
+   * Reactivación: acción reversible, sin modal de confirmación (docs/06-ui-ux.md
+   * §6). Mismo patrón híbrido de escrituras offline del proyecto (§8) que el
+   * resto de la ficha.
+   */
+  async function handleReactivar() {
+    if (cliente.datos === null || reactivando) return;
+    const escritura = reactivarCliente(db, cliente.datos.id);
+
+    if (!enLinea) {
+      mostrarToast('Guardado sin conexión. Se sincronizará al reconectar.', 'info');
+      escritura.catch(() => {
+        mostrarToast('No se pudo sincronizar la reactivación del cliente.', 'error');
+      });
+      return;
+    }
+
+    setReactivando(true);
+    try {
+      await escritura;
+      mostrarToast('Cliente reactivado.', 'exito');
+    } catch {
+      mostrarToast('No se pudo reactivar el cliente. Intentá de nuevo.', 'error');
+    } finally {
+      setReactivando(false);
     }
   }
 
@@ -277,6 +307,14 @@ export function DetalleClientePantalla() {
         <div className="flex justify-end">
           <Button variante="peligro" onClick={() => setModal('desactivar')}>
             Desactivar cliente
+          </Button>
+        </div>
+      )}
+
+      {esAdmin && !datosCliente.activo && (
+        <div className="flex justify-end">
+          <Button onClick={() => void handleReactivar()} disabled={reactivando}>
+            {reactivando ? 'Reactivando…' : 'Reactivar cliente'}
           </Button>
         </div>
       )}

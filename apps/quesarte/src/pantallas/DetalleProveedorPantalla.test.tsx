@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
+import type { FirestoreError } from 'firebase/firestore';
 import { ProveedorToasts } from '@gestion/ui';
 import type { Proveedor } from '@gestion/core';
 import { DetalleProveedorPantalla } from './DetalleProveedorPantalla';
@@ -8,19 +9,24 @@ import { ProveedorHeader, useHeaderActual } from '../componentes/header/Contexto
 
 const mocks = vi.hoisted(() => ({
   useOnlineStatus: vi.fn(() => true),
-  useCollection: vi.fn(),
+  useDoc: vi.fn(),
   actualizarProveedor: vi.fn(),
   desactivarProveedor: vi.fn(),
+  reactivarProveedor: vi.fn(),
 }));
 
+// Mismo criterio que DetalleClientePantalla.test.tsx (tarea RE-1: la ficha
+// pasó de `useCollection` filtrada por activos a `useDoc` sobre el documento
+// puntual, para que un proveedor inactivo tenga ficha visible).
 vi.mock('@gestion/firebase-kit', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@gestion/firebase-kit')>();
   return {
     ...actual,
     useOnlineStatus: mocks.useOnlineStatus,
-    useCollection: mocks.useCollection,
+    useDoc: mocks.useDoc,
     actualizarProveedor: mocks.actualizarProveedor,
     desactivarProveedor: mocks.desactivarProveedor,
+    reactivarProveedor: mocks.reactivarProveedor,
   };
 });
 
@@ -37,28 +43,24 @@ function crearRefFalsa(path: string): RefFalsa {
 }
 
 vi.mock('firebase/firestore', () => ({
-  collection: (_db: unknown, path: string) => crearRefFalsa(path),
-  query: (ref: RefFalsa, ...clausulas: unknown[]) => ({ ...ref, __clausulas: clausulas }),
-  where: (...args: unknown[]) => ({ __tipo: 'where', args }),
-  orderBy: (...args: unknown[]) => ({ __tipo: 'orderBy', args }),
+  doc: (_db: unknown, coleccion: string, id: string) => crearRefFalsa(`${coleccion}/${id}`),
 }));
 
-interface EstadoColeccionFalso<T> {
-  datos: T[];
+interface EstadoDocFalso<T> {
+  datos: T | null;
   cargando: boolean;
-  error: unknown;
+  error: FirestoreError | null;
 }
 
-let estadoProveedores: EstadoColeccionFalso<Proveedor> = { datos: [], cargando: false, error: null };
+function configurarProveedor(estado: EstadoDocFalso<Proveedor>) {
+  mocks.useDoc.mockImplementation((ref: RefFalsa | null) => {
+    if (ref === null) return { datos: null, cargando: false, error: null };
+    return estado;
+  });
+}
 
-mocks.useCollection.mockImplementation(() => estadoProveedores);
-
-function configurarCollection(overrides: { datos?: Proveedor[]; cargando?: boolean; error?: unknown }) {
-  estadoProveedores = {
-    datos: overrides.datos ?? [],
-    cargando: overrides.cargando ?? false,
-    error: overrides.error ?? null,
-  };
+function estadoOkDoc<T>(datos: T): EstadoDocFalso<T> {
+  return { datos, cargando: false, error: null };
 }
 
 function proveedorDe(over: Partial<Proveedor> & Pick<Proveedor, 'id'>): Proveedor {
@@ -106,11 +108,10 @@ describe('DetalleProveedorPantalla', () => {
     cleanup();
     vi.clearAllMocks();
     mocks.useOnlineStatus.mockReturnValue(true);
-    estadoProveedores = { datos: [], cargando: false, error: null };
   });
 
   it('estado cargando', () => {
-    configurarCollection({ cargando: true });
+    configurarProveedor({ datos: null, cargando: true, error: null });
 
     renderizar('p1');
 
@@ -118,7 +119,7 @@ describe('DetalleProveedorPantalla', () => {
   });
 
   it('estado error muestra mensaje y botón de reintento', () => {
-    configurarCollection({ error: new Error('boom') });
+    configurarProveedor({ datos: null, cargando: false, error: { code: 'unavailable' } as FirestoreError });
 
     renderizar('p1');
 
@@ -126,8 +127,8 @@ describe('DetalleProveedorPantalla', () => {
     expect(screen.getByRole('button', { name: 'Reintentar' })).toBeTruthy();
   });
 
-  it('id inexistente (o desactivado): mensaje de no encontrado con link al listado', () => {
-    configurarCollection({ datos: [proveedorDe({ id: 'p1', nombre: 'Quesos del Norte' })] });
+  it('id inexistente: mensaje de no encontrado con link al listado', () => {
+    configurarProveedor({ datos: null, cargando: false, error: null });
 
     renderizar('otro-id');
 
@@ -138,7 +139,7 @@ describe('DetalleProveedorPantalla', () => {
   });
 
   it('header: título con el nombre del proveedor y volver a Proveedores', () => {
-    configurarCollection({ datos: [proveedorDe({ id: 'p1', nombre: 'Quesos del Norte' })] });
+    configurarProveedor(estadoOkDoc(proveedorDe({ id: 'p1', nombre: 'Quesos del Norte' })));
 
     renderizar('p1');
 
@@ -147,8 +148,8 @@ describe('DetalleProveedorPantalla', () => {
   });
 
   it('muestra contacto, dirección, RUT y notas cuando están presentes', () => {
-    configurarCollection({
-      datos: [
+    configurarProveedor(
+      estadoOkDoc(
         proveedorDe({
           id: 'p1',
           nombre: 'Quesos del Norte',
@@ -158,8 +159,8 @@ describe('DetalleProveedorPantalla', () => {
           rut: '210000000000',
           notas: 'Prefiere que se llame antes de ir.',
         }),
-      ],
-    });
+      ),
+    );
 
     renderizar('p1');
 
@@ -171,15 +172,15 @@ describe('DetalleProveedorPantalla', () => {
   });
 
   it('muestra las cuentas de pago listas para copiar', () => {
-    configurarCollection({
-      datos: [
+    configurarProveedor(
+      estadoOkDoc(
         proveedorDe({
           id: 'p1',
           nombre: 'Quesos del Norte',
           pagos: [{ banco: 'Itaú', cuenta: '123-456', titular: 'Juan Pérez', moneda: 'UYU' }],
         }),
-      ],
-    });
+      ),
+    );
 
     renderizar('p1');
 
@@ -190,7 +191,7 @@ describe('DetalleProveedorPantalla', () => {
   });
 
   it('sin cuentas de pago: mensaje explícito', () => {
-    configurarCollection({ datos: [proveedorDe({ id: 'p1', nombre: 'Quesos del Norte' })] });
+    configurarProveedor(estadoOkDoc(proveedorDe({ id: 'p1', nombre: 'Quesos del Norte' })));
 
     renderizar('p1');
 
@@ -198,7 +199,7 @@ describe('DetalleProveedorPantalla', () => {
   });
 
   it('historial de compras: placeholder de Fase 2', () => {
-    configurarCollection({ datos: [proveedorDe({ id: 'p1', nombre: 'Quesos del Norte' })] });
+    configurarProveedor(estadoOkDoc(proveedorDe({ id: 'p1', nombre: 'Quesos del Norte' })));
 
     renderizar('p1');
 
@@ -207,9 +208,9 @@ describe('DetalleProveedorPantalla', () => {
 
   describe('edición', () => {
     it('el modal de edición llega precargado con los datos actuales', () => {
-      configurarCollection({
-        datos: [proveedorDe({ id: 'p1', nombre: 'Quesos del Norte', telefono: '099123456' })],
-      });
+      configurarProveedor(
+        estadoOkDoc(proveedorDe({ id: 'p1', nombre: 'Quesos del Norte', telefono: '099123456' })),
+      );
 
       renderizar('p1');
       fireEvent.click(screen.getByRole('button', { name: 'Editar' }));
@@ -219,7 +220,7 @@ describe('DetalleProveedorPantalla', () => {
     });
 
     it('guarda la edición delegando en actualizarProveedor', async () => {
-      configurarCollection({ datos: [proveedorDe({ id: 'p1', nombre: 'Quesos del Norte' })] });
+      configurarProveedor(estadoOkDoc(proveedorDe({ id: 'p1', nombre: 'Quesos del Norte' })));
       mocks.actualizarProveedor.mockResolvedValue(undefined);
 
       renderizar('p1');
@@ -235,15 +236,15 @@ describe('DetalleProveedorPantalla', () => {
     });
 
     it('agregar y quitar una cuenta de pago en la edición', async () => {
-      configurarCollection({
-        datos: [
+      configurarProveedor(
+        estadoOkDoc(
           proveedorDe({
             id: 'p1',
             nombre: 'Quesos del Norte',
             pagos: [{ banco: 'Itaú', cuenta: '123-456' }],
           }),
-        ],
-      });
+        ),
+      );
       mocks.actualizarProveedor.mockResolvedValue(undefined);
 
       renderizar('p1');
@@ -276,7 +277,7 @@ describe('DetalleProveedorPantalla', () => {
 
   describe('desactivación', () => {
     it('pide confirmación antes de desactivar', () => {
-      configurarCollection({ datos: [proveedorDe({ id: 'p1', nombre: 'Quesos del Norte' })] });
+      configurarProveedor(estadoOkDoc(proveedorDe({ id: 'p1', nombre: 'Quesos del Norte' })));
 
       renderizar('p1');
       fireEvent.click(screen.getByRole('button', { name: 'Desactivar' }));
@@ -286,7 +287,7 @@ describe('DetalleProveedorPantalla', () => {
     });
 
     it('confirmar desactiva, avisa y vuelve al listado', async () => {
-      configurarCollection({ datos: [proveedorDe({ id: 'p1', nombre: 'Quesos del Norte' })] });
+      configurarProveedor(estadoOkDoc(proveedorDe({ id: 'p1', nombre: 'Quesos del Norte' })));
       mocks.desactivarProveedor.mockResolvedValue(undefined);
 
       renderizar('p1');
@@ -298,7 +299,7 @@ describe('DetalleProveedorPantalla', () => {
     });
 
     it('sin conexión: navega al listado sin esperar el ack', async () => {
-      configurarCollection({ datos: [proveedorDe({ id: 'p1', nombre: 'Quesos del Norte' })] });
+      configurarProveedor(estadoOkDoc(proveedorDe({ id: 'p1', nombre: 'Quesos del Norte' })));
       mocks.useOnlineStatus.mockReturnValue(false);
       mocks.desactivarProveedor.mockResolvedValue(undefined);
 
@@ -308,6 +309,67 @@ describe('DetalleProveedorPantalla', () => {
 
       expect(screen.getByText('Listado de proveedores')).toBeTruthy();
       expect(mocks.desactivarProveedor).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('reactivación (tarea RE-1)', () => {
+    it('proveedor inactivo: la ficha es visible (useDoc, no filtra por activo), con badge "Inactivo"', () => {
+      configurarProveedor(
+        estadoOkDoc(proveedorDe({ id: 'p1', nombre: 'Quesos del Norte', activo: false })),
+      );
+
+      renderizar('p1');
+
+      expect(screen.getByText('Quesos del Norte')).toBeTruthy();
+      expect(screen.getByText('Inactivo')).toBeTruthy();
+    });
+
+    it('proveedor inactivo: el header ofrece "Reactivar" en vez de "Desactivar"', () => {
+      configurarProveedor(
+        estadoOkDoc(proveedorDe({ id: 'p1', nombre: 'Quesos del Norte', activo: false })),
+      );
+
+      renderizar('p1');
+
+      expect(screen.getByRole('button', { name: 'Reactivar' })).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'Desactivar' })).toBeNull();
+    });
+
+    it('proveedor activo: no ofrece "Reactivar"', () => {
+      configurarProveedor(estadoOkDoc(proveedorDe({ id: 'p1', nombre: 'Quesos del Norte' })));
+
+      renderizar('p1');
+
+      expect(screen.queryByRole('button', { name: 'Reactivar' })).toBeNull();
+    });
+
+    it('reactivar (sin modal de confirmación, doc 06 §6): llama a reactivarProveedor y avisa con éxito', async () => {
+      configurarProveedor(
+        estadoOkDoc(proveedorDe({ id: 'p1', nombre: 'Quesos del Norte', activo: false })),
+      );
+      mocks.reactivarProveedor.mockResolvedValue(undefined);
+
+      renderizar('p1');
+      fireEvent.click(screen.getByRole('button', { name: 'Reactivar' }));
+
+      await waitFor(() => expect(mocks.reactivarProveedor).toHaveBeenCalledWith({}, 'p1'));
+      expect(await screen.findByText('Proveedor reactivado.')).toBeTruthy();
+    });
+
+    it('sin conexión: reactiva sin esperar el ack y avisa que falta sincronizar', async () => {
+      configurarProveedor(
+        estadoOkDoc(proveedorDe({ id: 'p1', nombre: 'Quesos del Norte', activo: false })),
+      );
+      mocks.useOnlineStatus.mockReturnValue(false);
+      mocks.reactivarProveedor.mockResolvedValue(undefined);
+
+      renderizar('p1');
+      fireEvent.click(screen.getByRole('button', { name: 'Reactivar' }));
+
+      expect(mocks.reactivarProveedor).toHaveBeenCalledTimes(1);
+      expect(
+        await screen.findByText('Guardado sin conexión. Se sincronizará al reconectar.'),
+      ).toBeTruthy();
     });
   });
 });
