@@ -148,6 +148,13 @@ estimadas — NO va acá: extiende Fase 3):
    ficha con datos de pago; el historial de compras de la ficha se completa
    solo cuando Fase 2 exista.
 
+Deuda consciente (CP-B/CP-D, 2026-07-09): no existe `reactivarCliente` /
+`reactivarProveedor` — desactivar es irreversible desde la UI (el modal de
+confirmación lo dice honestamente). Si un cliente/proveedor se desactiva por
+error, hoy solo se recupera por consola. Habilitarlo requiere las funciones en
+firebase-kit + entrada de UI (Clientes ya tiene toggle "mostrar inactivos";
+Proveedores los oculta del todo). Decidir con el dueño si entra en Fase 2.
+
 Decisión consciente (CP-A, 2026-07-09): las reglas exigen que una venta con
 cliente SUBA estrictamente `stats.totalHistoricoCents` — asociar cliente a una
 venta de $0 haría fallar el batch. Una venta de mostrador siempre es > 0; si
