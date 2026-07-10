@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { money, type Producto } from '@gestion/core';
-import { estaBajoObjetivo, margenActualBps, MULTIPLO_REDONDEO_CENTS_DEFAULT, precioSugeridoDe } from './margenes';
+import {
+  estaBajoObjetivo,
+  margenActualBps,
+  margenComparable,
+  MULTIPLO_REDONDEO_CENTS_DEFAULT,
+  precioSugeridoDe,
+  unidadCosto,
+} from './margenes';
 
 function producto(over: Partial<Producto> & Pick<Producto, 'id'>): Producto {
   return {
@@ -16,9 +23,84 @@ function producto(over: Partial<Producto> & Pick<Producto, 'id'>): Producto {
   };
 }
 
+describe('unidadCosto (M2, review Fase 2)', () => {
+  it('fraccionado_por_pieza: siempre "kg", sea cual sea el modoPrecio', () => {
+    expect(unidadCosto(producto({ id: 'p1', modoStock: 'fraccionado_por_pieza', modoPrecio: 'por_kg' }))).toBe(
+      'kg',
+    );
+    expect(
+      unidadCosto(producto({ id: 'p1', modoStock: 'fraccionado_por_pieza', modoPrecio: 'por_unidad' })),
+    ).toBe('kg');
+  });
+
+  it('pieza_entera: siempre "kg", sea cual sea el modoPrecio (caso real: salame a precio fijo)', () => {
+    expect(unidadCosto(producto({ id: 'p1', modoStock: 'pieza_entera', modoPrecio: 'por_kg' }))).toBe('kg');
+    expect(unidadCosto(producto({ id: 'p1', modoStock: 'pieza_entera', modoPrecio: 'por_unidad' }))).toBe('kg');
+  });
+
+  it('granel: "kg"', () => {
+    expect(unidadCosto(producto({ id: 'p1', modoStock: 'granel' }))).toBe('kg');
+  });
+
+  it('unidad_simple: "unidad"', () => {
+    expect(unidadCosto(producto({ id: 'p1', modoStock: 'unidad_simple', modoPrecio: 'por_unidad' }))).toBe(
+      'unidad',
+    );
+  });
+});
+
+describe('margenComparable (M2, review Fase 2)', () => {
+  it('por pieza + por_kg: comparable (costo y precio ambos por kg)', () => {
+    expect(
+      margenComparable(producto({ id: 'p1', modoStock: 'fraccionado_por_pieza', modoPrecio: 'por_kg' })),
+    ).toBe(true);
+    expect(margenComparable(producto({ id: 'p1', modoStock: 'pieza_entera', modoPrecio: 'por_kg' }))).toBe(
+      true,
+    );
+  });
+
+  it('por pieza + por_unidad: NO comparable (costo por kg, precio por unidad)', () => {
+    expect(
+      margenComparable(producto({ id: 'p1', modoStock: 'fraccionado_por_pieza', modoPrecio: 'por_unidad' })),
+    ).toBe(false);
+    expect(margenComparable(producto({ id: 'p1', modoStock: 'pieza_entera', modoPrecio: 'por_unidad' }))).toBe(
+      false,
+    );
+  });
+
+  it('granel y unidad_simple: siempre comparable (sus combinaciones canónicas ya coinciden, doc 02)', () => {
+    expect(margenComparable(producto({ id: 'p1', modoStock: 'granel', modoPrecio: 'por_kg' }))).toBe(true);
+    expect(
+      margenComparable(producto({ id: 'p1', modoStock: 'unidad_simple', modoPrecio: 'por_unidad' })),
+    ).toBe(true);
+  });
+});
+
 describe('margenActualBps', () => {
   it('costo $300, precio $500 → 40 % (4000 bps)', () => {
     const p = producto({ id: 'p1', costoPromedioCents: money(30000), precioVentaCents: money(50000) });
+    expect(margenActualBps(p)).toBe(4000);
+  });
+
+  it('M2: pieza_entera + por_unidad con costo y precio cargados → null (unidades incompatibles, no se calcula)', () => {
+    const p = producto({
+      id: 'p1',
+      modoStock: 'pieza_entera',
+      modoPrecio: 'por_unidad',
+      costoPromedioCents: money(30000), // $300/kg
+      precioVentaCents: money(50000), // $500/unidad — no comparable con lo anterior
+    });
+    expect(margenActualBps(p)).toBeNull();
+  });
+
+  it('M2: pieza_entera + por_kg (el caso ANTERIOR a M2) sigue calculando margen normal', () => {
+    const p = producto({
+      id: 'p1',
+      modoStock: 'pieza_entera',
+      modoPrecio: 'por_kg',
+      costoPromedioCents: money(30000),
+      precioVentaCents: money(50000),
+    });
     expect(margenActualBps(p)).toBe(4000);
   });
 
@@ -73,6 +155,18 @@ describe('estaBajoObjetivo', () => {
     });
     expect(estaBajoObjetivo(p)).toBe(false);
   });
+
+  it('M2: false para pieza_entera + por_unidad aunque el "margen" crudo daría bajo objetivo (no hay alerta sin sentido)', () => {
+    const p = producto({
+      id: 'p1',
+      modoStock: 'pieza_entera',
+      modoPrecio: 'por_unidad',
+      costoPromedioCents: money(30000),
+      precioVentaCents: money(40000), // (400-300)/400=25%, "bajo" un objetivo de 40% si se calculara
+      margenObjetivoBps: 4000,
+    });
+    expect(estaBajoObjetivo(p)).toBe(false);
+  });
 });
 
 describe('precioSugeridoDe', () => {
@@ -111,5 +205,16 @@ describe('precioSugeridoDe', () => {
   it('acepta un multiplo de redondeo distinto del default', () => {
     const p = producto({ id: 'p1', costoPromedioCents: money(30000), margenObjetivoBps: 4000 });
     expect(precioSugeridoDe(p, 1000)).toBe(money(50000));
+  });
+
+  it('M2: null para pieza_entera + por_unidad, aunque tenga costo y objetivo (no comparable, excluido del masivo)', () => {
+    const p = producto({
+      id: 'p1',
+      modoStock: 'pieza_entera',
+      modoPrecio: 'por_unidad',
+      costoPromedioCents: money(30000),
+      margenObjetivoBps: 4000,
+    });
+    expect(precioSugeridoDe(p)).toBeNull();
   });
 });

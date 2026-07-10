@@ -25,7 +25,7 @@ import { formatearMoney, type Money, type Producto } from '@gestion/core';
 import { db } from '../firebase';
 import { BadgeStock } from '../componentes/stock/BadgeStock';
 import { categoriasVisibles } from '../componentes/stock/agrupacion';
-import { estaBajoObjetivo, margenActualBps, precioSugeridoDe } from '../componentes/stock/margenes';
+import { estaBajoObjetivo, margenActualBps, precioSugeridoDe, unidadCosto } from '../componentes/stock/margenes';
 import { itemsSelectorStock, SelectorSeccion } from '../componentes/stock/SelectorSeccion';
 import { useHeader } from '../componentes/header/ContextoHeader';
 import { ModalPrecio, type DatosPrecioFormulario } from './ModalPrecio';
@@ -42,9 +42,12 @@ function textoPrecio(producto: Producto): string {
   return `${formatearMoney(producto.precioVentaCents)}${producto.modoPrecio === 'por_kg' ? ' /kg' : ' /u'}`;
 }
 
+/** La unidad del costo la determina el `modoStock` (`unidadCosto`), NUNCA el
+ * `modoPrecio` de venta — hallazgo M2 del review de Fase 2 (ver JSDoc de
+ * `unidadCosto` en `margenes.ts`). */
 function textoCosto(producto: Producto): string {
   if (producto.costoPromedioCents <= 0) return '—';
-  return `${formatearMoney(producto.costoPromedioCents)}${producto.modoPrecio === 'por_kg' ? ' /kg' : ' /u'}`;
+  return `${formatearMoney(producto.costoPromedioCents)}${unidadCosto(producto) === 'kg' ? ' /kg' : ' /u'}`;
 }
 
 /** bps → `"40,00 %"`. Ídem `formatearBps` de `ModalPrecio.tsx`: conversión de
