@@ -1,5 +1,6 @@
 import type { Money } from './money.js';
 import type { Peso } from './peso.js';
+import type { MetodoProrrateo } from './prorrateo.js';
 
 /**
  * Tipos de dominio de la quesería (ver `docs/02-dominio-quesarte.md`).
@@ -69,10 +70,20 @@ export interface Producto {
   modoStock: ModoStock;
   /** Precio de venta: por kg si `modoPrecio === 'por_kg'`, por unidad si `'por_unidad'`. */
   precioVentaCents: Money;
-  /** Cache derivado (promedio ponderado de ingresos). Fuente de verdad: compras/piezas. */
+  /**
+   * Cache derivado (promedio ponderado de ingresos). Fuente de verdad:
+   * compras/piezas. Su unidad depende del `modoStock`: costo por kg para
+   * productos al peso, costo por unidad para `unidad_simple`. Lo recalcula la
+   * confirmación de una compra (`nuevoCostoPromedio`, doc 03).
+   */
   costoPromedioCents: Money;
-  /** Margen objetivo en puntos porcentuales (p. ej. `40` = 40 %). Opcional. */
-  margenObjetivoPct?: number;
+  /**
+   * Margen objetivo **sobre venta**, en basis points enteros (`4000` = 40 %,
+   * `10000` = 100 %; ver `BPS_TOTAL` en `margen.ts`). Opcional, aún sin UI que lo
+   * escriba. Migró de `margenObjetivoPct` (puntos porcentuales) en F2-E: nunca
+   * floats en dominio ni persistencia (doc 03, decisión F2-D).
+   */
+  margenObjetivoBps?: number;
   /** Stock agregado en gramos. Solo `modoStock === 'granel'`. */
   stockGranelGramos?: Peso;
   /** Stock agregado en unidades enteras. Solo `modoStock === 'unidad_simple'`. */
@@ -186,7 +197,8 @@ export interface Configuracion {
   nombreNegocio: string;
   /** Umbral de peso restante (gramos) para ofrecer marcar una pieza como agotada. */
   umbralPiezaAgotadaGramos: Peso;
-  metodoProrrateo: 'por_valor' | 'por_peso';
+  /** Reparto de gastos de viaje al confirmar una compra (dedup con `core`). */
+  metodoProrrateo: MetodoProrrateo;
 }
 
 /**
@@ -266,4 +278,91 @@ export interface Proveedor {
   notas?: string;
   fechaAlta: Date;
   activo: boolean;
+}
+
+// ── Compras (doc 03) ────────────────────────────────────────────────────────
+
+/**
+ * Estado de una compra. Nace en `borrador` (editable, sin efectos); la
+ * confirmación la pasa a `confirmada`, que es **inmutable** (correcciones =
+ * ajustes de stock, no reversión de la compra — doc 03).
+ */
+export type EstadoCompra = 'borrador' | 'confirmada';
+
+/** Concepto de un gasto de viaje imputado a una compra (doc 03). */
+export type ConceptoGasto = 'combustible' | 'peaje' | 'flete' | 'otro';
+
+/**
+ * Gasto de viaje de una compra (combustible, peaje, flete u otro). Al confirmar,
+ * el total de gastos se prorratea entre los ítems (doc 03).
+ */
+export interface GastoCompra {
+  concepto: ConceptoGasto;
+  descripcion?: string;
+  montoCents: Money;
+}
+
+/**
+ * Detalle de una pieza física declarada en un ítem de compra (productos por
+ * pieza). Al confirmar, cada una se materializa como un doc `piezas/{id}` que
+ * hereda el `costoRealKgCents` del ítem y queda ligado a la compra (`compraId`).
+ */
+export interface PiezaCompra {
+  pesoGramos: Peso;
+  fechaVencimiento?: Date;
+}
+
+/**
+ * Ítem de una compra. Según el `modoStock` del producto lleva `gramos` (al peso:
+ * `fraccionado_por_pieza`, `pieza_entera`, `granel`) o `unidades`
+ * (`unidad_simple`), y `piezas` con el detalle físico cuando el producto va por
+ * pieza.
+ *
+ * `gastoProrrateadoCents`, `costoRealCents` y `costoRealKgCents` los calcula la
+ * **confirmación** (prorrateo con `core`): están AUSENTES en un borrador y
+ * presentes en una compra confirmada. `costoRealKgCents` solo existe para ítems
+ * al peso (los de unidad no tienen costo por kg).
+ */
+export interface ItemCompra {
+  productoId: string;
+  /** Nombre del producto congelado al momento de la compra (denormalizado). */
+  nombreProducto: string;
+  /** Peso comprado (ítems al peso). Excluyente con `unidades`. */
+  gramos?: Peso;
+  /** Cantidad comprada (`unidad_simple`). Excluyente con `gramos`. */
+  unidades?: number;
+  /** Detalle físico de piezas (productos por pieza). */
+  piezas?: PiezaCompra[];
+  /** Lo que dice la factura por este ítem (total del ítem). */
+  costoFacturaCents: Money;
+  /** Gasto de viaje imputado en el prorrateo. Ausente en borrador. */
+  gastoProrrateadoCents?: Money;
+  /** `costoFacturaCents + gastoProrrateadoCents`. Ausente en borrador. */
+  costoRealCents?: Money;
+  /** Costo real por kg (ítems al peso). Ausente en borrador y en ítems por unidad. */
+  costoRealKgCents?: Money;
+}
+
+/**
+ * Compra de mercadería con costos de viaje (doc 03). Flujo borrador → confirmada:
+ * el borrador es editable y sin efectos; la confirmación (en un batch atómico)
+ * aplica el prorrateo, crea las piezas, incrementa el stock agregado, registra los
+ * movimientos y recalcula el costo promedio, dejando la compra inmutable.
+ *
+ * `proveedorId` es opcional solo por retrocompatibilidad (doc 07): las compras
+ * nuevas siempre lo llevan; `proveedorNombre` va denormalizado para no depender de
+ * un join al listar.
+ */
+export interface Compra {
+  id: string;
+  fecha: Date;
+  usuarioId: string;
+  estado: EstadoCompra;
+  proveedorId?: string;
+  proveedorNombre: string;
+  items: ItemCompra[];
+  gastos: GastoCompra[];
+  totalFacturaCents: Money;
+  totalGastosCents: Money;
+  totalRealCents: Money;
 }

@@ -38,6 +38,12 @@ export type {
   Cliente,
   DatosPago,
   Proveedor,
+  EstadoCompra,
+  ConceptoGasto,
+  GastoCompra,
+  PiezaCompra,
+  ItemCompra,
+  Compra,
 } from './tipos.js';
 export { type ItemCobrable, calcularSubtotal } from './precio.js';
 export { type PiezaElegida, elegirPieza } from './fifo.js';
