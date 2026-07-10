@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router';
 import type { FirestoreError } from 'firebase/firestore';
-import { money, peso, type Pieza, type Producto } from '@gestion/core';
+import { money, peso, type Cliente, type Pieza, type Producto } from '@gestion/core';
 import { StockInsuficienteError, type EntradaVenta } from '@gestion/firebase-kit';
 import { ProveedorToasts } from '@gestion/ui';
 import { Venta } from './Venta';
@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   useOnlineStatus: vi.fn(() => true),
   useCollection: vi.fn(),
   registrarVenta: vi.fn(),
+  crearCliente: vi.fn(),
 }));
 
 vi.mock('@gestion/firebase-kit', async (importOriginal) => {
@@ -24,6 +25,7 @@ vi.mock('@gestion/firebase-kit', async (importOriginal) => {
     useOnlineStatus: mocks.useOnlineStatus,
     useCollection: mocks.useCollection,
     registrarVenta: mocks.registrarVenta,
+    crearCliente: mocks.crearCliente,
   };
 });
 
@@ -66,13 +68,27 @@ function configurarAuth() {
   });
 }
 
-function configurarCollections(estados: { productos?: EstadoFalso<Producto>; piezas?: EstadoFalso<Pieza> }) {
+function configurarCollections(estados: {
+  productos?: EstadoFalso<Producto>;
+  piezas?: EstadoFalso<Pieza>;
+  clientes?: EstadoFalso<Cliente>;
+}) {
   mocks.useCollection.mockImplementation((q: RefFalsa | null) => {
     if (q === null) return { datos: [], cargando: false, error: null };
     if (q.__path === 'productos') return estados.productos ?? estadoOk([]);
     if (q.__path === 'piezas') return estados.piezas ?? estadoOk([]);
+    if (q.__path === 'clientes') return estados.clientes ?? estadoOk([]);
     return { datos: [], cargando: false, error: null };
   });
+}
+
+function clienteDe(over: Partial<Cliente> & Pick<Cliente, 'id' | 'nombre'>): Cliente {
+  return {
+    fechaAlta: new Date('2026-01-01'),
+    activo: true,
+    stats: { cantidadVentas: 0, totalHistoricoCents: money(0) },
+    ...over,
+  };
 }
 
 function productoDe(over: Partial<Producto> & Pick<Producto, 'id' | 'modoStock' | 'modoPrecio'>): Producto {
@@ -498,6 +514,9 @@ describe('Venta - cobro', () => {
       precioUnitCents: money(45000),
       subtotalCents: money(45000),
     });
+    // Regresión clave (docs/07-clientes-proveedores.md §POS): la venta
+    // anónima NO lleva el campo `cliente` — ni siquiera como `undefined`.
+    expect(entrada).not.toHaveProperty('cliente');
 
     expect(await screen.findByText('Venta registrada.')).toBeTruthy();
     await waitFor(() => expect(screen.getAllByText('Todavía no agregaste productos.').length).toBeGreaterThan(0));
@@ -552,6 +571,154 @@ describe('Venta - cobro', () => {
   });
 });
 
+describe('Venta - cliente (docs/07-clientes-proveedores.md §POS)', () => {
+  function agregarUnidadAlCarrito(clientes: Cliente[] = []) {
+    configurarCollections({ productos: estadoOk([mielFrasco]), piezas: estadoOk([]), clientes: estadoOk(clientes) });
+    renderizar();
+    fireEvent.click(screen.getByText('Miel 500g'));
+    fireEvent.click(screen.getByRole('button', { name: 'Agregar' }));
+  }
+
+  function abrirSelectorCliente() {
+    fireEvent.click(screen.getAllByText('+ Cliente')[0]!);
+  }
+
+  it('elegir un cliente existente sin compras previas: cobra con esPrimeraCompra true', async () => {
+    configurarAuth();
+    mocks.registrarVenta.mockResolvedValue({ ventaId: 'v1' });
+    const marta = clienteDe({ id: 'c1', nombre: 'Marta' }); // stats.cantidadVentas: 0 por defecto
+    agregarUnidadAlCarrito([marta]);
+
+    abrirSelectorCliente();
+    fireEvent.click(screen.getByText('Marta'));
+
+    expect(screen.getAllByText('Cliente: Marta').length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Cobrar' })[0]!);
+    fireEvent.click(screen.getByRole('button', { name: 'Efectivo' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }));
+
+    await waitFor(() => expect(mocks.registrarVenta).toHaveBeenCalledTimes(1));
+    const [, entrada] = mocks.registrarVenta.mock.calls[0] as [unknown, EntradaVenta];
+    expect(entrada.cliente).toEqual({ id: 'c1', nombre: 'Marta', esPrimeraCompra: true });
+  });
+
+  it('elegir un cliente existente CON compras previas: cobra con esPrimeraCompra false', async () => {
+    configurarAuth();
+    mocks.registrarVenta.mockResolvedValue({ ventaId: 'v1' });
+    const juan = clienteDe({
+      id: 'c2',
+      nombre: 'Juan',
+      stats: { cantidadVentas: 3, totalHistoricoCents: money(150000) },
+    });
+    agregarUnidadAlCarrito([juan]);
+
+    abrirSelectorCliente();
+    fireEvent.click(screen.getByText('Juan'));
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Cobrar' })[0]!);
+    fireEvent.click(screen.getByRole('button', { name: 'Efectivo' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }));
+
+    await waitFor(() => expect(mocks.registrarVenta).toHaveBeenCalledTimes(1));
+    const [, entrada] = mocks.registrarVenta.mock.calls[0] as [unknown, EntradaVenta];
+    expect(entrada.cliente).toEqual({ id: 'c2', nombre: 'Juan', esPrimeraCompra: false });
+  });
+
+  it('quitar el cliente asociado vuelve la venta a anónima (sin campo cliente al cobrar)', async () => {
+    configurarAuth();
+    mocks.registrarVenta.mockResolvedValue({ ventaId: 'v1' });
+    const marta = clienteDe({ id: 'c1', nombre: 'Marta' });
+    agregarUnidadAlCarrito([marta]);
+
+    abrirSelectorCliente();
+    fireEvent.click(screen.getByText('Marta'));
+    expect(screen.getAllByText('Cliente: Marta').length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Quitar cliente Marta' })[0]!);
+    expect(screen.getAllByText('+ Cliente').length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Cobrar' })[0]!);
+    fireEvent.click(screen.getByRole('button', { name: 'Efectivo' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }));
+
+    await waitFor(() => expect(mocks.registrarVenta).toHaveBeenCalledTimes(1));
+    const [, entrada] = mocks.registrarVenta.mock.calls[0] as [unknown, EntradaVenta];
+    expect(entrada).not.toHaveProperty('cliente');
+  });
+
+  it('alta rápida: crea el cliente con solo el nombre y lo asocia a la venta', async () => {
+    configurarAuth();
+    mocks.registrarVenta.mockResolvedValue({ ventaId: 'v1' });
+    mocks.crearCliente.mockResolvedValue({ clienteId: 'nuevo-1' });
+    agregarUnidadAlCarrito([]);
+
+    abrirSelectorCliente();
+    fireEvent.change(screen.getByLabelText('Buscar por nombre, alias o teléfono'), {
+      target: { value: 'Cliente Nuevo' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Crear «Cliente Nuevo»' }));
+
+    expect(mocks.crearCliente).toHaveBeenCalledWith({}, { nombre: 'Cliente Nuevo' });
+    await screen.findByText('Cliente creado.');
+    expect(screen.getAllByText('Cliente: Cliente Nuevo').length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Cobrar' })[0]!);
+    fireEvent.click(screen.getByRole('button', { name: 'Efectivo' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }));
+
+    await waitFor(() => expect(mocks.registrarVenta).toHaveBeenCalledTimes(1));
+    const [, entrada] = mocks.registrarVenta.mock.calls[0] as [unknown, EntradaVenta];
+    expect(entrada.cliente).toEqual({ id: 'nuevo-1', nombre: 'Cliente Nuevo', esPrimeraCompra: true });
+  });
+
+  it('alta rápida offline: no espera el ack, cierra el modal y asocia en cuanto resuelve', async () => {
+    configurarAuth();
+    mocks.useOnlineStatus.mockReturnValue(false);
+    let resolverCreacion: (valor: { clienteId: string }) => void;
+    mocks.crearCliente.mockReturnValue(
+      new Promise((resolve) => {
+        resolverCreacion = resolve;
+      }),
+    );
+    agregarUnidadAlCarrito([]);
+
+    abrirSelectorCliente();
+    fireEvent.change(screen.getByLabelText('Buscar por nombre, alias o teléfono'), {
+      target: { value: 'Offline Cliente' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Crear «Offline Cliente»' }));
+
+    // El modal cierra YA, sin esperar el ack: no queda un botón "Creando…"
+    // colgado (docs/06-ui-ux.md §8).
+    expect(await screen.findByText('Cliente guardado sin conexión. Se asociará a la venta al sincronizar.')).toBeTruthy();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.queryAllByText(/Cliente: Offline Cliente/).length).toBe(0);
+
+    resolverCreacion!({ clienteId: 'offline-1' });
+    await waitFor(() => expect(screen.getAllByText('Cliente: Offline Cliente').length).toBeGreaterThan(0));
+  });
+
+  it('cobrar limpia el cliente asociado: la venta siguiente vuelve a ser anónima', async () => {
+    configurarAuth();
+    mocks.registrarVenta.mockResolvedValue({ ventaId: 'v1' });
+    const marta = clienteDe({ id: 'c1', nombre: 'Marta' });
+    agregarUnidadAlCarrito([marta]);
+
+    abrirSelectorCliente();
+    fireEvent.click(screen.getByText('Marta'));
+    expect(screen.getAllByText('Cliente: Marta').length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Cobrar' })[0]!);
+    fireEvent.click(screen.getByRole('button', { name: 'Efectivo' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }));
+
+    await waitFor(() => expect(screen.getAllByText('Todavía no agregaste productos.').length).toBeGreaterThan(0));
+    expect(screen.getAllByText('+ Cliente').length).toBeGreaterThan(0);
+    expect(screen.queryAllByText(/Cliente: Marta/).length).toBe(0);
+  });
+});
+
 describe('Venta - persistencia entre navegación (docs/06-ui-ux.md §6)', () => {
   it('agregar un ítem, navegar a otro tab (Venta se desmonta) y volver: el carrito sigue', async () => {
     configurarAuth();
@@ -572,6 +739,25 @@ describe('Venta - persistencia entre navegación (docs/06-ui-ux.md §6)', () => 
     expect(screen.getAllByText('Miel 500g').length).toBeGreaterThan(0);
     // 1 unidad de Miel 500g a $ 450,00.
     expect(screen.getAllByText('$ 450,00').length).toBeGreaterThan(0);
+  });
+
+  it('elegir un cliente, navegar a otro tab (Venta se desmonta) y volver: el cliente sigue asociado', async () => {
+    configurarAuth();
+    const marta = clienteDe({ id: 'c1', nombre: 'Marta' });
+    configurarCollections({ productos: estadoOk([mielFrasco]), piezas: estadoOk([]), clientes: estadoOk([marta]) });
+    renderizarConNavegacion('/venta');
+
+    fireEvent.click(screen.getAllByText('+ Cliente')[0]!);
+    fireEvent.click(screen.getByText('Marta'));
+    expect(screen.getAllByText('Cliente: Marta').length).toBeGreaterThan(0);
+
+    // Navegar a otro tab desmonta por completo la pantalla Venta.
+    fireEvent.click(screen.getByRole('button', { name: 'Ir a Stock' }));
+    expect(screen.getByText('Contenido de Stock')).toBeTruthy();
+
+    // Volver a Venta: el cliente sigue asociado, no hubo que re-elegirlo.
+    fireEvent.click(screen.getByRole('button', { name: 'Ir a Venta' }));
+    expect(screen.getAllByText('Cliente: Marta').length).toBeGreaterThan(0);
   });
 
   it('agregar ítems antes y después de navegar no colisiona claves de lista (quitar solo afecta al ítem tocado)', async () => {

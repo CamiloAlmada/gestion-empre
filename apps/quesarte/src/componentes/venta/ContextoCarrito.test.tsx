@@ -1,8 +1,11 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { money, type Producto } from '@gestion/core';
+import type { ClienteVenta } from '@gestion/firebase-kit';
 import { ProveedorCarrito, useCarrito } from './ContextoCarrito';
 import { crearItemUnidad } from './itemsCarrito';
+
+const clienteMarta: ClienteVenta = { id: 'c1', nombre: 'Marta', esPrimeraCompra: false };
 
 afterEach(() => cleanup());
 
@@ -23,10 +26,18 @@ const mielFrasco: Producto = {
  * agrega un ítem de `mielFrasco` por click, expone cantidad/claves y permite
  * quitar/vaciar. */
 function VisorCarrito() {
-  const { items, agregar, quitar, vaciar, actualizar, proximaClave } = useCarrito();
+  const { items, agregar, quitar, vaciar, actualizar, proximaClave, cliente, seleccionarCliente, quitarCliente } =
+    useCarrito();
   return (
     <div>
       <p data-testid="cantidad">{items.length}</p>
+      <p data-testid="cliente">{cliente === null ? 'Sin cliente' : cliente.nombre}</p>
+      <button type="button" onClick={() => seleccionarCliente(clienteMarta)}>
+        Elegir a Marta
+      </button>
+      <button type="button" onClick={quitarCliente}>
+        Quitar cliente
+      </button>
       <ul>
         {items.map((item) => (
           <li key={item.clave}>
@@ -136,6 +147,39 @@ describe('useCarrito / ProveedorCarrito', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Vaciar' }));
 
     expect(screen.getByTestId('cantidad').textContent).toBe('0');
+  });
+
+  it('arranca sin cliente asociado (venta anónima por defecto)', () => {
+    renderizar();
+    expect(screen.getByTestId('cliente').textContent).toBe('Sin cliente');
+  });
+
+  it('seleccionarCliente asocia el cliente elegido', () => {
+    renderizar();
+    fireEvent.click(screen.getByRole('button', { name: 'Elegir a Marta' }));
+
+    expect(screen.getByTestId('cliente').textContent).toBe('Marta');
+  });
+
+  it('quitarCliente vuelve la venta a anónima', () => {
+    renderizar();
+    fireEvent.click(screen.getByRole('button', { name: 'Elegir a Marta' }));
+    expect(screen.getByTestId('cliente').textContent).toBe('Marta');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Quitar cliente' }));
+    expect(screen.getByTestId('cliente').textContent).toBe('Sin cliente');
+  });
+
+  it('vaciar también limpia el cliente asociado (docs/07-clientes-proveedores.md §POS)', () => {
+    renderizar();
+    fireEvent.click(screen.getByRole('button', { name: 'Agregar' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Elegir a Marta' }));
+    expect(screen.getByTestId('cliente').textContent).toBe('Marta');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Vaciar' }));
+
+    expect(screen.getByTestId('cantidad').textContent).toBe('0');
+    expect(screen.getByTestId('cliente').textContent).toBe('Sin cliente');
   });
 
   it('desmontar el proveedor y montar uno nuevo arranca en cero (no persiste, ver comentario en ContextoCarrito.tsx)', () => {

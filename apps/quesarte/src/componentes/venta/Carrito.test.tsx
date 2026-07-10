@@ -31,6 +31,9 @@ function renderCarrito(props: Partial<CarritoProps> & Pick<CarritoProps, 'items'
       onCambiarUnidades={vi.fn()}
       onEditarAlPeso={vi.fn()}
       onAgregarOtraPieza={vi.fn()}
+      cliente={null}
+      onAbrirCliente={vi.fn()}
+      onQuitarCliente={vi.fn()}
       {...props}
     />,
   );
@@ -273,6 +276,58 @@ describe('Carrito', () => {
       fireEvent.click(screen.getAllByRole('button', { name: 'Agregar otra pieza de Producto' })[0]!);
       expect(onAgregarOtraPieza).toHaveBeenCalledWith(item);
       expect(screen.queryByRole('button', { name: 'Quitar una unidad de Producto' })).toBeNull();
+    });
+  });
+
+  describe('control "Cliente" (docs/07-clientes-proveedores.md §POS)', () => {
+    it('sin cliente: muestra "+ Cliente"; tocarlo llama a onAbrirCliente', () => {
+      const onAbrirCliente = vi.fn();
+      renderCarrito({ items: [], cliente: null, onAbrirCliente });
+
+      fireEvent.click(screen.getAllByText('+ Cliente')[0]!);
+      expect(onAbrirCliente).toHaveBeenCalled();
+    });
+
+    it('con cliente: muestra su nombre; "Quitar" lo desasocia SIN pedir confirmación', () => {
+      const onQuitarCliente = vi.fn();
+      renderCarrito({ items: [], cliente: { nombre: 'Marta' }, onQuitarCliente });
+
+      expect(screen.getAllByText('Cliente: Marta').length).toBeGreaterThan(0);
+      expect(screen.queryAllByText('+ Cliente')).toHaveLength(0);
+
+      fireEvent.click(screen.getAllByRole('button', { name: 'Quitar cliente Marta' })[0]!);
+      expect(onQuitarCliente).toHaveBeenCalled();
+    });
+
+    it('tocar el nombre del cliente reabre el selector (onAbrirCliente), no lo quita', () => {
+      const onAbrirCliente = vi.fn();
+      const onQuitarCliente = vi.fn();
+      renderCarrito({ items: [], cliente: { nombre: 'Marta' }, onAbrirCliente, onQuitarCliente });
+
+      fireEvent.click(screen.getAllByText('Cliente: Marta')[0]!);
+
+      expect(onAbrirCliente).toHaveBeenCalled();
+      expect(onQuitarCliente).not.toHaveBeenCalled();
+    });
+
+    it('el control "Cliente" NO aparece en la fila de resumen colapsada: colapsado, solo el del panel desktop está en el DOM', () => {
+      const item = (() => {
+        const producto = productoDe({ id: 'p1', modoStock: 'unidad_simple', modoPrecio: 'por_unidad' });
+        return crearItemUnidad(producto, 1, 'a');
+      })();
+
+      // Con ítems y la hoja mobile SIN expandir (default): la única "+
+      // Cliente" en el DOM es la del <aside> desktop (siempre visible) — la
+      // hoja mobile expandida (que también la renderiza) no está montada.
+      renderCarrito({ items: [item] });
+
+      expect(screen.getAllByText('+ Cliente')).toHaveLength(1);
+
+      // Al expandir, aparece una segunda (la de la hoja mobile) — prueba que
+      // esa es efectivamente la que está gateada por `expandidoMobile`, y
+      // confirma a contrario que antes de expandir no estaba en el DOM.
+      fireEvent.click(screen.getByRole('button', { name: /1 ítem/ }));
+      expect(screen.getAllByText('+ Cliente')).toHaveLength(2);
     });
   });
 
