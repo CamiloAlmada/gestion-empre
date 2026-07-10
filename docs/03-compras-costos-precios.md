@@ -42,8 +42,13 @@ Al confirmar la compra, los gastos se reparten entre los ítems según
 
 El prorrateo es función pura en `packages/core`:
 `prorratearGastos(items, gastos, metodo) → items con gastoProrrateadoCents`.
-Los redondeos deben cerrar: la suma de lo prorrateado == total de gastos
-(asignar el residuo de redondeo al ítem de mayor valor). Testear este invariante.
+Los redondeos deben cerrar: la suma de lo prorrateado == total de gastos.
+Algoritmo (fijado en F2-D, 2026-07-10): método del mayor residuo (Hamilton) en
+aritmética entera — base `⌊total·peso_i/W⌋` por ítem y el residuo repartido de
+a +1 a los de mayor residuo fraccionario, con desempate determinístico mayor
+residuo → mayor peso → menor índice (el desempate por mayor peso recupera la
+intención original de "al ítem de mayor valor" cuando hay empate). Testear este
+invariante con barrido exhaustivo, no solo casos sueltos.
 
 ## Compras e ingreso manual (decidido con el dueño, 2026-07-09)
 
@@ -72,6 +77,16 @@ Definiciones (fijarlas en `core` con estos nombres, y en la UI siempre etiquetad
 La UI de precios trabaja con **margen sobre venta** como métrica principal (es lo
 que responde "de cada $100 que vendo, cuánto me queda"), mostrando el markup como
 dato secundario.
+
+Representación del porcentaje (fijada en F2-D, 2026-07-10): **basis points
+enteros** (`10000 bps = 100 %`; `33,33 % = 3333 bps`) — nunca floats en
+persistencia ni en core. El campo `margenObjetivoPct` del modelo `Producto`
+(puntos porcentuales, aún sin uso) migra a **`margenObjetivoBps`** en la tarea
+de persistencia de Fase 2, antes de que exista UI que lo escriba. Redondeo
+comercial: al múltiplo MÁS CERCANO con half-up (consistente con
+`redondearHalfUp` de core). La alerta de margen recalcula el margen real desde
+el precio YA redondeado (en precios chicos, el redondeo de $5 corre el margen
+efectivo respecto del objetivo — comportamiento esperado, no un bug).
 
 ### Pantalla "Precios y márgenes"
 
