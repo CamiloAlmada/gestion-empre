@@ -9,9 +9,9 @@ import {
   useAuth,
   useCollection,
 } from '@gestion/firebase-kit';
-import { Button } from '@gestion/ui';
+import { Button, ChipsFiltro } from '@gestion/ui';
 import { db } from '../firebase';
-import { agruparPorCategoria } from '../componentes/stock/agrupacion';
+import { agruparPorCategoria, categoriasVisibles } from '../componentes/stock/agrupacion';
 import { contarAlertas, filtrarPorAlerta, type TipoAlerta } from '../componentes/stock/alertas';
 import { FranjaAlertas } from '../componentes/stock/FranjaAlertas';
 import { ListaProductosAgrupada } from '../componentes/stock/ListaProductosAgrupada';
@@ -38,6 +38,7 @@ export function Stock() {
 
   const [intento, setIntento] = useState(0);
   const [alertaActiva, setAlertaActiva] = useState<TipoAlerta | null>(null);
+  const [categoriaFiltro, setCategoriaFiltro] = useState<string | null>(null);
 
   // `db` es el import estable de '../firebase' (no cambia entre renders); la
   // única dependencia real de estas queries es `intento`, que fuerza un
@@ -107,9 +108,30 @@ export function Stock() {
     [productos.datos, resumenesPorProducto, alertaActiva],
   );
 
-  const gruposPorCategoria = useMemo(
-    () => agruparPorCategoria(productosFiltrados, categorias.datos),
+  // Chips de filtro por categoría (docs/06-ui-ux.md §3, tarea UI-3d): se
+  // calculan sobre `productosFiltrados` (YA recortado por la alerta activa,
+  // si hay una) para componer como AND con `FranjaAlertas`. Mismo auto-reset
+  // que `alertaActiva` arriba: si la categoría elegida se queda sin chip
+  // (p. ej. se activa una alerta que la deja sin productos), vuelve a
+  // "Todas" en vez de dejar la lista en un callejón sin salida.
+  const opcionesCategoria = useMemo(
+    () => categoriasVisibles(productosFiltrados, categorias.datos),
     [productosFiltrados, categorias.datos],
+  );
+
+  useEffect(() => {
+    if (categoriaFiltro === null) return;
+    if (!opcionesCategoria.some((c) => c.nombre === categoriaFiltro)) setCategoriaFiltro(null);
+  }, [categoriaFiltro, opcionesCategoria]);
+
+  const productosParaAgrupar = useMemo(() => {
+    if (categoriaFiltro === null) return productosFiltrados;
+    return productosFiltrados.filter((p) => p.categoria === categoriaFiltro);
+  }, [productosFiltrados, categoriaFiltro]);
+
+  const gruposPorCategoria = useMemo(
+    () => agruparPorCategoria(productosParaAgrupar, categorias.datos),
+    [productosParaAgrupar, categorias.datos],
   );
 
   // Stock ya NO declara acciones de navegación en el header (docs/06-ui-ux.md
@@ -152,6 +174,14 @@ export function Stock() {
   } else {
     contenido = (
       <>
+        {opcionesCategoria.length > 1 && (
+          <ChipsFiltro
+            ariaLabel="Filtrar por categoría"
+            opciones={opcionesCategoria.map((c) => c.nombre)}
+            valor={categoriaFiltro}
+            onCambiar={setCategoriaFiltro}
+          />
+        )}
         <FranjaAlertas conteo={conteoAlertas} alertaActiva={alertaActiva} onAlternar={alternarAlerta} />
         <ListaProductosAgrupada
           grupos={gruposPorCategoria}

@@ -22,6 +22,7 @@ vi.mock('@gestion/firebase-kit', () => ({
   productoConverter: {},
   piezaConverter: {},
   clienteConverter: {},
+  categoriaConverter: {},
 }));
 
 // Mismo motivo que el mock de '@gestion/firebase-kit' de arriba: Venta arma
@@ -43,6 +44,7 @@ vi.mock('firebase/firestore', () => ({
   collection: (_db: unknown, path: string) => crearRefFalsa(path),
   query: (ref: RefFalsa, ...clausulas: unknown[]) => ({ ...ref, __clausulas: clausulas }),
   where: (...args: unknown[]) => ({ __tipo: 'where', args }),
+  orderBy: (...args: unknown[]) => ({ __tipo: 'orderBy', args }),
 }));
 
 // AvisoPwa (montado siempre por App) importa el módulo virtual que expone

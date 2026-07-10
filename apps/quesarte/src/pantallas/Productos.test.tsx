@@ -303,6 +303,51 @@ describe('Productos', () => {
     expect(tabla().queryByText('Queso Añejo')).toBeNull();
   });
 
+  it('sin categorías definidas, no muestra chips de filtro', () => {
+    configurarAuth();
+    configurarCollection({ datos: productosFalsos });
+
+    renderizar();
+
+    expect(screen.queryByRole('group', { name: 'Filtrar por categoría' })).toBeNull();
+  });
+
+  it('con dos o más categorías con productos, muestra chips y filtra la tabla al elegir uno', () => {
+    configurarAuth();
+    configurarCollection({ datos: productosFalsos });
+    configurarCategorias({ datos: categoriasFalsas });
+
+    renderizar();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Quesos' }));
+
+    expect(tabla().getByText('Queso Añejo')).toBeTruthy();
+    expect(tabla().queryByText('Miel 500g')).toBeNull();
+  });
+
+  it('compone el chip de categoría con la búsqueda de texto (AND)', () => {
+    configurarAuth();
+    configurarCollection({ datos: productosFalsos });
+    configurarCategorias({ datos: categoriasFalsas });
+
+    renderizar();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Quesos' }));
+    fireEvent.change(screen.getByLabelText('Buscar producto'), { target: { value: 'anejo' } });
+
+    expect(tabla().getByText('Queso Añejo')).toBeTruthy();
+  });
+
+  it('con una sola categoría con productos, no muestra chips (no aportan)', () => {
+    configurarAuth();
+    configurarCollection({ datos: [productosFalsos[0]!] });
+    configurarCategorias({ datos: [categoriasFalsas[0]!] });
+
+    renderizar();
+
+    expect(screen.queryByRole('group', { name: 'Filtrar por categoría' })).toBeNull();
+  });
+
   it('estado cargando', () => {
     configurarAuth();
     configurarCollection({ cargando: true });

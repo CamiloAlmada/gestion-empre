@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   addDoc,
   collection,
@@ -9,7 +9,7 @@ import {
   updateDoc,
   type UpdateData,
 } from 'firebase/firestore';
-import { Button, CampoBusqueda, DataTable, normalizarBusqueda, useToasts, type ColumnaDataTable } from '@gestion/ui';
+import { Button, CampoBusqueda, ChipsFiltro, DataTable, normalizarBusqueda, useToasts, type ColumnaDataTable } from '@gestion/ui';
 import {
   categoriaConverter,
   productoConverter,
@@ -26,6 +26,7 @@ import {
   type DatosProductoFormulario,
 } from './ModalProducto';
 import { ModalCategorias } from './ModalCategorias';
+import { categoriasVisibles } from '../componentes/stock/agrupacion';
 import { itemsSelectorStock, SelectorSeccion } from '../componentes/stock/SelectorSeccion';
 import { useHeader } from '../componentes/header/ContextoHeader';
 
@@ -133,6 +134,7 @@ export function Productos() {
   const esAdmin = perfil?.rol === 'admin';
 
   const [busqueda, setBusqueda] = useState('');
+  const [categoriaFiltro, setCategoriaFiltro] = useState<string | null>(null);
   const [estadoModal, setEstadoModal] = useState<EstadoModal>({ tipo: 'cerrado' });
   const [guardando, setGuardando] = useState(false);
   const [modalCategoriasAbierto, setModalCategoriasAbierto] = useState(false);
@@ -180,7 +182,7 @@ export function Productos() {
     error: categoriasError,
   } = useCollection(consultaCategorias);
 
-  const productosFiltrados = useMemo(() => {
+  const productosPorBusqueda = useMemo(() => {
     const consulta = normalizarBusqueda(busqueda.trim());
     if (consulta === '') return productos;
     return productos.filter(
@@ -188,6 +190,26 @@ export function Productos() {
         normalizarBusqueda(p.nombre).includes(consulta) || normalizarBusqueda(p.categoria).includes(consulta),
     );
   }, [productos, busqueda]);
+
+  // Chips de filtro por categoría (docs/06-ui-ux.md §3, tarea UI-3d): mismo
+  // criterio que `GrillaProductos` — se calculan sobre el resultado YA
+  // filtrado por texto, para componer como AND, y con auto-reset si la
+  // categoría elegida se queda sin chip (p. ej. al tipear una búsqueda que
+  // la excluye), para no dejar la tabla en un callejón sin salida.
+  const opcionesCategoria = useMemo(
+    () => categoriasVisibles(productosPorBusqueda, categorias),
+    [productosPorBusqueda, categorias],
+  );
+
+  useEffect(() => {
+    if (categoriaFiltro === null) return;
+    if (!opcionesCategoria.some((c) => c.nombre === categoriaFiltro)) setCategoriaFiltro(null);
+  }, [categoriaFiltro, opcionesCategoria]);
+
+  const productosFiltrados = useMemo(() => {
+    if (categoriaFiltro === null) return productosPorBusqueda;
+    return productosPorBusqueda.filter((p) => p.categoria === categoriaFiltro);
+  }, [productosPorBusqueda, categoriaFiltro]);
 
   function abrirAlta() {
     setEstadoModal({ tipo: 'alta' });
@@ -351,6 +373,15 @@ export function Productos() {
           placeholder="Nombre o categoría"
         />
       </div>
+
+      {opcionesCategoria.length > 1 && (
+        <ChipsFiltro
+          ariaLabel="Filtrar por categoría"
+          opciones={opcionesCategoria.map((c) => c.nombre)}
+          valor={categoriaFiltro}
+          onCambiar={setCategoriaFiltro}
+        />
+      )}
 
       {cargando ? (
         <div className="flex min-h-[40vh] items-center justify-center">

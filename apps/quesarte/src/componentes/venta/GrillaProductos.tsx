@@ -1,12 +1,16 @@
-import { useMemo, useState } from 'react';
-import { formatearMoney, peso, type ModoStock, type Pieza, type Producto } from '@gestion/core';
-import { CampoBusqueda, normalizarBusqueda } from '@gestion/ui';
+import { useEffect, useMemo, useState } from 'react';
+import { formatearMoney, peso, type Categoria, type ModoStock, type Pieza, type Producto } from '@gestion/core';
+import { CampoBusqueda, ChipsFiltro, normalizarBusqueda } from '@gestion/ui';
 import { BadgeStock } from '../stock/BadgeStock';
+import { categoriasVisibles } from '../stock/agrupacion';
 
 export interface GrillaProductosProps {
   productos: Producto[];
   /** Piezas disponibles, ya agrupadas por `productoId` (`agruparPiezasPorProducto`). */
   piezasAgrupadas: Map<string, Pieza[]>;
+  /** Vocabulario de categorías (docs/06-ui-ux.md §3): con 0 o 1 categoría los
+   * chips de filtro no aportan y no se muestran. */
+  categorias: Categoria[];
   onSeleccionar: (producto: Producto) => void;
 }
 
@@ -35,17 +39,41 @@ function sinStock(producto: Producto, piezasAgrupadas: Map<string, Pieza[]>): bo
  * "búsqueda con teclado arriba, resultados en grilla de cards grandes").
  * Tocar una card dispara `onSeleccionar`; el llamador decide qué modal de
  * "agregar" abrir según el `modoStock` del producto.
+ *
+ * Chips de filtro por categoría (docs/06-ui-ux.md §3, tarea UI-3d): debajo
+ * de la búsqueda, calculados sobre el resultado YA filtrado por texto
+ * (`categoriasVisibles`) para que compongan como AND — un chip sin match
+ * bajo la búsqueda actual desaparece solo. Si la categoría elegida deja de
+ * tener chip (p. ej. porque se tipeó una búsqueda que la excluye), el filtro
+ * se resetea a "Todas" en vez de dejar la grilla en un callejón sin salida
+ * (mismo criterio que el auto-reset de `alertaActiva` en `Stock.tsx`).
  */
-export function GrillaProductos({ productos, piezasAgrupadas, onSeleccionar }: GrillaProductosProps) {
+export function GrillaProductos({ productos, piezasAgrupadas, categorias, onSeleccionar }: GrillaProductosProps) {
   const [busqueda, setBusqueda] = useState('');
+  const [categoriaFiltro, setCategoriaFiltro] = useState<string | null>(null);
 
-  const filtrados = useMemo(() => {
+  const filtradosPorBusqueda = useMemo(() => {
     const consulta = normalizarBusqueda(busqueda.trim());
     if (consulta === '') return productos;
     return productos.filter(
       (p) => normalizarBusqueda(p.nombre).includes(consulta) || normalizarBusqueda(p.categoria).includes(consulta),
     );
   }, [productos, busqueda]);
+
+  const opcionesCategoria = useMemo(
+    () => categoriasVisibles(filtradosPorBusqueda, categorias),
+    [filtradosPorBusqueda, categorias],
+  );
+
+  useEffect(() => {
+    if (categoriaFiltro === null) return;
+    if (!opcionesCategoria.some((c) => c.nombre === categoriaFiltro)) setCategoriaFiltro(null);
+  }, [categoriaFiltro, opcionesCategoria]);
+
+  const filtrados = useMemo(() => {
+    if (categoriaFiltro === null) return filtradosPorBusqueda;
+    return filtradosPorBusqueda.filter((p) => p.categoria === categoriaFiltro);
+  }, [filtradosPorBusqueda, categoriaFiltro]);
 
   return (
     <div className="flex flex-col gap-3">
@@ -55,6 +83,15 @@ export function GrillaProductos({ productos, piezasAgrupadas, onSeleccionar }: G
         ariaLabel="Buscar producto"
         placeholder="Nombre o categoría"
       />
+
+      {opcionesCategoria.length > 1 && (
+        <ChipsFiltro
+          ariaLabel="Filtrar por categoría"
+          opciones={opcionesCategoria.map((c) => c.nombre)}
+          valor={categoriaFiltro}
+          onCambiar={setCategoriaFiltro}
+        />
+      )}
 
       {filtrados.length === 0 ? (
         <p className="py-4 text-center text-texto-secundario">

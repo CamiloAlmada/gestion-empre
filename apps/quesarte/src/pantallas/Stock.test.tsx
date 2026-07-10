@@ -432,3 +432,105 @@ describe('Stock - agrupación por categoría', () => {
     expect(encabezados).toEqual(['Quesos']);
   });
 });
+
+describe('Stock - chips de filtro por categoría (docs/06-ui-ux.md §3, tarea UI-3d)', () => {
+  it('sin categorías definidas, no muestra chips', () => {
+    configurarAuth('admin');
+    const prod = producto({ id: 'p1', nombre: 'Queso Colonia', categoria: 'Quesos', modoStock: 'granel' });
+    configurarCollections({ productos: estadoOk([prod]) });
+
+    renderizar();
+
+    expect(screen.queryByRole('group', { name: 'Filtrar por categoría' })).toBeNull();
+  });
+
+  it('con una sola categoría con productos, no muestra chips (no aportan)', () => {
+    configurarAuth('admin');
+    const categorias = estadoOk([categoria({ nombre: 'Quesos', orden: 0 })]);
+    const productos = estadoOk([
+      producto({ id: 'p1', nombre: 'Queso Colonia', categoria: 'Quesos', modoStock: 'granel', stockGranelGramos: peso(1000) }),
+    ]);
+    configurarCollections({ productos, categorias });
+
+    renderizar();
+
+    expect(screen.queryByRole('group', { name: 'Filtrar por categoría' })).toBeNull();
+  });
+
+  it('con dos o más categorías con productos, tocar un chip deja solo ese grupo (los demás encabezados desaparecen)', () => {
+    configurarAuth('admin');
+    const categorias = estadoOk([
+      categoria({ nombre: 'Quesos', orden: 0 }),
+      categoria({ nombre: 'Miel', orden: 1 }),
+    ]);
+    const productos = estadoOk([
+      producto({ id: 'p1', nombre: 'Miel 500g', categoria: 'Miel', modoPrecio: 'por_unidad', modoStock: 'unidad_simple', stockUnidades: 3 }),
+      producto({ id: 'p2', nombre: 'Queso Colonia', categoria: 'Quesos', modoStock: 'granel', stockGranelGramos: peso(1000) }),
+    ]);
+    configurarCollections({ productos, categorias });
+
+    renderizar();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Quesos' }));
+
+    const encabezados = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
+    expect(encabezados).toEqual(['Quesos']);
+    expect(screen.getByText('Queso Colonia')).toBeTruthy();
+    expect(screen.queryByText('Miel 500g')).toBeNull();
+  });
+
+  it('compone con el chip de alerta activo (AND): filtrar por categoría y por alerta a la vez', () => {
+    configurarAuth('admin');
+    const categorias = estadoOk([
+      categoria({ nombre: 'Quesos', orden: 0 }),
+      categoria({ nombre: 'Miel', orden: 1 }),
+    ]);
+    const prodBajo = producto({
+      id: 'p1',
+      nombre: 'Queso bajo',
+      categoria: 'Quesos',
+      modoStock: 'granel',
+      stockGranelGramos: peso(50),
+      umbralAlertaStock: peso(500),
+    });
+    const prodMiel = producto({
+      id: 'p2',
+      nombre: 'Miel 500g',
+      categoria: 'Miel',
+      modoPrecio: 'por_unidad',
+      modoStock: 'unidad_simple',
+      stockUnidades: 1,
+      umbralAlertaStock: 5,
+    });
+    configurarCollections({ productos: estadoOk([prodBajo, prodMiel]), categorias });
+
+    renderizar();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Quesos' }));
+    fireEvent.click(screen.getByRole('button', { name: /stock bajo/ }));
+
+    expect(screen.getByText('Queso bajo')).toBeTruthy();
+    expect(screen.queryByText('Miel 500g')).toBeNull();
+  });
+
+  it('"Todas" vuelve a mostrar ambos grupos', () => {
+    configurarAuth('admin');
+    const categorias = estadoOk([
+      categoria({ nombre: 'Quesos', orden: 0 }),
+      categoria({ nombre: 'Miel', orden: 1 }),
+    ]);
+    const productos = estadoOk([
+      producto({ id: 'p1', nombre: 'Miel 500g', categoria: 'Miel', modoPrecio: 'por_unidad', modoStock: 'unidad_simple', stockUnidades: 3 }),
+      producto({ id: 'p2', nombre: 'Queso Colonia', categoria: 'Quesos', modoStock: 'granel', stockGranelGramos: peso(1000) }),
+    ]);
+    configurarCollections({ productos, categorias });
+
+    renderizar();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Quesos' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Todas' }));
+
+    const encabezados = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
+    expect(encabezados).toEqual(['Quesos', 'Miel']);
+  });
+});

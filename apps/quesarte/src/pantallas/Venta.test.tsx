@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router';
 import type { FirestoreError } from 'firebase/firestore';
-import { money, peso, type Cliente, type Pieza, type Producto } from '@gestion/core';
+import { money, peso, type Categoria, type Cliente, type Pieza, type Producto } from '@gestion/core';
 import { StockInsuficienteError, type EntradaVenta } from '@gestion/firebase-kit';
 import { ProveedorToasts } from '@gestion/ui';
 import { Venta } from './Venta';
@@ -55,6 +55,7 @@ vi.mock('firebase/firestore', () => ({
   collection: (_db: unknown, path: string) => crearRef(path),
   query: (ref: RefFalsa, ...clausulas: unknown[]) => ({ ...ref, __clausulas: clausulas }),
   where: (...args: unknown[]) => ({ __tipo: 'where', args }),
+  orderBy: (...args: unknown[]) => ({ __tipo: 'orderBy', args }),
 }));
 
 interface EstadoFalso<T> {
@@ -82,12 +83,14 @@ function configurarCollections(estados: {
   productos?: EstadoFalso<Producto>;
   piezas?: EstadoFalso<Pieza>;
   clientes?: EstadoFalso<Cliente>;
+  categorias?: EstadoFalso<Categoria>;
 }) {
   mocks.useCollection.mockImplementation((q: RefFalsa | null) => {
     if (q === null) return { datos: [], cargando: false, error: null };
     if (q.__path === 'productos') return estados.productos ?? estadoOk([]);
     if (q.__path === 'piezas') return estados.piezas ?? estadoOk([]);
     if (q.__path === 'clientes') return estados.clientes ?? estadoOk([]);
+    if (q.__path === 'categorias') return estados.categorias ?? estadoOk([]);
     return { datos: [], cargando: false, error: null };
   });
 }
@@ -122,6 +125,10 @@ function piezaDe(over: Partial<Pieza> & Pick<Pieza, 'id' | 'productoId'>): Pieza
     estado: 'disponible',
     ...over,
   };
+}
+
+function categoriaDe(over: Partial<Categoria> & Pick<Categoria, 'nombre' | 'orden'>): Categoria {
+  return { id: over.nombre, ...over };
 }
 
 const quesoColonia = productoDe({
@@ -265,6 +272,33 @@ describe('Venta - estados', () => {
     expect(screen.getByRole('link', { name: 'Ir a Productos' }).getAttribute('href')).toBe('/stock/productos');
   });
 
+});
+
+describe('Venta - chips de filtro por categoría (docs/06-ui-ux.md §3, tarea UI-3d)', () => {
+  it('con vocabulario de categorías, filtra la grilla al elegir una', () => {
+    configurarAuth();
+    configurarCollections({
+      productos: estadoOk([quesoColonia, salame]),
+      piezas: estadoOk([]),
+      categorias: estadoOk([categoriaDe({ nombre: 'Quesos', orden: 0 }), categoriaDe({ nombre: 'Embutidos', orden: 1 })]),
+    });
+    renderizar();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Quesos' }));
+
+    expect(screen.getByText('Queso Colonia')).toBeTruthy();
+    expect(screen.queryByText('Salame tandilero')).toBeNull();
+  });
+
+  it('sin categorías (colección vacía), no muestra chips y no bloquea la grilla', () => {
+    configurarAuth();
+    configurarCollections({ productos: estadoOk([quesoColonia, salame]), piezas: estadoOk([]), categorias: estadoOk([]) });
+    renderizar();
+
+    expect(screen.queryByRole('group', { name: 'Filtrar por categoría' })).toBeNull();
+    expect(screen.getByText('Queso Colonia')).toBeTruthy();
+    expect(screen.getByText('Salame tandilero')).toBeTruthy();
+  });
 });
 
 describe('Venta - atajo a Historial (docs/06-ui-ux.md §2, 2026-07-10)', () => {

@@ -12,6 +12,8 @@ export {
   type ProveedorTemaProps,
 } from './ProveedorTema';
 export { BarraPestanas, type BarraPestanasProps, type ItemBarraPestanas } from './BarraPestanas';
+export { Chip, type ChipProps } from './Chip';
+export { ChipsFiltro, type ChipsFiltroProps } from './ChipsFiltro';
 export { Modal, type ModalProps } from './Modal';
 export { Toast, type ToastProps, type TipoToast, DURACION_TOAST_MS } from './Toast';
 export {

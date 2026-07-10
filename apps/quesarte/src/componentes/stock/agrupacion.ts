@@ -60,3 +60,22 @@ export function agruparPorCategoria(productos: Producto[], categorias: Categoria
 
   return grupos;
 }
+
+/**
+ * Categorías definidas que tienen al menos un producto en `productos` — la
+ * lista de opciones de los chips de filtro por categoría de Venta/Catálogo/
+ * Stock (docs/06-ui-ux.md §3 "Chips de filtro") parte de acá. Reutiliza
+ * `agruparPorCategoria` (mismo criterio de match exacto/case-sensitive y
+ * mismo orden, el de `categorias`) en vez de duplicar la lógica; los
+ * productos huérfanos ("Sin categoría") nunca generan un chip, solo
+ * categorías del vocabulario son elegibles como filtro.
+ *
+ * `productos` puede venir ya recortado por un filtro previo (p. ej. la
+ * búsqueda de texto): el resultado refleja qué categorías siguen teniendo
+ * algo que mostrar bajo ESE recorte, así los chips sin match desaparecen
+ * solos a medida que se escribe.
+ */
+export function categoriasVisibles(productos: Producto[], categorias: Categoria[]): Categoria[] {
+  const nombresConProductos = new Set(agruparPorCategoria(productos, categorias).map((g) => g.nombre));
+  return categorias.filter((c) => nombresConProductos.has(c.nombre));
+}

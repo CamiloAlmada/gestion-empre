@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
-import { collection, query, where } from 'firebase/firestore';
-import type { Cliente, MedioPago, Peso, Pieza, Producto } from '@gestion/core';
+import { collection, orderBy, query, where } from 'firebase/firestore';
+import type { Categoria, Cliente, MedioPago, Peso, Pieza, Producto } from '@gestion/core';
 import {
   ItemInvalidoError,
   StockInsuficienteError,
   TotalIncoherenteError,
   VentaVaciaError,
+  categoriaConverter,
   clienteConverter,
   crearCliente,
   piezaConverter,
@@ -154,10 +155,18 @@ export function Venta() {
       query(collection(db, 'clientes').withConverter(clienteConverter), where('activo', '==', true)),
     [intento],
   );
+  // Vocabulario de categorías para los chips de filtro (docs/06-ui-ux.md §3,
+  // tarea UI-3d) — misma query que `Stock.tsx`/`Productos.tsx` (colección
+  // chica, ordenada por `orden`).
+  const categoriasQuery = useMemo(
+    () => query(collection(db, 'categorias').withConverter(categoriaConverter), orderBy('orden')),
+    [intento],
+  );
 
   const productos = useCollection<Producto>(productosQuery);
   const piezas = useCollection<Pieza>(piezasQuery);
   const clientes = useCollection<Cliente>(clientesQuery);
+  const categorias = useCollection<Categoria>(categoriasQuery);
 
   const piezasAgrupadas = useMemo(() => agruparPiezasPorProducto(piezas.datos), [piezas.datos]);
 
@@ -366,6 +375,12 @@ export function Venta() {
     }
   }
 
+  // `categorias` queda AFUERA de este cargando/error agregado a propósito
+  // (mismo criterio que `Productos.tsx` con su propio `categoriasCargando`):
+  // es solo el vocabulario de los chips de filtro, no crítica para vender.
+  // Si esa colección tarda o falla, la grilla igual se usa (sin chips o con
+  // los que ya llegaron) — bloquear el POS entero por eso violaría
+  // docs/06-ui-ux.md §1 "mostrador primero".
   const cargando = productos.cargando || piezas.cargando;
   const error = productos.error ?? piezas.error;
 
@@ -398,6 +413,7 @@ export function Venta() {
       <GrillaProductos
         productos={productos.datos}
         piezasAgrupadas={piezasAgrupadas}
+        categorias={categorias.datos}
         onSeleccionar={abrirParaAgregar}
       />
     );

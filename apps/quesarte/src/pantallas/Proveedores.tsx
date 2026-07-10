@@ -9,7 +9,7 @@ import {
   useOnlineStatus,
   type DatosProveedor,
 } from '@gestion/firebase-kit';
-import { Button, CampoBusqueda, normalizarBusqueda, useToasts } from '@gestion/ui';
+import { Button, CampoBusqueda, Chip, normalizarBusqueda, useToasts } from '@gestion/ui';
 import { db } from '../firebase';
 import { ModalProveedor } from './ModalProveedor';
 import { itemsSelectorStock, SelectorSeccion } from '../componentes/stock/SelectorSeccion';
@@ -226,19 +226,9 @@ export function Proveedores() {
         <div className="w-full max-w-xs">
           <CampoBusqueda valor={busqueda} onChange={setBusqueda} ariaLabel="Buscar proveedor" placeholder="Nombre" />
         </div>
-        <button
-          type="button"
-          aria-pressed={mostrarInactivos}
-          onClick={() => setMostrarInactivos((v) => !v)}
-          className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-full border px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-1 focus-visible:ring-offset-superficie ${
-            mostrarInactivos
-              ? 'border-2 border-primary-600 text-primary-700 dark:text-primary-300'
-              : 'border-borde text-texto-secundario'
-          }`}
-        >
-          {mostrarInactivos && <span aria-hidden="true">✓</span>}
+        <Chip activo={mostrarInactivos} onClick={() => setMostrarInactivos((v) => !v)}>
           Mostrar inactivos
-        </button>
+        </Chip>
       </div>
 
       {contenido}

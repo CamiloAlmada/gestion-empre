@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { money, type Categoria, type Producto } from '@gestion/core';
-import { agruparPorCategoria, SIN_CATEGORIA } from './agrupacion';
+import { agruparPorCategoria, categoriasVisibles, SIN_CATEGORIA } from './agrupacion';
 
 function producto(over: Partial<Producto> & Pick<Producto, 'nombre' | 'categoria'>): Producto {
   return {
@@ -151,5 +151,52 @@ describe('agruparPorCategoria', () => {
     const grupos = agruparPorCategoria(filtrados, categorias);
 
     expect(grupos).toEqual([{ nombre: 'Quesos', productos: filtrados }]);
+  });
+});
+
+describe('categoriasVisibles', () => {
+  it('sin categorías definidas: sin opciones (los chips no se muestran)', () => {
+    const productos = [producto({ nombre: 'Nuez', categoria: 'Frutos secos' })];
+
+    expect(categoriasVisibles(productos, [])).toEqual([]);
+  });
+
+  it('devuelve solo las categorías con al menos un producto, en el orden de `categorias`', () => {
+    const categorias = [
+      categoria({ nombre: 'Miel', orden: 0 }),
+      categoria({ nombre: 'Quesos', orden: 1 }),
+      categoria({ nombre: 'Embutidos', orden: 2 }), // sin productos
+    ];
+    const productos = [
+      producto({ nombre: 'Queso Colonia', categoria: 'Quesos' }),
+      producto({ nombre: 'Miel 500g', categoria: 'Miel' }),
+    ];
+
+    expect(categoriasVisibles(productos, categorias).map((c) => c.nombre)).toEqual(['Miel', 'Quesos']);
+  });
+
+  it('categorías definidas pero sin ningún producto: lista vacía', () => {
+    const categorias = [categoria({ nombre: 'Quesos', orden: 0 })];
+
+    expect(categoriasVisibles([], categorias)).toEqual([]);
+  });
+
+  it('productos huérfanos (categoría sin definir) nunca generan un chip', () => {
+    const categorias = [categoria({ nombre: 'Quesos', orden: 0 })];
+    const productos = [producto({ nombre: 'Especias raras', categoria: 'Especias' })];
+
+    expect(categoriasVisibles(productos, categorias)).toEqual([]);
+  });
+
+  it('compone con un filtro previo (p. ej. búsqueda): una categoría sin matches tras filtrar desaparece', () => {
+    const categorias = [categoria({ nombre: 'Quesos', orden: 0 }), categoria({ nombre: 'Miel', orden: 1 })];
+    const productos = [
+      producto({ nombre: 'Queso Colonia', categoria: 'Quesos' }),
+      producto({ nombre: 'Miel 500g', categoria: 'Miel' }),
+    ];
+
+    const filtrados = productos.filter((p) => p.nombre.toLowerCase().includes('colonia'));
+
+    expect(categoriasVisibles(filtrados, categorias).map((c) => c.nombre)).toEqual(['Quesos']);
   });
 });
