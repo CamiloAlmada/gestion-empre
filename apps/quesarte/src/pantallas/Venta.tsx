@@ -1,12 +1,14 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { collection, query, where } from 'firebase/firestore';
-import type { MedioPago, Peso, Pieza, Producto } from '@gestion/core';
+import type { Cliente, MedioPago, Peso, Pieza, Producto } from '@gestion/core';
 import {
   ItemInvalidoError,
   StockInsuficienteError,
   TotalIncoherenteError,
   VentaVaciaError,
+  clienteConverter,
+  crearCliente,
   piezaConverter,
   productoConverter,
   registrarVenta,
@@ -38,6 +40,7 @@ import { ModalAgregarFraccionado } from '../componentes/venta/ModalAgregarFracci
 import { ModalAgregarGranel } from '../componentes/venta/ModalAgregarGranel';
 import { ModalAgregarPiezaEntera } from '../componentes/venta/ModalAgregarPiezaEntera';
 import { ModalAgregarUnidad } from '../componentes/venta/ModalAgregarUnidad';
+import { ModalCliente } from '../componentes/venta/ModalCliente';
 import { ModalCobro } from '../componentes/venta/ModalCobro';
 import { useHeader } from '../componentes/header/ContextoHeader';
 
@@ -99,6 +102,9 @@ export function Venta() {
     vaciar: vaciarCarrito,
     actualizar: actualizarCarrito,
     proximaClave,
+    cliente,
+    seleccionarCliente,
+    quitarCliente,
   } = useCarrito();
 
   const [intento, setIntento] = useState(0);
@@ -110,6 +116,11 @@ export function Venta() {
   const [itemParaEditar, setItemParaEditar] = useState<ItemCarrito | null>(null);
   const [modalCobroAbierto, setModalCobroAbierto] = useState(false);
   const [cobrando, setCobrando] = useState(false);
+  const [modalClienteAbierto, setModalClienteAbierto] = useState(false);
+  // `true` mientras se espera el ack del alta rápida ONLINE (ver
+  // `confirmarAltaRapidaCliente`): deshabilita el botón "Crear" del modal
+  // para que dos toques rápidos no den de alta el mismo nombre dos veces.
+  const [creandoCliente, setCreandoCliente] = useState(false);
 
   const productosQuery = useMemo(
     () =>
@@ -124,9 +135,15 @@ export function Venta() {
       query(collection(db, 'piezas').withConverter(piezaConverter), where('estado', '==', 'disponible')),
     [intento],
   );
+  const clientesQuery = useMemo(
+    () =>
+      query(collection(db, 'clientes').withConverter(clienteConverter), where('activo', '==', true)),
+    [intento],
+  );
 
   const productos = useCollection<Producto>(productosQuery);
   const piezas = useCollection<Pieza>(piezasQuery);
+  const clientes = useCollection<Cliente>(clientesQuery);
 
   const piezasAgrupadas = useMemo(() => agruparPiezasPorProducto(piezas.datos), [piezas.datos]);
 
@@ -188,6 +205,79 @@ export function Venta() {
     cerrarModales();
   }
 
+  function abrirModalCliente() {
+    setModalClienteAbierto(true);
+  }
+
+  function cerrarModalCliente() {
+    setModalClienteAbierto(false);
+  }
+
+  /**
+   * Asocia un cliente EXISTENTE (elegido en la búsqueda del modal).
+   * `esPrimeraCompra` sale del `Cliente` que ya tenemos en pantalla (viene de
+   * `useCollection`, sin lectura extra) — doc 07 §POS: "sin lecturas extra".
+   */
+  function seleccionarClienteExistente(clienteElegido: Cliente) {
+    seleccionarCliente({
+      id: clienteElegido.id,
+      nombre: clienteElegido.nombre,
+      esPrimeraCompra: clienteElegido.stats.cantidadVentas === 0,
+    });
+    cerrarModalCliente();
+  }
+
+  /**
+   * Alta rápida (solo nombre) + asociación a la venta en curso. Sigue el
+   * patrón híbrido online/offline de `docs/06-ui-ux.md §8` (mismo criterio
+   * que `Productos.tsx`/`confirmarCobro`, abajo), con una diferencia clave:
+   * a diferencia de esas escrituras, ACÁ sí necesitamos el `clienteId` que
+   * devuelve `crearCliente` para poder asociarlo — por eso NO se dispara
+   * "a ciegas" sin mirar el resultado ni offline ni online: lo que cambia
+   * entre ramas es solo CUÁNDO se cierra el modal y aviso al vendedor, nunca
+   * si se espera o no el resultado (un `await` incondicional colgaría el
+   * botón "Creando…" para siempre sin conexión, que es exactamente lo que
+   * `docs/06-ui-ux.md §8` prohíbe).
+   *
+   * Un cliente recién creado siempre tiene `stats.cantidadVentas === 0`
+   * (`crearCliente` los inicializa en cero): `esPrimeraCompra: true` sin
+   * necesidad de leer nada.
+   */
+  function confirmarAltaRapidaCliente(nombre: string) {
+    const escritura = crearCliente(db, { nombre });
+
+    if (!enLinea) {
+      // No se espera el ack: se cierra el modal YA (el vendedor sigue
+      // armando la venta) y se asocia el cliente en cuanto la escritura
+      // resuelva (offline, recién al reconectar) — nunca se deja el botón
+      // "Creando…" esperando algo que no va a llegar.
+      cerrarModalCliente();
+      mostrarToast('Cliente guardado sin conexión. Se asociará a la venta al sincronizar.', 'info');
+      escritura
+        .then(({ clienteId }) => {
+          seleccionarCliente({ id: clienteId, nombre, esPrimeraCompra: true });
+        })
+        .catch(() => {
+          mostrarToast(`No se pudo crear "${nombre}" sin conexión. La venta no quedó asociada.`, 'error');
+        });
+      return;
+    }
+
+    setCreandoCliente(true);
+    escritura
+      .then(({ clienteId }) => {
+        seleccionarCliente({ id: clienteId, nombre, esPrimeraCompra: true });
+        mostrarToast('Cliente creado.', 'exito');
+        cerrarModalCliente();
+      })
+      .catch(() => {
+        mostrarToast('No se pudo crear el cliente. Intentá de nuevo.', 'error');
+      })
+      .finally(() => {
+        setCreandoCliente(false);
+      });
+  }
+
   /**
    * Confirmar el modal de `fraccionado_por_pieza`/`granel`: si hay un ítem en
    * edición, REEMPLAZA ese ítem por uno nuevo con la MISMA clave (mismo lugar
@@ -238,6 +328,10 @@ export function Venta() {
         subtotalCents: item.subtotalCents,
       })),
       totalCents: totalCarrito(carrito),
+      // Sin cliente elegido, la venta queda anónima: la propiedad NO se
+      // agrega al objeto (a diferencia de asignarle `undefined`), byte-
+      // idéntica a como era antes de esta tarea (docs/07 §POS).
+      ...(cliente !== null ? { cliente } : {}),
     };
 
     const escritura = registrarVenta(db, entrada);
@@ -331,6 +425,20 @@ export function Venta() {
         onCambiarUnidades={(clave, delta) => actualizarCarrito((items) => cambiarUnidades(items, clave, delta))}
         onEditarAlPeso={editarAlPeso}
         onAgregarOtraPieza={(item) => abrirParaAgregar(item.producto)}
+        cliente={cliente}
+        onAbrirCliente={abrirModalCliente}
+        onQuitarCliente={quitarCliente}
+      />
+
+      <ModalCliente
+        abierto={modalClienteAbierto}
+        onCerrar={cerrarModalCliente}
+        clientes={clientes.datos}
+        cargando={clientes.cargando}
+        error={clientes.error !== null}
+        creando={creandoCliente}
+        onSeleccionar={seleccionarClienteExistente}
+        onCrear={confirmarAltaRapidaCliente}
       />
 
       {productoActivo !== null && (

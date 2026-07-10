@@ -63,6 +63,60 @@ export interface CarritoProps {
   onEditarAlPeso: (item: ItemCarrito) => void;
   /** "+" de un ítem `pieza_entera`: abre el selector para sumar OTRA pieza del mismo producto. */
   onAgregarOtraPieza: (item: ItemCarrito) => void;
+  /** Cliente asociado a la venta en curso (docs/07-clientes-proveedores.md
+   * §POS). `null` = venta anónima — el control "Cliente" muestra "+ Cliente"
+   * en vez del nombre. Solo se usa `nombre`: el resto de `ClienteVenta` no le
+   * importa a este componente de presentación. */
+  cliente: { nombre: string } | null;
+  /** Abre el selector de cliente (búsqueda + alta rápida). */
+  onAbrirCliente: () => void;
+  /** Quita el cliente asociado. Reversible, sin confirmación (docs/06-ui-ux.md §6). */
+  onQuitarCliente: () => void;
+}
+
+/**
+ * Fila "Cliente" del carrito (docs/07-clientes-proveedores.md §POS): control
+ * discreto, deliberadamente AFUERA de la fila de resumen colapsada (contador,
+ * total, Cobrar) — esa zona es sagrada (docs/06-ui-ux.md §6). Se repite en el
+ * panel desktop (siempre visible) y en la hoja mobile expandida.
+ */
+function FilaCliente({
+  cliente,
+  onAbrirCliente,
+  onQuitarCliente,
+}: Pick<CarritoProps, 'cliente' | 'onAbrirCliente' | 'onQuitarCliente'>) {
+  return (
+    <div className="flex items-center justify-between gap-2 rounded-elemento border border-borde bg-fondo px-3 py-1">
+      {cliente === null ? (
+        <button
+          type="button"
+          onClick={onAbrirCliente}
+          className="flex min-h-11 flex-1 items-center rounded-control text-sm font-medium text-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 dark:text-primary-300"
+        >
+          + Cliente
+        </button>
+      ) : (
+        <>
+          <button
+            type="button"
+            onClick={onAbrirCliente}
+            className="flex min-h-11 flex-1 items-center truncate rounded-control text-left text-sm font-medium text-texto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
+          >
+            Cliente: {cliente.nombre}
+          </button>
+          {/* Quitar cliente es reversible: nunca pide confirmación (docs/06-ui-ux.md §6). */}
+          <button
+            type="button"
+            onClick={onQuitarCliente}
+            aria-label={`Quitar cliente ${cliente.nombre}`}
+            className="min-h-11 shrink-0 text-sm text-peligro underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
+          >
+            Quitar
+          </button>
+        </>
+      )}
+    </div>
+  );
 }
 
 interface FilaItemProps {
@@ -170,6 +224,9 @@ export function Carrito({
   onCambiarUnidades,
   onEditarAlPeso,
   onAgregarOtraPieza,
+  cliente,
+  onAbrirCliente,
+  onQuitarCliente,
 }: CarritoProps) {
   const [expandidoMobile, setExpandidoMobile] = useState(false);
   // Desplazamiento vertical (px, siempre ≥0) que sigue al dedo mientras se
@@ -340,6 +397,7 @@ export function Carrito({
       {/* Ancho: panel lateral siempre visible. */}
       <aside className="hidden lg:sticky lg:top-20 lg:flex lg:h-[calc(100vh-6rem)] lg:flex-col lg:gap-3 lg:rounded-card lg:border lg:border-borde lg:bg-superficie lg:p-4">
         <h2 className="text-base font-semibold text-texto">Carrito</h2>
+        <FilaCliente cliente={cliente} onAbrirCliente={onAbrirCliente} onQuitarCliente={onQuitarCliente} />
         {carritoVacio ? (
           <p className="text-sm text-texto-secundario">Todavía no agregaste productos.</p>
         ) : (
@@ -426,6 +484,9 @@ export function Carrito({
               onPointerCancel={cancelarArrastre}
             >
               <span className="h-[5px] w-10 rounded-full bg-borde" />
+            </div>
+            <div className="px-3 pb-2">
+              <FilaCliente cliente={cliente} onAbrirCliente={onAbrirCliente} onQuitarCliente={onQuitarCliente} />
             </div>
             <ul
               ref={listaRef}

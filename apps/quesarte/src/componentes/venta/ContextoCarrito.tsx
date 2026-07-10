@@ -7,12 +7,15 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import type { ClienteVenta } from '@gestion/firebase-kit';
 import type { ItemCarrito } from './itemsCarrito';
 
 interface EstadoCarritoContexto {
   items: ItemCarrito[];
   agregar: (item: ItemCarrito) => void;
   quitar: (clave: string) => void;
+  /** Vacía los ítems Y el cliente asociado (docs/07 §POS: el cliente se limpia
+   * junto con el carrito, tanto al cobrar con éxito como al vaciar a mano). */
   vaciar: () => void;
   /**
    * Reemplaza la lista completa de ítems (docs/06-ui-ux.md §6, "el carrito es
@@ -39,6 +42,18 @@ interface EstadoCarritoContexto {
    * clave (`item-0`), rompiendo tanto la identidad de lista de React como
    * `quitar` (que filtra por clave). */
   proximaClave: () => string;
+  /** Cliente asociado a la venta en curso (docs/07-clientes-proveedores.md
+   * §POS). `null` = venta anónima, el caso por defecto. Vive acá por la MISMA
+   * razón que `items`: sobrevive a la navegación entre pestañas. */
+  cliente: ClienteVenta | null;
+  /** Asocia (o reemplaza) el cliente de la venta en curso. La UI ya resolvió
+   * `esPrimeraCompra` contra el `Cliente` que tiene en pantalla (existente
+   * elegido o recién dado de alta): este contexto no lee Firestore, solo
+   * custodia lo que le pasan. */
+  seleccionarCliente: (cliente: ClienteVenta) => void;
+  /** Quita el cliente asociado (acción reversible, sin confirmación —
+   * docs/06-ui-ux.md §6). La venta vuelve a ser anónima. */
+  quitarCliente: () => void;
 }
 
 const ContextoCarrito = createContext<EstadoCarritoContexto | null>(null);
@@ -72,6 +87,7 @@ export interface ProveedorCarritoProps {
  */
 export function ProveedorCarrito({ children }: ProveedorCarritoProps) {
   const [items, setItems] = useState<ItemCarrito[]>([]);
+  const [cliente, setCliente] = useState<ClienteVenta | null>(null);
   const proximaClaveRef = useRef(0);
 
   const agregar = useCallback((item: ItemCarrito) => {
@@ -84,6 +100,7 @@ export function ProveedorCarrito({ children }: ProveedorCarritoProps) {
 
   const vaciar = useCallback(() => {
     setItems([]);
+    setCliente(null);
   }, []);
 
   const actualizar = useCallback((actualizador: (items: ItemCarrito[]) => ItemCarrito[]) => {
@@ -96,9 +113,27 @@ export function ProveedorCarrito({ children }: ProveedorCarritoProps) {
     return clave;
   }, []);
 
+  const seleccionarCliente = useCallback((clienteNuevo: ClienteVenta) => {
+    setCliente(clienteNuevo);
+  }, []);
+
+  const quitarCliente = useCallback(() => {
+    setCliente(null);
+  }, []);
+
   const valor = useMemo<EstadoCarritoContexto>(
-    () => ({ items, agregar, quitar, vaciar, actualizar, proximaClave }),
-    [items, agregar, quitar, vaciar, actualizar, proximaClave],
+    () => ({
+      items,
+      agregar,
+      quitar,
+      vaciar,
+      actualizar,
+      proximaClave,
+      cliente,
+      seleccionarCliente,
+      quitarCliente,
+    }),
+    [items, agregar, quitar, vaciar, actualizar, proximaClave, cliente, seleccionarCliente, quitarCliente],
   );
 
   return <ContextoCarrito.Provider value={valor}>{children}</ContextoCarrito.Provider>;

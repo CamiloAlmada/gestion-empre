@@ -21,6 +21,7 @@ vi.mock('@gestion/firebase-kit', () => ({
   useCollection: mocks.useCollection,
   productoConverter: {},
   piezaConverter: {},
+  clienteConverter: {},
 }));
 
 // Mismo motivo que el mock de '@gestion/firebase-kit' de arriba: Venta arma
