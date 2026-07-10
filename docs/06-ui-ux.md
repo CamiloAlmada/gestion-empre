@@ -162,14 +162,17 @@ tech lead; no se ignora en silencio.
   hoja expandida lleva barra de agarre visual y se cierra arrastrando hacia
   abajo desde su parte superior (con `prefers-reduced-motion`, sin animación
   de seguimiento).
-- **El arrastre colapsa la lista, no mueve la hoja** (2026-07-09, feedback del
-  dueño): durante el arrastre, la fila de resumen (contador de ítems, total y
-  botón Cobrar) queda QUIETA en su posición; lo que se achica es la altura del
-  listado de ítems, hasta desaparecer y dejar visible solo el resumen. Al
-  soltar: pasado el umbral se cierra (queda el resumen colapsado de siempre);
-  antes del umbral, la lista vuelve a su altura con una transición corta. El
-  resumen nunca se desplaza: Cobrar no se mueve de abajo en ningún momento del
-  gesto.
+- **El arrastre colapsa el contenido, no mueve la hoja** (2026-07-09, feedback
+  del dueño; precisado 2026-07-10): durante el arrastre, la fila de resumen
+  (contador de ítems, total y botón Cobrar) queda QUIETA en su posición; lo
+  que se achica es la altura de TODO el bloque entre el agarre y el resumen
+  (hoy: fila Cliente + listado de ítems — cualquier contenido futuro de la
+  hoja entra al mismo bloque), hasta desaparecer y dejar visible solo el
+  resumen. Sin topes intermedios: el gesto no debe frenar en un piso parcial.
+  Al soltar: pasado el umbral se cierra (queda el resumen colapsado de
+  siempre); antes del umbral, el bloque vuelve a su altura con una transición
+  corta. El resumen nunca se desplaza: Cobrar no se mueve de abajo en ningún
+  momento del gesto.
 
 ## 7. Combinaciones de contraste aprobadas
 
