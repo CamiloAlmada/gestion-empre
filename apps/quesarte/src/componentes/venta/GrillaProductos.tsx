@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { formatearMoney, peso, type ModoStock, type Pieza, type Producto } from '@gestion/core';
-import { Input } from '@gestion/ui';
+import { CampoBusqueda, normalizarBusqueda } from '@gestion/ui';
 import { BadgeStock } from '../stock/BadgeStock';
 
 export interface GrillaProductosProps {
@@ -8,14 +8,6 @@ export interface GrillaProductosProps {
   /** Piezas disponibles, ya agrupadas por `productoId` (`agruparPiezasPorProducto`). */
   piezasAgrupadas: Map<string, Pieza[]>;
   onSeleccionar: (producto: Producto) => void;
-}
-
-/** Minúsculas y sin diacríticos, para que la búsqueda ignore acentos (mismo criterio que `Productos.tsx`). */
-function normalizarTexto(texto: string): string {
-  return texto
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase();
 }
 
 /** Qué le espera al vendedor al tocar la card, según `modoStock` (docs/02). */
@@ -48,19 +40,19 @@ export function GrillaProductos({ productos, piezasAgrupadas, onSeleccionar }: G
   const [busqueda, setBusqueda] = useState('');
 
   const filtrados = useMemo(() => {
-    const consulta = normalizarTexto(busqueda.trim());
+    const consulta = normalizarBusqueda(busqueda.trim());
     if (consulta === '') return productos;
     return productos.filter(
-      (p) => normalizarTexto(p.nombre).includes(consulta) || normalizarTexto(p.categoria).includes(consulta),
+      (p) => normalizarBusqueda(p.nombre).includes(consulta) || normalizarBusqueda(p.categoria).includes(consulta),
     );
   }, [productos, busqueda]);
 
   return (
     <div className="flex flex-col gap-3">
-      <Input
-        label="Buscar producto"
-        value={busqueda}
+      <CampoBusqueda
+        valor={busqueda}
         onChange={setBusqueda}
+        ariaLabel="Buscar producto"
         placeholder="Nombre o categoría"
       />
 

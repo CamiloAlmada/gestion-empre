@@ -1,12 +1,5 @@
 import type { Cliente } from '@gestion/core';
-
-const DIACRITICOS = /[̀-ͯ]/g;
-
-/** Minúsculas y sin diacríticos, para que la búsqueda ignore acentos (mismo
- * criterio que `normalizarTexto` de `Productos.tsx`). */
-export function normalizarTexto(texto: string): string {
-  return texto.normalize('NFD').replace(DIACRITICOS, '').toLowerCase();
-}
+import { normalizarBusqueda } from '@gestion/ui';
 
 /**
  * Filtro client-side del listado de Clientes: la colección es chica (doc 07,
@@ -26,16 +19,16 @@ export function filtrarClientes(
   busqueda: string,
   mostrarInactivos: boolean,
 ): Cliente[] {
-  const consulta = normalizarTexto(busqueda.trim());
+  const consulta = normalizarBusqueda(busqueda.trim());
 
   return clientes.filter((cliente) => {
     if (!mostrarInactivos && !cliente.activo) return false;
     if (consulta === '') return true;
 
     return (
-      normalizarTexto(cliente.nombre).includes(consulta) ||
-      (cliente.alias !== undefined && normalizarTexto(cliente.alias).includes(consulta)) ||
-      (cliente.telefono !== undefined && normalizarTexto(cliente.telefono).includes(consulta))
+      normalizarBusqueda(cliente.nombre).includes(consulta) ||
+      (cliente.alias !== undefined && normalizarBusqueda(cliente.alias).includes(consulta)) ||
+      (cliente.telefono !== undefined && normalizarBusqueda(cliente.telefono).includes(consulta))
     );
   });
 }

@@ -265,7 +265,7 @@ describe('Productos', () => {
 
     renderizar();
 
-    fireEvent.change(screen.getByLabelText('Buscar'), { target: { value: 'anejo' } });
+    fireEvent.change(screen.getByLabelText('Buscar producto'), { target: { value: 'anejo' } });
 
     expect(tabla().getByText('Queso Añejo')).toBeTruthy();
     expect(tabla().queryByText('Miel 500g')).toBeNull();
@@ -277,7 +277,7 @@ describe('Productos', () => {
 
     renderizar();
 
-    fireEvent.change(screen.getByLabelText('Buscar'), { target: { value: 'miel' } });
+    fireEvent.change(screen.getByLabelText('Buscar producto'), { target: { value: 'miel' } });
 
     expect(tabla().getByText('Miel 500g')).toBeTruthy();
     expect(tabla().queryByText('Queso Añejo')).toBeNull();

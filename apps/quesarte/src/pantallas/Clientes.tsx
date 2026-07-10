@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { collection, orderBy, query } from 'firebase/firestore';
-import { Button, Input, useToasts } from '@gestion/ui';
+import { Button, CampoBusqueda, useToasts } from '@gestion/ui';
 import { clienteConverter, crearCliente, useCollection, useOnlineStatus } from '@gestion/firebase-kit';
 import type { DatosCliente } from '@gestion/firebase-kit';
 import { db } from '../firebase';
@@ -157,7 +157,12 @@ export function Clientes() {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end gap-3">
         <div className="w-full max-w-xs">
-          <Input label="Buscar" value={busqueda} onChange={setBusqueda} placeholder="Nombre, alias o teléfono" />
+          <CampoBusqueda
+            valor={busqueda}
+            onChange={setBusqueda}
+            ariaLabel="Buscar cliente"
+            placeholder="Nombre, alias o teléfono"
+          />
         </div>
         <button
           type="button"

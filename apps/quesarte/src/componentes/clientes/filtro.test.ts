@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { money, type Cliente } from '@gestion/core';
-import { filtrarClientes, normalizarTexto } from './filtro';
+import { filtrarClientes } from './filtro';
 
 function cliente(over: Partial<Cliente> & Pick<Cliente, 'id' | 'nombre'>): Cliente {
   return {
@@ -11,12 +11,10 @@ function cliente(over: Partial<Cliente> & Pick<Cliente, 'id' | 'nombre'>): Clien
   };
 }
 
-describe('normalizarTexto', () => {
-  it('ignora acentos y mayúsculas', () => {
-    expect(normalizarTexto('María Núñez')).toBe('maria nunez');
-  });
-});
-
+// La normalización acento/mayúscula-insensible (`normalizarBusqueda`,
+// `@gestion/ui`) tiene sus propios tests unitarios; acá solo se verifica que
+// `filtrarClientes` la usa correctamente (caso "filtra por nombre ignorando
+// acentos", abajo).
 describe('filtrarClientes', () => {
   const clientes: Cliente[] = [
     cliente({ id: 'c1', nombre: 'Ana Pérez', alias: 'Anita', telefono: '099111222' }),

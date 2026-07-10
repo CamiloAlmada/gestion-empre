@@ -188,7 +188,7 @@ describe('Proveedores', () => {
     });
 
     renderizar();
-    fireEvent.change(screen.getByLabelText('Buscar'), { target: { value: 'anejo' } });
+    fireEvent.change(screen.getByLabelText('Buscar proveedor'), { target: { value: 'anejo' } });
 
     expect(screen.getByText('Quesos Añejo')).toBeTruthy();
     expect(screen.queryByText('Miel Artesanal')).toBeNull();

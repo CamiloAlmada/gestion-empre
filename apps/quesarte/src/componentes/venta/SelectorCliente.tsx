@@ -1,22 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Cliente } from '@gestion/core';
-import { Button, Input, Modal } from '@gestion/ui';
-
-/** Minúsculas y sin diacríticos, para comparar "marta" contra "Márta" (mismo
- * criterio que `SearchSelect` de `@gestion/ui`, duplicado acá porque no hay un
- * helper de texto compartido y este filtro es puramente de presentación). */
-function normalizar(texto: string): string {
-  return texto
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase();
-}
+import { Button, CampoBusqueda, Modal, normalizarBusqueda } from '@gestion/ui';
 
 function coincide(cliente: Cliente, consulta: string): boolean {
-  const objetivo = normalizar(consulta);
+  const objetivo = normalizarBusqueda(consulta);
   if (objetivo === '') return true;
-  if (normalizar(cliente.nombre).includes(objetivo)) return true;
-  if (cliente.alias !== undefined && normalizar(cliente.alias).includes(objetivo)) return true;
+  if (normalizarBusqueda(cliente.nombre).includes(objetivo)) return true;
+  if (cliente.alias !== undefined && normalizarBusqueda(cliente.alias).includes(objetivo)) return true;
   if (cliente.telefono !== undefined && cliente.telefono.includes(consulta.trim())) return true;
   return false;
 }
@@ -71,10 +61,10 @@ export function SelectorCliente({
   return (
     <Modal abierto={abierto} onCerrar={onCerrar} titulo="Cliente">
       <div className="flex flex-col gap-3">
-        <Input
-          label="Buscar por nombre, alias o teléfono"
-          value={texto}
+        <CampoBusqueda
+          valor={texto}
           onChange={setTexto}
+          ariaLabel="Buscar por nombre, alias o teléfono"
           placeholder="Ej: Marta"
         />
 
