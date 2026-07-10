@@ -243,6 +243,15 @@ del dueño en producción. Incluyó además: tanda visual UI-3 (header fundido,
 CampoBusqueda, selector de sección de Stock, chips de filtro), reactivación de
 clientes/proveedores (RE-1) y code-splitting con vendor chunks (D0).
 
+Tanda UI-4 (2026-07-10, feedback del dueño sobre UI-3 en producción; contrato
+en docs/06 §2-§3): búsqueda a ancho completo en todas las pantallas de listado
+(a), layout route compartido de Stock + Categorías como sección propia del
+selector en `/stock/categorias`, reemplazando el modal de Catálogo (b), y
+swipe entre secciones + píldora del selector animada con View Transitions (c).
+Review senior integral: APROBAR CON OBSERVACIONES — sin bloqueantes; selector
+a 48px y cobertura extra del gesto corregidos por el autor; el edge de
+Suspense con chunk frío quedó anotado en las notas de Fase 3.
+
 Notas para Fase 3 (arrastradas de los reviews de esta fase):
 - Promover `calcularCostoRealUnidadCents` a core (hoy Compras reusa
   `calcularTicketPromedio`, numéricamente idéntico, semánticamente prestado).
@@ -260,6 +269,11 @@ Notas para Fase 3 (arrastradas de los reviews de esta fase):
   candidato a `PorcentajeInput` en @gestion/ui.
 - Edge menor: en una compra, el botón Editar de un ítem cuyo producto fue
   desactivado después queda mudo (sin aviso).
+- (UI-4, review senior) Primera visita a una sección de Stock con View
+  Transition activa: el morph de la píldora corre contra el fallback de
+  Suspense si el chunk lazy aún no cargó (el contenido real entra después sin
+  transición). Cosmético, solo la primera vez por sección. Candidato: prefetch
+  del chunk en `touchstart`/`mouseenter` del ítem del selector.
 
 Criterios de aceptación:
 - [x] Una compra con $2.000 de combustible reparte exactamente $2.000 entre los
