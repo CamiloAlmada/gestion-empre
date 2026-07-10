@@ -234,12 +234,42 @@ Tareas:
    margen objetivo por producto.
 4. Alerta de margen post-compra con precios sugeridos y aplicación masiva.
 
+Estado (2026-07-10): IMPLEMENTADA COMPLETA — review senior integral con una
+devolución corregida (B1: crash de prorrateo sin ítems + ErrorBoundary de ruta
+como red general; M1: acciones de ficha de proveedor al cuerpo; M2: margen "—"
+para pieza+precio-por-unidad, unidades incomparables sin el peso). Los 4
+criterios verificados por el reviewer con sus tests; PENDIENTE la validación
+del dueño en producción. Incluyó además: tanda visual UI-3 (header fundido,
+CampoBusqueda, selector de sección de Stock, chips de filtro), reactivación de
+clientes/proveedores (RE-1) y code-splitting con vendor chunks (D0).
+
+Notas para Fase 3 (arrastradas de los reviews de esta fase):
+- Promover `calcularCostoRealUnidadCents` a core (hoy Compras reusa
+  `calcularTicketPromedio`, numéricamente idéntico, semánticamente prestado).
+- No existe pantalla de configuración: `metodoProrrateo` (default por_valor) y
+  `multiploRedondeoCents` (hardcode $5; el campo ni existe en el modelo) no son
+  elegibles en producción. Candidato: sección en Ajustes.
+- Sugerencia de productos "comprados antes a este proveedor" (doc 07) — quedó
+  solo `proveedorPrincipalId`; requiere query de compras históricas.
+- Service worker sigue en `autoUpdate` (nota de Fase 1 aún abierta): recarga
+  sola al publicar — riesgoso a mitad de venta; pasar a prompt.
+- Índice `compras (estado, fecha desc)` quedó sin consumidor (el listado ordena
+  por fecha y filtra client-side) — mismo criterio que el de proveedores: se
+  deja declarado.
+- `formatearBps`/entrada de porcentaje duplicados en Precios/ModalPrecio —
+  candidato a `PorcentajeInput` en @gestion/ui.
+- Edge menor: en una compra, el botón Editar de un ítem cuyo producto fue
+  desactivado después queda mudo (sin aviso).
+
 Criterios de aceptación:
-- [ ] Una compra con $2.000 de combustible reparte exactamente $2.000 entre los
-      ítems (sin perder ni inventar centésimos).
-- [ ] Las piezas creadas por la compra heredan el costo real por kg.
-- [ ] Cambiar margen objetivo sugiere precio con redondeo comercial correcto.
-- [ ] Confirmada una compra que sube costos, aparecen las alertas de margen.
+- [x] Una compra con $2.000 de combustible reparte exactamente $2.000 entre los
+      ítems (sin perder ni inventar centésimos). *(reviewer: test de propiedad
+      + validación del kit; falta verificación del dueño)*
+- [x] Las piezas creadas por la compra heredan el costo real por kg.
+- [x] Cambiar margen objetivo sugiere precio con redondeo comercial correcto.
+- [x] Confirmada una compra que sube costos, aparecen las alertas de margen
+      (como lista "bajo objetivo" en Precios, enlazada desde la compra
+      confirmada — pull, no notificación push).
 
 ## Fase 3 — Inteligencia de negocio
 
