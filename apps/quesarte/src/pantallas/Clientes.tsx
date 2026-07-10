@@ -155,15 +155,13 @@ export function Clientes() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="w-full max-w-xs">
-          <CampoBusqueda
-            valor={busqueda}
-            onChange={setBusqueda}
-            ariaLabel="Buscar cliente"
-            placeholder="Nombre, alias o teléfono"
-          />
-        </div>
+      <CampoBusqueda
+        valor={busqueda}
+        onChange={setBusqueda}
+        ariaLabel="Buscar cliente"
+        placeholder="Nombre, alias o teléfono"
+      />
+      <div className="flex flex-wrap gap-3">
         <Chip activo={mostrarInactivos} onClick={() => setMostrarInactivos((v) => !v)}>
           Mostrar inactivos
         </Chip>

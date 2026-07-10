@@ -319,20 +319,16 @@ export function Precios() {
         </div>
       )}
 
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="w-full max-w-xs">
-            <CampoBusqueda
-              valor={busqueda}
-              onChange={setBusqueda}
-              ariaLabel="Buscar producto"
-              placeholder="Nombre o categoría"
-            />
-          </div>
-          <Chip activo={soloBajoObjetivo} onClick={() => setSoloBajoObjetivo((v) => !v)}>
-            Solo bajo objetivo
-          </Chip>
-        </div>
+      <CampoBusqueda
+        valor={busqueda}
+        onChange={setBusqueda}
+        ariaLabel="Buscar producto"
+        placeholder="Nombre o categoría"
+      />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Chip activo={soloBajoObjetivo} onClick={() => setSoloBajoObjetivo((v) => !v)}>
+          Solo bajo objetivo
+        </Chip>
         <Button
           variante="secundaria"
           disabled={candidatosMasivo.length === 0}
