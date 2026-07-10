@@ -199,13 +199,19 @@ describe('App - rutas', () => {
     expect(screen.queryByRole('heading', { name: 'Reportes' })).toBeNull();
   });
 
-  it('admin que navega a /reportes ve la pantalla de Reportes', () => {
+  it('admin que navega a /reportes ve la pantalla de Reportes', async () => {
     configurarAuth('admin');
 
     renderizarEn('/reportes');
 
-    expect(screen.getByRole('heading', { name: 'Reportes', level: 1 })).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Reportes', level: 2 })).toBeTruthy();
+    // Reportes no está mockeada (real, sin dependencias de Firestore): con
+    // el code-splitting por ruta (F2-D0) su chunk se resuelve async vía
+    // Suspense. El h1 "Reportes" aparece antes que el resto (título de
+    // fallback del tab, `TITULOS_POR_TAB` en Shell.tsx, ya visible durante
+    // el propio fallback de Suspense) — el h2 recién se monta cuando el
+    // chunk de Reportes resuelve, así que también se espera con `find`.
+    expect(await screen.findByRole('heading', { name: 'Reportes', level: 1 })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Reportes', level: 2 })).toBeTruthy();
   });
 
   it('vendedor que navega a /ajustes/usuarios es redirigido a Venta', () => {
@@ -217,28 +223,31 @@ describe('App - rutas', () => {
     expect(screen.queryByText('Contenido de Usuarios')).toBeNull();
   });
 
-  it('admin que navega a /ajustes/usuarios ve la pantalla de Usuarios', () => {
+  it('admin que navega a /ajustes/usuarios ve la pantalla de Usuarios', async () => {
     configurarAuth('admin');
 
     renderizarEn('/ajustes/usuarios');
 
-    expect(screen.getByText('Contenido de Usuarios')).toBeTruthy();
+    // Usuarios está mockeada, pero se resuelve igual vía `React.lazy`
+    // (import() dinámico, aunque el módulo detrás sea el mock): el primer
+    // render cae en el fallback de Suspense hasta que la promesa resuelve.
+    expect(await screen.findByText('Contenido de Usuarios')).toBeTruthy();
   });
 
-  it('navega a /stock/producto/:id (ruta real de detalle, no estado interno)', () => {
+  it('navega a /stock/producto/:id (ruta real de detalle, no estado interno)', async () => {
     configurarAuth('admin');
 
     renderizarEn('/stock/producto/abc123');
 
-    expect(screen.getByText('Contenido de DetalleProductoPantalla')).toBeTruthy();
+    expect(await screen.findByText('Contenido de DetalleProductoPantalla')).toBeTruthy();
   });
 
-  it('vendedor también puede navegar a /stock/producto/:id (no es solo-admin)', () => {
+  it('vendedor también puede navegar a /stock/producto/:id (no es solo-admin)', async () => {
     configurarAuth('vendedor');
 
     renderizarEn('/stock/producto/abc123');
 
-    expect(screen.getByText('Contenido de DetalleProductoPantalla')).toBeTruthy();
+    expect(await screen.findByText('Contenido de DetalleProductoPantalla')).toBeTruthy();
   });
 
   it('vendedor que navega a /stock/proveedores es redirigido a Venta (docs/07: solo admin)', () => {
@@ -246,16 +255,18 @@ describe('App - rutas', () => {
 
     renderizarEn('/stock/proveedores');
 
+    // RutaSoloAdmin redirige ANTES de que el lazy de Proveedores se
+    // resuelva (nunca llega a montarse): Venta (eager) aparece sincrónico.
     expect(screen.getByRole('heading', { name: 'Venta', level: 1 })).toBeTruthy();
     expect(screen.queryByText('Contenido de Proveedores')).toBeNull();
   });
 
-  it('admin que navega a /stock/proveedores ve la pantalla de Proveedores', () => {
+  it('admin que navega a /stock/proveedores ve la pantalla de Proveedores', async () => {
     configurarAuth('admin');
 
     renderizarEn('/stock/proveedores');
 
-    expect(screen.getByText('Contenido de Proveedores')).toBeTruthy();
+    expect(await screen.findByText('Contenido de Proveedores')).toBeTruthy();
   });
 
   it('vendedor que navega a /stock/proveedor/:id es redirigido a Venta (docs/07: solo admin)', () => {
@@ -267,70 +278,70 @@ describe('App - rutas', () => {
     expect(screen.queryByText('Contenido de DetalleProveedorPantalla')).toBeNull();
   });
 
-  it('admin que navega a /stock/proveedor/:id ve la ficha del proveedor', () => {
+  it('admin que navega a /stock/proveedor/:id ve la ficha del proveedor', async () => {
     configurarAuth('admin');
 
     renderizarEn('/stock/proveedor/abc123');
 
-    expect(screen.getByText('Contenido de DetalleProveedorPantalla')).toBeTruthy();
+    expect(await screen.findByText('Contenido de DetalleProveedorPantalla')).toBeTruthy();
   });
 
-  it('navega a /clientes (raíz del tab desde 2026-07-10, ruta real)', () => {
+  it('navega a /clientes (raíz del tab desde 2026-07-10, ruta real)', async () => {
     configurarAuth('admin');
 
     renderizarEn('/clientes');
 
-    expect(screen.getByText('Contenido de Clientes')).toBeTruthy();
+    expect(await screen.findByText('Contenido de Clientes')).toBeTruthy();
   });
 
-  it('vendedor también puede navegar a /clientes (no es solo-admin, doc 07)', () => {
+  it('vendedor también puede navegar a /clientes (no es solo-admin, doc 07)', async () => {
     configurarAuth('vendedor');
 
     renderizarEn('/clientes');
 
-    expect(screen.getByText('Contenido de Clientes')).toBeTruthy();
+    expect(await screen.findByText('Contenido de Clientes')).toBeTruthy();
   });
 
-  it('navega a /clientes/cliente/:id (ficha de cliente, ruta real)', () => {
+  it('navega a /clientes/cliente/:id (ficha de cliente, ruta real)', async () => {
     configurarAuth('admin');
 
     renderizarEn('/clientes/cliente/abc123');
 
-    expect(screen.getByText('Contenido de DetalleClientePantalla')).toBeTruthy();
+    expect(await screen.findByText('Contenido de DetalleClientePantalla')).toBeTruthy();
   });
 
-  it('navega a /historial (Historial general, URL sin cambios) y el tab activo es Venta', () => {
+  it('navega a /historial (Historial general, URL sin cambios) y el tab activo es Venta', async () => {
     configurarAuth('admin');
 
     renderizarEn('/historial');
 
-    expect(screen.getByText('Contenido de Historial')).toBeTruthy();
+    expect(await screen.findByText('Contenido de Historial')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Venta' }).getAttribute('aria-current')).toBe('page');
   });
 
-  it('vendedor también puede navegar a /historial (no está gateada a admin)', () => {
+  it('vendedor también puede navegar a /historial (no está gateada a admin)', async () => {
     configurarAuth('vendedor');
 
     renderizarEn('/historial');
 
-    expect(screen.getByText('Contenido de Historial')).toBeTruthy();
+    expect(await screen.findByText('Contenido de Historial')).toBeTruthy();
   });
 
   describe('redirects de rutas viejas de Clientes (vivían bajo /historial, PWAs con deep links instalados)', () => {
-    it('/historial/clientes redirige a /clientes', () => {
+    it('/historial/clientes redirige a /clientes', async () => {
       configurarAuth('admin');
 
       renderizarEn('/historial/clientes');
 
-      expect(screen.getByText('Contenido de Clientes')).toBeTruthy();
+      expect(await screen.findByText('Contenido de Clientes')).toBeTruthy();
     });
 
-    it('/historial/cliente/:id redirige a /clientes/cliente/:id preservando el id', () => {
+    it('/historial/cliente/:id redirige a /clientes/cliente/:id preservando el id', async () => {
       configurarAuth('admin');
 
       renderizarEn('/historial/cliente/abc123');
 
-      expect(screen.getByText('Contenido de DetalleClientePantalla')).toBeTruthy();
+      expect(await screen.findByText('Contenido de DetalleClientePantalla')).toBeTruthy();
     });
   });
 });

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { Suspense, useEffect, useRef } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router';
 import { BarraPestanas, useToasts, type ItemBarraPestanas } from '@gestion/ui';
 import { useAuth, useOnlineStatus } from '@gestion/firebase-kit';
@@ -9,6 +9,7 @@ import {
   IconoStock,
   IconoVenta,
 } from './componentes/iconos';
+import { FallbackPantalla } from './componentes/FallbackPantalla';
 import { ProveedorHeader, useHeaderActual } from './componentes/header/ContextoHeader';
 import { ProveedorCarrito } from './componentes/venta/ContextoCarrito';
 
@@ -192,7 +193,13 @@ function ShellInterior() {
             : 'pb-[calc(var(--altura-zona-inferior)+2rem)]'
         }`}
       >
-        <Outlet />
+        {/* Suspense de las pantallas lazy (F2-D0, docs/04): acá y no en
+            App.tsx a propósito — header y `BarraPestanas` de este Shell
+            quedan montados durante la carga, solo este `<main>` muestra el
+            fallback (docs/06-ui-ux.md §1.3). */}
+        <Suspense fallback={<FallbackPantalla />}>
+          <Outlet />
+        </Suspense>
       </main>
       {/* Cluster flotante de acciones (mobile, ver CLASES_CLUSTER_ACCIONES):
           DESPUÉS del `<main>` en el DOM a propósito — los lectores de
