@@ -102,7 +102,7 @@ export function SelectorSeccion({ items }: SelectorSeccionProps) {
               to={item.a}
               viewTransition
               aria-current={activo ? 'page' : undefined}
-              className={`flex min-h-[44px] items-center justify-center whitespace-nowrap rounded-control px-4 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-inset ${
+              className={`flex min-h-[48px] items-center justify-center whitespace-nowrap rounded-control px-4 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-inset ${
                 activo
                   ? // `view-transition-name` SOLO en el activo (docs/06-ui-ux.md
                     // §2/§3, UI-4c): la View Transitions API exige un nombre
