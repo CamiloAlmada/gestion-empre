@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { money, type Cliente } from '@gestion/core';
-import { ModalCliente, type ModalClienteProps } from './ModalCliente';
+import { SelectorCliente, type SelectorClienteProps } from './SelectorCliente';
 
 afterEach(cleanup);
 
@@ -17,9 +17,9 @@ function clienteDe(over: Partial<Cliente> & Pick<Cliente, 'id' | 'nombre'>): Cli
 const marta = clienteDe({ id: 'c1', nombre: 'Marta Fernández', alias: 'Marta la de enfrente' });
 const juan = clienteDe({ id: 'c2', nombre: 'Juan Pérez', telefono: '099123456' });
 
-function renderModal(props: Partial<ModalClienteProps> = {}) {
+function renderModal(props: Partial<SelectorClienteProps> = {}) {
   return render(
-    <ModalCliente
+    <SelectorCliente
       abierto={true}
       onCerrar={vi.fn()}
       clientes={[marta, juan]}
@@ -32,7 +32,7 @@ function renderModal(props: Partial<ModalClienteProps> = {}) {
   );
 }
 
-describe('ModalCliente', () => {
+describe('SelectorCliente', () => {
   it('cerrado: no muestra nada (dialog no abierto)', () => {
     renderModal({ abierto: false });
     expect(screen.queryByRole('dialog')).toBeNull();
@@ -124,7 +124,7 @@ describe('ModalCliente', () => {
   it('al reabrir, la búsqueda arranca en blanco (no arrastra la anterior)', () => {
     const { rerender } = renderModal({ abierto: false });
     rerender(
-      <ModalCliente
+      <SelectorCliente
         abierto={true}
         onCerrar={vi.fn()}
         clientes={[marta, juan]}

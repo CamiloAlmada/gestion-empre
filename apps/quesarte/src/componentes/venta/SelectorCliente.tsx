@@ -21,7 +21,7 @@ function coincide(cliente: Cliente, consulta: string): boolean {
   return false;
 }
 
-export interface ModalClienteProps {
+export interface SelectorClienteProps {
   abierto: boolean;
   onCerrar: () => void;
   /** Clientes activos (`clientes` con `activo === true`), ya resueltos por
@@ -43,8 +43,12 @@ export interface ModalClienteProps {
  * por nombre/alias/teléfono entre los clientes activos, o dar de alta uno
  * nuevo con solo el nombre. Vive dentro del carrito — la venta anónima (sin
  * abrir este modal) no cambia en nada.
+ *
+ * No confundir con `pantallas/ModalCliente.tsx` (CP-B): ese es el formulario
+ * ABM de alta/edición completa de la ficha de cliente (Clientes/
+ * DetalleClientePantalla), responsabilidad distinta a este selector del POS.
  */
-export function ModalCliente({
+export function SelectorCliente({
   abierto,
   onCerrar,
   clientes,
@@ -52,7 +56,7 @@ export function ModalCliente({
   error,
   onSeleccionar,
   onCrear,
-}: ModalClienteProps) {
+}: SelectorClienteProps) {
   const [texto, setTexto] = useState('');
 
   // Arranca en blanco cada vez que se abre: no arrastrar la búsqueda de la

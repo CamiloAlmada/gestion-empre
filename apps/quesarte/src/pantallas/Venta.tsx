@@ -40,8 +40,8 @@ import { ModalAgregarFraccionado } from '../componentes/venta/ModalAgregarFracci
 import { ModalAgregarGranel } from '../componentes/venta/ModalAgregarGranel';
 import { ModalAgregarPiezaEntera } from '../componentes/venta/ModalAgregarPiezaEntera';
 import { ModalAgregarUnidad } from '../componentes/venta/ModalAgregarUnidad';
-import { ModalCliente } from '../componentes/venta/ModalCliente';
 import { ModalCobro } from '../componentes/venta/ModalCobro';
+import { SelectorCliente } from '../componentes/venta/SelectorCliente';
 import { useHeader } from '../componentes/header/ContextoHeader';
 
 function mensajeErrorCobro(error: unknown): string {
@@ -411,7 +411,7 @@ export function Venta() {
         onQuitarCliente={quitarCliente}
       />
 
-      <ModalCliente
+      <SelectorCliente
         abierto={modalClienteAbierto}
         onCerrar={cerrarModalCliente}
         clientes={clientes.datos}
