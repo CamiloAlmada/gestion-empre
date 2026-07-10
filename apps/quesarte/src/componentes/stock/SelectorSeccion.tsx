@@ -8,26 +8,32 @@ export interface ItemSelectorSeccion {
 
 /**
  * Lista declarativa de secciones del tab Stock (docs/06-ui-ux.md §2,
- * 2026-07-10): agregar Compras/Precios cuando existan (F2-F) es sumar un
- * objeto acá, sin tocar `SelectorSeccion`. "Proveedores" solo para admin
- * (docs/07-clientes-proveedores.md: el vendedor no ve datos bancarios ni
- * costos de proveedor) — mismo gate que ya usaban las acciones de header de
- * `Stock.tsx` antes de esta tarea y que la tab bar general (`Shell.tsx`); la
- * ruta además queda protegida server-side por `RutaSoloAdmin` en App.tsx.
+ * 2026-07-10): agregar una sección nueva es sumar un objeto acá, sin tocar
+ * `SelectorSeccion`. "Proveedores"/"Categorías" (esta última, tanda UI-4)
+ * solo para admin (docs/07-clientes-proveedores.md: el vendedor no ve datos
+ * bancarios ni costos de proveedor; el vocabulario de categorías es gestión,
+ * no consulta de catálogo) — mismo gate que ya usaban las acciones de header
+ * de `Stock.tsx` antes de esta tarea y que la tab bar general (`Shell.tsx`);
+ * las rutas además quedan protegidas server-side por `RutaSoloAdmin` en
+ * App.tsx.
  */
 export function itemsSelectorStock(esAdmin: boolean): ItemSelectorSeccion[] {
   return [
     { id: 'stock', etiqueta: 'Stock', a: '/stock' },
     { id: 'catalogo', etiqueta: 'Catálogo', a: '/stock/productos' },
-    // Secciones solo-admin (docs/06-ui-ux.md §2: "Stock | Catálogo | Compras |
-    // Proveedores | Precios"): el vendedor no ve compras, datos de proveedor
-    // ni costos/edición de precios (docs/07 y docs/06 §2); las rutas además
+    // Secciones solo-admin, orden contractual (docs/06-ui-ux.md §2): "Stock |
+    // Catálogo | Compras | Proveedores | Precios | Categorías" — el vendedor
+    // no ve compras, datos de proveedor, costos/edición de precios ni el
+    // vocabulario de categorías (docs/07 y docs/06 §2); las rutas además
     // quedan protegidas server-side por `RutaSoloAdmin` en App.tsx.
+    // "Categorías" (UI-4, 2026-07-10) va AL FINAL: baja frecuencia de uso,
+    // dejó de ser el modal de Catálogo para ser una sección más.
     ...(esAdmin
       ? [
           { id: 'compras', etiqueta: 'Compras', a: '/stock/compras' },
           { id: 'proveedores', etiqueta: 'Proveedores', a: '/stock/proveedores' },
           { id: 'precios', etiqueta: 'Precios', a: '/stock/precios' },
+          { id: 'categorias', etiqueta: 'Categorías', a: '/stock/categorias' },
         ]
       : []),
   ];

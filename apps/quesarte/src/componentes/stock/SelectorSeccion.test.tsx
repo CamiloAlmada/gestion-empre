@@ -11,7 +11,7 @@ describe('itemsSelectorStock', () => {
     expect(items.map((i) => i.etiqueta)).toEqual(['Stock', 'Catálogo']);
   });
 
-  it('admin: suma Compras, Proveedores y Precios, en ese orden (docs/06 §2)', () => {
+  it('admin: suma Compras, Proveedores, Precios y Categorías, en ese orden (docs/06 §2)', () => {
     const items = itemsSelectorStock(true);
     expect(items.map((i) => i.etiqueta)).toEqual([
       'Stock',
@@ -19,6 +19,7 @@ describe('itemsSelectorStock', () => {
       'Compras',
       'Proveedores',
       'Precios',
+      'Categorías',
     ]);
   });
 });
@@ -48,6 +49,7 @@ describe('SelectorSeccion', () => {
     expect(screen.getByRole('link', { name: 'Compras' }).getAttribute('href')).toBe('/stock/compras');
     expect(screen.getByRole('link', { name: 'Proveedores' }).getAttribute('href')).toBe('/stock/proveedores');
     expect(screen.getByRole('link', { name: 'Precios' }).getAttribute('href')).toBe('/stock/precios');
+    expect(screen.getByRole('link', { name: 'Categorías' }).getAttribute('href')).toBe('/stock/categorias');
   });
 
   it('marca aria-current="page" SOLO en el ítem cuya ruta coincide EXACTO con el pathname actual', () => {
@@ -69,12 +71,13 @@ describe('SelectorSeccion', () => {
     expect(nav.getByRole('link', { name: 'Catálogo' }).getAttribute('aria-current')).toBeNull();
   });
 
-  it('vendedor: no ve los ítems "Compras", "Proveedores" ni "Precios"', () => {
+  it('vendedor: no ve los ítems "Compras", "Proveedores", "Precios" ni "Categorías"', () => {
     renderizar('/stock', false);
 
     expect(screen.queryByRole('link', { name: 'Compras' })).toBeNull();
     expect(screen.queryByRole('link', { name: 'Proveedores' })).toBeNull();
     expect(screen.queryByRole('link', { name: 'Precios' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Categorías' })).toBeNull();
   });
 
   it('tocar un ítem navega a su ruta real (rutas hermanas, no estado interno)', () => {

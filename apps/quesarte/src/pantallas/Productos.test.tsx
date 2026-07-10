@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { MemoryRouter } from 'react-router';
+import { MemoryRouter, Route, Routes } from 'react-router';
 import { ProveedorTema, ProveedorToasts } from '@gestion/ui';
 import { money, peso, type Categoria, type Producto } from '@gestion/core';
 import { Productos } from './Productos';
+import { StockLayout } from '../componentes/stock/StockLayout';
 import { ProveedorHeader, useHeaderActual } from '../componentes/header/ContextoHeader';
 
 // `DataTable` con `filaCompacta` (docs/06-ui-ux.md §3) renderiza SIEMPRE la
@@ -181,12 +182,16 @@ function VisorHeader() {
 
 function renderizar() {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={['/stock/productos']}>
       <ProveedorTema>
         <ProveedorToasts>
           <ProveedorHeader>
             <VisorHeader />
-            <Productos />
+            <Routes>
+              <Route element={<StockLayout />}>
+                <Route path="/stock/productos" element={<Productos />} />
+              </Route>
+            </Routes>
           </ProveedorHeader>
         </ProveedorToasts>
       </ProveedorTema>
@@ -241,14 +246,14 @@ describe('Productos', () => {
     expect(screen.queryByRole('link', { name: 'Proveedores' })).toBeNull();
   });
 
-  it('admin: el header contextual expone las acciones "Agregar" y "Categorías"', () => {
+  it('admin: el header contextual expone la acción "Agregar" (Categorías es ahora una sección propia, UI-4)', () => {
     configurarAuth();
     configurarCollection({ datos: productosFalsos });
 
     renderizar();
 
     expect(screen.getByRole('button', { name: 'Agregar producto' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Categorías' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Categorías' })).toBeNull();
   });
 
   it('vendedor: el header contextual no expone acciones', () => {
@@ -377,16 +382,14 @@ describe('Productos', () => {
     expect(screen.getAllByRole('button', { name: 'Agregar producto' }).length).toBeGreaterThan(0);
   });
 
-  it('banner de offline explica que no se pueden gestionar categorías', () => {
+  it('sin conexión no muestra ningún banner: el alta/edición de productos funciona offline (la gestión de categorías, que sí la exige, se mudó a su propia pantalla, UI-4)', () => {
     configurarAuth();
     mocks.useOnlineStatus.mockReturnValue(false);
     configurarCollection({ datos: productosFalsos });
 
     renderizar();
 
-    expect(screen.getByRole('status').textContent).toContain(
-      'no se pueden gestionar categorías hasta reconectar',
-    );
+    expect(screen.queryByRole('status')).toBeNull();
   });
 
   it('vendedor no ve botones de alta ni edición', () => {
@@ -466,7 +469,7 @@ describe('Productos', () => {
 
       const select = screen.getByLabelText('Categoría') as HTMLSelectElement;
       expect(select.disabled).toBe(true);
-      expect(screen.getByText('Definí categorías desde Productos → Categorías.')).toBeTruthy();
+      expect(screen.getByText('Definí categorías desde Stock → Categorías.')).toBeTruthy();
     });
 
     it('la validación "categoría obligatoria" se mantiene con el select', () => {

@@ -3,13 +3,28 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useParams } from 'react-router';
 import { money, type Compra } from '@gestion/core';
 import { Compras } from './Compras';
+import { StockLayout } from '../componentes/stock/StockLayout';
 import { ProveedorHeader, useHeaderActual } from '../componentes/header/ContextoHeader';
 
-const mocks = vi.hoisted(() => ({ useCollection: vi.fn() }));
+const mocks = vi.hoisted(() => ({ useCollection: vi.fn(), useAuth: vi.fn() }));
 
+// `StockLayout` (UI-4) envuelve esta ruta y llama a `useAuth` para decidir
+// qué ítems muestra el `SelectorSeccion` — se mockea con un admin fijo
+// (mismo criterio que `Proveedores.test.tsx`/`Precios.test.tsx`: esta
+// pantalla ya está protegida por `RutaSoloAdmin`, no hay caso "vendedor" que
+// probar acá).
 vi.mock('@gestion/firebase-kit', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@gestion/firebase-kit')>();
-  return { ...actual, useCollection: mocks.useCollection };
+  return { ...actual, useCollection: mocks.useCollection, useAuth: mocks.useAuth };
+});
+
+mocks.useAuth.mockReturnValue({
+  usuario: { uid: 'u1' },
+  perfil: { uid: 'u1', nombre: 'Ana', email: 'ana@a.com', rol: 'admin', activo: true },
+  cargando: false,
+  ingresarConEmail: vi.fn(),
+  restablecerPassword: vi.fn(),
+  salir: vi.fn(),
 });
 
 vi.mock('../firebase', () => ({ db: {} }));
@@ -83,7 +98,9 @@ function renderizar() {
       <ProveedorHeader>
         <VisorHeader />
         <Routes>
-          <Route path="/stock/compras" element={<Compras />} />
+          <Route element={<StockLayout />}>
+            <Route path="/stock/compras" element={<Compras />} />
+          </Route>
           <Route path="/stock/compra/:id" element={<PlaceholderDetalle />} />
         </Routes>
       </ProveedorHeader>

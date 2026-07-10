@@ -26,14 +26,8 @@ import { db } from '../firebase';
 import { BadgeStock } from '../componentes/stock/BadgeStock';
 import { categoriasVisibles } from '../componentes/stock/agrupacion';
 import { estaBajoObjetivo, margenActualBps, precioSugeridoDe, unidadCosto } from '../componentes/stock/margenes';
-import { itemsSelectorStock, SelectorSeccion } from '../componentes/stock/SelectorSeccion';
 import { useHeader } from '../componentes/header/ContextoHeader';
 import { ModalPrecio, type DatosPrecioFormulario } from './ModalPrecio';
-
-// Esta pantalla YA está protegida por `RutaSoloAdmin` en App.tsx (mismo
-// criterio que Proveedores.tsx): el ítem "Precios" del selector se pide
-// siempre `true`, no hace falta leer `useAuth` acá para decidir visibilidad.
-const ITEMS_SELECTOR = itemsSelectorStock(true);
 
 const coleccionProductos = collection(db, 'productos').withConverter(productoConverter);
 const coleccionCategorias = collection(db, 'categorias').withConverter(categoriaConverter);
@@ -307,8 +301,6 @@ export function Precios() {
 
   return (
     <div className="flex flex-col gap-4">
-      <SelectorSeccion items={ITEMS_SELECTOR} />
-
       {!enLinea && (
         <div
           role="status"
