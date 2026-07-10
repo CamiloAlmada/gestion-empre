@@ -173,6 +173,78 @@ describe('Shell', () => {
     expect(volver.getAttribute('href')).toBe('/stock');
   });
 
+  describe('header fundido (docs/06-ui-ux.md §2, rediseño 2026-07-10)', () => {
+    it('la flecha de volver va sola (sin el nombre del padre al lado) con aria-label "Volver a {Padre}"', () => {
+      configurarAuth('admin');
+
+      renderizarEn('/stock/productos');
+
+      const volver = screen.getByRole('link', { name: 'Volver a Stock' });
+      // Contenido visible: solo el glifo del ícono (aria-hidden), nada de
+      // texto "Stock" al lado — ese nombre vive únicamente en el aria-label.
+      expect(volver.textContent).toBe('‹');
+      // Target táctil ≥44px (docs/06-ui-ux.md §5).
+      expect(volver.className).toContain('h-11');
+      expect(volver.className).toContain('w-11');
+    });
+
+    it('el header no lleva clases de translucidez/blur ni borde inferior: fondo fundido con `bg-fondo`', () => {
+      configurarAuth('admin');
+
+      const { container } = renderizarEn('/venta');
+
+      const header = container.querySelector('header');
+      expect(header?.className).toContain('bg-fondo');
+      expect(header?.className).not.toContain('translucida');
+      expect(header?.className).not.toContain('backdrop');
+      expect(header?.className).not.toContain('border-b');
+    });
+
+    it('el título vive en la columna central de una grilla de 3 columnas con laterales simétricos (óptico-centrado)', () => {
+      configurarAuth('admin');
+
+      const { container } = renderizarEn('/venta');
+
+      const fila = container.querySelector('header > div');
+      expect(fila?.className).toContain('grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]');
+      const titulo = screen.getByRole('heading', { level: 1 });
+      expect(titulo.className).toContain('text-center');
+    });
+
+    it('sin conexión y con accionHeader (Venta), el chip y la acción conviven en la columna derecha sin duplicar ni empujar el título', () => {
+      configurarAuth('admin');
+      mocks.useOnlineStatus.mockReturnValue(false);
+
+      render(
+        <MemoryRouter initialEntries={['/venta']}>
+          <ProveedorToasts>
+            <Routes>
+              <Route element={<Shell />}>
+                <Route
+                  path="venta"
+                  element={
+                    <PantallaConHeader
+                      titulo="Venta"
+                      accionHeader={
+                        <a href="/historial" aria-label="Historial">
+                          Ir a Historial
+                        </a>
+                      }
+                    />
+                  }
+                />
+              </Route>
+            </Routes>
+          </ProveedorToasts>
+        </MemoryRouter>,
+      );
+
+      expect(screen.getByRole('status').textContent).toContain('Sin conexión');
+      expect(screen.getByRole('link', { name: 'Historial' })).toBeTruthy();
+      expect(screen.getByRole('heading', { name: 'Venta', level: 1 })).toBeTruthy();
+    });
+  });
+
   it('en línea, no muestra ningún indicador de conexión', () => {
     configurarAuth('admin');
 

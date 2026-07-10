@@ -36,15 +36,13 @@ const TAB_POR_SEGMENTO: Record<string, string> = {
   ajustes: 'ajustes',
 };
 
-// Misma translucidez que BarraPestanas (docs/06-ui-ux.md §3): tab bar y
-// header son las únicas zonas translúcidas de la app, con el mismo fallback
-// a superficie sólida cuando el navegador no soporta backdrop-filter o el
-// usuario pidió menos transparencia.
+// Header FUNDIDO con el fondo (docs/06-ui-ux.md §2-3, rediseño 2026-07-10,
+// tanda UI-3): mismo color que `fondo`, sin borde inferior ni translucidez —
+// la translucidez queda reservada a `BarraPestanas` (única zona translúcida
+// de la app). Opaco de por sí, así que no necesita los fallbacks de
+// `@supports`/`prefers-reduced-transparency` que sí requiere la tab bar.
 const CLASES_HEADER =
-  'sticky top-0 z-30 border-b border-borde px-4 pb-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] ' +
-  'bg-superficie-translucida backdrop-blur-lg backdrop-saturate-[1.4] ' +
-  '[@supports_not_(backdrop-filter:_blur(1px))]:bg-superficie ' +
-  '[@media(prefers-reduced-transparency:reduce)]:bg-superficie';
+  'sticky top-0 z-30 bg-fondo px-4 pb-3 pt-[calc(env(safe-area-inset-top)+0.75rem)]';
 
 // `--altura-header` (usada por `ListaProductosAgrupada` para su offset
 // sticky) ya no se define acá: vive en `@gestion/config/tailwind.css`, junto
@@ -63,9 +61,12 @@ const CLASES_HEADER =
 // adicional que no podríamos estilar desde acá al ser un `ReactNode` opaco).
 const CLASES_CLUSTER_ACCIONES = 'fixed right-4 z-30 flex gap-2 md:hidden [&>*]:shadow-flotante';
 
+// Flecha de volver SOLA (docs/06-ui-ux.md §2, rediseño 2026-07-10): sin el
+// nombre del padre al lado — ese texto ahora vive únicamente en el
+// `aria-label` ("Volver a {Padre}"). Target 44×44px (h-11/w-11 = 2.75rem).
 const CLASE_VOLVER =
-  'flex min-h-[44px] shrink-0 items-center gap-1 rounded px-1 text-sm font-medium text-texto-secundario ' +
-  'hover:text-texto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600';
+  'flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-2xl text-texto-secundario ' +
+  'hover:bg-superficie hover:text-texto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600';
 
 /** Tab que debe quedar activo para la ruta actual (ver `TAB_POR_SEGMENTO`),
  * o 'venta' (home de la app) si el primer segmento no matchea ninguna
@@ -156,28 +157,38 @@ function ShellInterior() {
   return (
     <div className="min-h-screen bg-fondo">
       <header className={CLASES_HEADER}>
-        {/* Una sola fila: volver + título truncan/comparten espacio a la
-            izquierda, chip de conexión y acciones (hasta 2, solo `md:`+: en
-            mobile flotan sobre la tab bar, ver cluster más abajo) a la
-            derecha. */}
-        <div className="mx-auto flex max-w-5xl items-center gap-3">
-          <div className="flex min-w-0 flex-1 items-center gap-2">
+        {/* Grilla de 3 columnas con laterales SIMÉTRICOS (`minmax(0,1fr)` a
+            ambos lados de una columna central `auto`): el título queda
+            óptico-centrado en el ancho total del header, sin importar si un
+            lado está vacío o el otro carga chip+acción — ambos laterales
+            reciben siempre la misma fracción del espacio sobrante, así que
+            el centro no se corre (docs/06-ui-ux.md §2, rediseño 2026-07-10). */}
+        <div className="mx-auto grid max-w-5xl grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3">
+          <div className="flex min-w-0 items-center justify-start">
             {config?.volverA !== undefined && (
-              <Link to={config.volverA.a} className={CLASE_VOLVER}>
-                <span aria-hidden="true">‹</span> {config.volverA.etiqueta}
+              <Link
+                to={config.volverA.a}
+                aria-label={`Volver a ${config.volverA.etiqueta}`}
+                className={CLASE_VOLVER}
+              >
+                <span aria-hidden="true">‹</span>
               </Link>
             )}
-            <h1 className="truncate text-lg font-semibold text-texto">{titulo}</h1>
           </div>
-          {!enLinea && <ChipSinConexion />}
-          {hayAcciones && (
-            <div className="hidden shrink-0 items-center gap-2 md:flex">{config?.acciones}</div>
-          )}
-          {/* Acción de header-siempre (docs/06-ui-ux.md §2, 2026-07-10): a
-              diferencia de `acciones`, esta NO tiene contraparte en el
-              cluster flotante — se renderiza acá en TODAS las anchuras (hoy
-              solo la usa Venta, para el atajo a Historial). */}
-          {hayAccionHeader && <div className="flex shrink-0 items-center">{config?.accionHeader}</div>}
+          <h1 className="truncate text-center text-lg font-semibold text-texto">{titulo}</h1>
+          <div className="flex min-w-0 items-center justify-end gap-2">
+            {!enLinea && <ChipSinConexion />}
+            {hayAcciones && (
+              <div className="hidden shrink-0 items-center gap-2 md:flex">{config?.acciones}</div>
+            )}
+            {/* Acción de header-siempre (docs/06-ui-ux.md §2, 2026-07-10): a
+                diferencia de `acciones`, esta NO tiene contraparte en el
+                cluster flotante — se renderiza acá en TODAS las anchuras (hoy
+                solo la usa Venta, para el atajo a Historial). */}
+            {hayAccionHeader && (
+              <div className="flex shrink-0 items-center">{config?.accionHeader}</div>
+            )}
+          </div>
         </div>
       </header>
       {/* Padding inferior base (`--altura-zona-inferior` + 2rem = 6rem de
