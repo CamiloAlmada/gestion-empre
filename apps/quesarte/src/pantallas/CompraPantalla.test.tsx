@@ -244,7 +244,18 @@ describe('CompraPantalla', () => {
 
   it('offline: "Confirmar" deshabilitado con banner explicativo', () => {
     mocks.useOnlineStatus.mockReturnValue(false);
-    estadoCompra = { datos: compraBorrador(), cargando: false, error: null };
+    // Con al menos un ítem, para que el banner que se afirma sea el de
+    // conexión (sin ítems, el mensaje que se muestra es el de "agregá un
+    // ítem" — ver los tests de B1 más abajo).
+    estadoCompra = {
+      datos: compraBorrador({
+        items: [
+          { productoId: 'p1', nombreProducto: 'Queso Colonia', gramos: peso(1000), costoFacturaCents: money(10000) },
+        ],
+      }),
+      cargando: false,
+      error: null,
+    };
     renderizar();
 
     expect(screen.getByRole('button', { name: 'Confirmar compra' }).hasAttribute('disabled')).toBe(true);
@@ -323,6 +334,47 @@ describe('CompraPantalla', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar compra' }));
 
     expect(mocks.confirmarCompra).not.toHaveBeenCalled();
+  });
+
+  it('B1: cargar un gasto ANTES que los ítems no crashea y muestra el gasto (compra nueva)', () => {
+    renderizar('nueva');
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Agregar gasto' }));
+    fireEvent.change(screen.getByLabelText('Monto'), { target: { value: '1000' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Agregar' }));
+
+    // No crashea: el resto de la pantalla sigue montado.
+    expect(screen.getByText('combustible')).toBeTruthy();
+    expect(screen.getByText('Todavía no hay ítems cargados.')).toBeTruthy();
+    expect(
+      screen.getByText('Agregá al menos un ítem para poder confirmar la compra y prorratear los gastos ya cargados.'),
+    ).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Confirmar compra' }).hasAttribute('disabled')).toBe(true);
+  });
+
+  it('B1: quitar el último ítem con un gasto ya cargado no crashea', () => {
+    estadoProductos = { datos: [producto({ id: 'p1', modoStock: 'granel' })], cargando: false, error: null };
+    estadoCompra = {
+      datos: compraBorrador({
+        items: [
+          { productoId: 'p1', nombreProducto: 'Queso Colonia', gramos: peso(1000), costoFacturaCents: money(10000) },
+        ],
+        gastos: [{ concepto: 'combustible', montoCents: money(2000) }],
+        totalFacturaCents: money(10000),
+        totalGastosCents: money(2000),
+        totalRealCents: money(12000),
+      }),
+      cargando: false,
+      error: null,
+    };
+    renderizar();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Quitar' })[0]!);
+
+    // No crashea: el gasto sigue visible y el listado de ítems vuelve al vacío.
+    expect(screen.getByText('combustible')).toBeTruthy();
+    expect(screen.getByText('Todavía no hay ítems cargados.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Confirmar compra' }).hasAttribute('disabled')).toBe(true);
   });
 
   it('nueva compra: título "Nueva compra", sin badge de estado', () => {

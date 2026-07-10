@@ -166,7 +166,15 @@ export function CompraPantalla() {
 
   const totales = totalesActuales(items, gastos);
   const metodo = configuracion?.metodoProrrateo ?? 'por_valor';
-  const itemsProrrateados = calcularItemsProrrateados(items, totales.totalGastosCents, metodo);
+  // Guarda (B1, hallazgo bloqueante del review de Fase 2): `prorratearGastos`
+  // (core) lanza `RangeError` si hay gastos (> 0) pero cero ítems entre los
+  // que repartirlos — correcto de su parte, pero acá se ejecuta en el CUERPO
+  // del componente (no en un handler), así que sin esta guarda cualquier
+  // render con `items: []` y `totalGastosCents > 0` (compra nueva con un
+  // gasto cargado antes que el primer ítem, o quitar el último ítem con
+  // gastos ya presentes) tira abajo toda la pantalla. Sin ítems no hay nada
+  // que prorratear: la lista vacía es la representación correcta.
+  const itemsProrrateados = items.length === 0 ? [] : calcularItemsProrrateados(items, totales.totalGastosCents, metodo);
 
   // Sin `acciones` de header a propósito (a diferencia de Proveedores/
   // Productos): `useHeader` cachea `acciones` en un efecto que SOLO se
@@ -408,14 +416,22 @@ export function CompraPantalla() {
             >
               {guardando ? 'Guardando…' : 'Guardar borrador'}
             </Button>
-            <Button onClick={() => void handleConfirmar()} disabled={confirmando || compraId === null || !enLinea}>
+            <Button
+              onClick={() => void handleConfirmar()}
+              disabled={confirmando || compraId === null || items.length === 0 || !enLinea}
+            >
               {confirmando ? 'Confirmando…' : 'Confirmar compra'}
             </Button>
           </div>
           {esNueva && !enLinea && (
             <p className="text-sm text-advertencia">Necesitás conexión para guardar una compra nueva.</p>
           )}
-          {!enLinea && (
+          {items.length === 0 && (
+            <p className="text-sm text-texto-secundario">
+              Agregá al menos un ítem para poder confirmar la compra{gastos.length > 0 ? ' y prorratear los gastos ya cargados' : ''}.
+            </p>
+          )}
+          {items.length > 0 && !enLinea && (
             <p className="text-sm text-advertencia">Necesitás conexión para confirmar la compra.</p>
           )}
         </div>
