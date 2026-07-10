@@ -13,6 +13,7 @@ export { configuracionConverter } from './converters/configuracion';
 export { categoriaConverter } from './converters/categoria';
 export { clienteConverter } from './converters/cliente';
 export { proveedorConverter } from './converters/proveedor';
+export { compraConverter } from './converters/compra';
 
 export {
   registrarVenta,
@@ -41,6 +42,15 @@ export {
   type EntradaIngresoPiezas,
   type PiezaIngreso,
 } from './stock';
+export {
+  guardarBorradorCompra,
+  actualizarBorradorCompra,
+  confirmarCompra,
+  type DatosBorradorCompra,
+  type ItemBorradorCompra,
+  type EntradaConfirmarCompra,
+  type EfectoProductoCompra,
+} from './compras';
 export { invitarUsuario, type EntradaInvitacion } from './invitaciones';
 export {
   crearCategoria,
@@ -63,6 +73,11 @@ export {
   ClienteInvalidoError,
   ErrorProveedor,
   ProveedorInvalidoError,
+  ErrorCompra,
+  CompraVaciaError,
+  EstadoCompraInvalidoError,
+  CompraIncoherenteError,
+  ProrateoIncoherenteError,
   ErrorInvitacion,
   EmailInvalidoError,
   DatosInvitacionInvalidosError,

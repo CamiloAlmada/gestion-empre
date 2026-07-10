@@ -5,7 +5,7 @@ import {
   type SnapshotOptions,
   type WithFieldValue,
 } from 'firebase/firestore';
-import { peso, type Configuracion } from '@gestion/core';
+import { peso, type Configuracion, type MetodoProrrateo } from '@gestion/core';
 
 /**
  * Forma del documento `configuracion/general` tal como vive en Firestore: los
@@ -15,7 +15,7 @@ import { peso, type Configuracion } from '@gestion/core';
 interface ConfiguracionDoc {
   nombreNegocio: string;
   umbralPiezaAgotadaGramos: number;
-  metodoProrrateo: 'por_valor' | 'por_peso';
+  metodoProrrateo: MetodoProrrateo;
 }
 
 /**

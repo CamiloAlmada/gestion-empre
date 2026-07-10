@@ -152,6 +152,62 @@ export class ProveedorInvalidoError extends ErrorProveedor {
 }
 
 /**
+ * Errores del módulo de compras (`compras.ts`, doc 03).
+ *
+ * Mismo patrón que las otras familias: una raíz abstracta para el `catch` genérico
+ * en la pantalla de compras y clases concretas para discriminar el mensaje. La
+ * confirmación es una escritura atómica con efectos de stock: como en el POS, se
+ * valida TODO (coherencia de totales, prorrateo y estado) ANTES de abrir el batch,
+ * fail fast en español.
+ */
+export abstract class ErrorCompra extends Error {}
+
+/** Se intentó confirmar una compra sin ítems. */
+export class CompraVaciaError extends ErrorCompra {
+  constructor(message: string) {
+    super(message);
+    this.name = 'CompraVaciaError';
+  }
+}
+
+/**
+ * Transición de estado inválida: confirmar una compra que no está en `borrador`
+ * (una `confirmada` es inmutable, doc 03), o efectos por producto que no cubren
+ * exactamente los ítems de la compra.
+ */
+export class EstadoCompraInvalidoError extends ErrorCompra {
+  constructor(message: string) {
+    super(message);
+    this.name = 'EstadoCompraInvalidoError';
+  }
+}
+
+/**
+ * La compra es internamente incoherente: un total no cierra con la suma de sus
+ * partes, un ítem no trae los datos que su tipo exige (gramos/unidades/piezas,
+ * costo real por kg), o un costo derivado no coincide con lo que recalcula `core`.
+ */
+export class CompraIncoherenteError extends ErrorCompra {
+  constructor(message: string) {
+    super(message);
+    this.name = 'CompraIncoherenteError';
+  }
+}
+
+/**
+ * Invariante del prorrateo roto: la suma de `gastoProrrateadoCents` de los ítems no
+ * es exactamente `totalGastosCents` (doc 03). Se calcula con `prorratearGastos` de
+ * `core`, que garantiza el cierre; este error protege contra un caller que arme la
+ * compra a mano o con un total de gastos que no coincide con sus gastos.
+ */
+export class ProrateoIncoherenteError extends ErrorCompra {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ProrateoIncoherenteError';
+  }
+}
+
+/**
  * Errores del alta de usuarios por invitación (`invitaciones.ts`).
  *
  * Mismo patrón que `ErrorEscrituraPOS`: una raíz abstracta para el `catch`

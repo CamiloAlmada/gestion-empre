@@ -20,6 +20,12 @@ interface ProductoDoc {
   modoStock: ModoStock;
   precioVentaCents: number;
   costoPromedioCents: number;
+  margenObjetivoBps?: number;
+  /**
+   * Campo legacy previo a F2-E (puntos porcentuales). No lo escribe ninguna UI —
+   * jamás llegó a persistirse—, pero el `fromFirestore` lo tolera migrándolo a bps
+   * si apareciera. Nunca se vuelve a escribir (`toFirestore` solo emite bps).
+   */
   margenObjetivoPct?: number;
   stockGranelGramos?: number;
   stockUnidades?: number;
@@ -37,8 +43,13 @@ interface ProductoDoc {
  * - `precioVentaCents` / `costoPromedioCents` se reconstruyen con `money()`:
  *   un doc corrupto con float explota al leer en lugar de propagarse.
  * - `stockGranelGramos` se reconstruye con `peso()`. `stockUnidades`,
- *   `umbralAlertaStock` y `margenObjetivoPct` son `number` planos en dominio
- *   (unidades enteras o puntos porcentuales, no magnitudes de peso/dinero).
+ *   `umbralAlertaStock` y `margenObjetivoBps` son `number` planos en dominio
+ *   (unidades enteras o basis points, no magnitudes de peso/dinero).
+ * - `margenObjetivoBps` migró de `margenObjetivoPct` (puntos porcentuales) en
+ *   F2-E. Comportamiento tolerante al leer: si el doc trae `margenObjetivoBps` se
+ *   usa; si no pero trae el legacy `margenObjetivoPct` (no debería existir: nunca
+ *   se escribió), se migra multiplicando por 100 (`40 pct` → `4000 bps`). Al
+ *   escribir se emite SOLO `margenObjetivoBps`, así un re-guardado limpia el legacy.
  * - Campos opcionales ausentes en Firestore ↔ `undefined` en dominio (nunca
  *   se escribe `null`; si el campo no está definido, se omite del doc).
  */
@@ -51,7 +62,7 @@ export const productoConverter: FirestoreDataConverter<Producto> = {
       modoStock,
       precioVentaCents,
       costoPromedioCents,
-      margenObjetivoPct,
+      margenObjetivoBps,
       stockGranelGramos,
       stockUnidades,
       umbralAlertaStock,
@@ -69,7 +80,7 @@ export const productoConverter: FirestoreDataConverter<Producto> = {
       activo,
       actualizadoEn,
     };
-    if (margenObjetivoPct !== undefined) doc.margenObjetivoPct = margenObjetivoPct;
+    if (margenObjetivoBps !== undefined) doc.margenObjetivoBps = margenObjetivoBps;
     if (stockGranelGramos !== undefined) doc.stockGranelGramos = stockGranelGramos;
     if (stockUnidades !== undefined) doc.stockUnidades = stockUnidades;
     if (umbralAlertaStock !== undefined) doc.umbralAlertaStock = umbralAlertaStock;
@@ -86,7 +97,9 @@ export const productoConverter: FirestoreDataConverter<Producto> = {
       modoStock: datos.modoStock,
       precioVentaCents: money(datos.precioVentaCents),
       costoPromedioCents: money(datos.costoPromedioCents),
-      margenObjetivoPct: datos.margenObjetivoPct,
+      margenObjetivoBps:
+        datos.margenObjetivoBps ??
+        (datos.margenObjetivoPct !== undefined ? datos.margenObjetivoPct * 100 : undefined),
       stockGranelGramos:
         datos.stockGranelGramos !== undefined ? peso(datos.stockGranelGramos) : undefined,
       stockUnidades: datos.stockUnidades,

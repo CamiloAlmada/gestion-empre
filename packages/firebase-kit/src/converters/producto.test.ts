@@ -24,7 +24,7 @@ const docCompleto = {
   modoStock: 'fraccionado_por_pieza',
   precioVentaCents: 89900,
   costoPromedioCents: 54000,
-  margenObjetivoPct: 40,
+  margenObjetivoBps: 4000,
   stockGranelGramos: 1500,
   stockUnidades: 3,
   umbralAlertaStock: 200,
@@ -42,7 +42,7 @@ describe('productoConverter.fromFirestore', () => {
     expect(producto.modoStock).toBe('fraccionado_por_pieza');
     expect(producto.precioVentaCents).toBe(89900);
     expect(producto.costoPromedioCents).toBe(54000);
-    expect(producto.margenObjetivoPct).toBe(40);
+    expect(producto.margenObjetivoBps).toBe(4000);
     expect(producto.stockGranelGramos).toBe(1500);
     expect(producto.stockUnidades).toBe(3);
     expect(producto.umbralAlertaStock).toBe(200);
@@ -52,16 +52,34 @@ describe('productoConverter.fromFirestore', () => {
 
   it('opcionales ausentes en el doc quedan undefined en dominio', () => {
     const docSinOpcionales: Partial<typeof docCompleto> = { ...docCompleto };
-    delete docSinOpcionales.margenObjetivoPct;
+    delete docSinOpcionales.margenObjetivoBps;
     delete docSinOpcionales.stockGranelGramos;
     delete docSinOpcionales.stockUnidades;
     delete docSinOpcionales.umbralAlertaStock;
     const producto = productoConverter.fromFirestore(snapshotDe('p2', docSinOpcionales), {});
 
-    expect(producto.margenObjetivoPct).toBeUndefined();
+    expect(producto.margenObjetivoBps).toBeUndefined();
     expect(producto.stockGranelGramos).toBeUndefined();
     expect(producto.stockUnidades).toBeUndefined();
     expect(producto.umbralAlertaStock).toBeUndefined();
+  });
+
+  it('migra el legacy margenObjetivoPct a bps (×100) cuando no hay margenObjetivoBps', () => {
+    const docLegacy: Partial<typeof docCompleto> & { margenObjetivoPct?: number } = {
+      ...docCompleto,
+    };
+    delete docLegacy.margenObjetivoBps;
+    docLegacy.margenObjetivoPct = 40;
+    const producto = productoConverter.fromFirestore(snapshotDe('p-legacy', docLegacy), {});
+
+    expect(producto.margenObjetivoBps).toBe(4000);
+  });
+
+  it('prioriza margenObjetivoBps sobre el legacy margenObjetivoPct si ambos están', () => {
+    const docAmbos = { ...docCompleto, margenObjetivoBps: 3333, margenObjetivoPct: 40 };
+    const producto = productoConverter.fromFirestore(snapshotDe('p-ambos', docAmbos), {});
+
+    expect(producto.margenObjetivoBps).toBe(3333);
   });
 
   it('rechaza precioVentaCents no entero (doc corrupto)', () => {
@@ -88,7 +106,7 @@ describe('productoConverter.toFirestore', () => {
     modoStock: 'fraccionado_por_pieza',
     precioVentaCents: money(89900),
     costoPromedioCents: money(54000),
-    margenObjetivoPct: 40,
+    margenObjetivoBps: 4000,
     stockGranelGramos: peso(1500),
     stockUnidades: 3,
     umbralAlertaStock: 200,
@@ -114,16 +132,22 @@ describe('productoConverter.toFirestore', () => {
   it('omite del doc los opcionales que están undefined', () => {
     const productoSinOpcionales: Producto = {
       ...producto,
-      margenObjetivoPct: undefined,
+      margenObjetivoBps: undefined,
       stockGranelGramos: undefined,
       stockUnidades: undefined,
       umbralAlertaStock: undefined,
     };
     const doc = productoConverter.toFirestore(productoSinOpcionales);
 
-    expect(doc).not.toHaveProperty('margenObjetivoPct');
+    expect(doc).not.toHaveProperty('margenObjetivoBps');
     expect(doc).not.toHaveProperty('stockGranelGramos');
     expect(doc).not.toHaveProperty('stockUnidades');
     expect(doc).not.toHaveProperty('umbralAlertaStock');
+  });
+
+  it('nunca emite el campo legacy margenObjetivoPct', () => {
+    const doc = productoConverter.toFirestore(producto);
+    expect(doc).not.toHaveProperty('margenObjetivoPct');
+    expect(doc.margenObjetivoBps).toBe(4000);
   });
 });
