@@ -1,5 +1,7 @@
 export { Button, type ButtonProps } from './Button';
 export { Input, type InputProps } from './Input';
+export { CampoBusqueda, type CampoBusquedaProps } from './CampoBusqueda';
+export { normalizarBusqueda } from './normalizarBusqueda';
 export { Layout, type LayoutProps } from './Layout';
 export {
   ProveedorTema,

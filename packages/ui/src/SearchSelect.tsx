@@ -7,6 +7,7 @@ import {
   type ChangeEvent,
   type KeyboardEvent,
 } from 'react';
+import { normalizarBusqueda as normalizar } from './normalizarBusqueda';
 
 export interface OpcionSearchSelect {
   id: string;
@@ -20,14 +21,6 @@ export interface SearchSelectProps {
   onChange: (id: string | null) => void;
   placeholder?: string;
   disabled?: boolean;
-}
-
-/** Minúsculas y sin diacríticos, para comparar "arbol" contra "Árbol". */
-function normalizar(texto: string): string {
-  return texto
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase();
 }
 
 function idOpcion(baseId: string, opcionId: string): string {
