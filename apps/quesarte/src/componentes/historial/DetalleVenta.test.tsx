@@ -101,6 +101,38 @@ describe('DetalleVenta - cabecera e ítems', () => {
     expect(screen.getByText('Total: $ 800,00')).toBeTruthy();
   });
 
+  it('venta con cliente asociado: muestra "Cliente: {nombre}" (denormalizado, doc 07)', () => {
+    mocks.useDoc.mockReturnValue({ datos: null, cargando: false, error: null });
+
+    render(
+      <DetalleVenta
+        venta={venta({ clienteId: 'c1', clienteNombre: 'Ana Pérez' })}
+        esAdmin={false}
+        db={{} as never}
+        onVolver={() => {}}
+        onAnular={() => {}}
+      />,
+    );
+
+    expect(screen.getByText('Cliente: Ana Pérez')).toBeTruthy();
+  });
+
+  it('venta anónima (sin clienteNombre): no muestra la línea de cliente', () => {
+    mocks.useDoc.mockReturnValue({ datos: null, cargando: false, error: null });
+
+    render(
+      <DetalleVenta
+        venta={venta()}
+        esAdmin={false}
+        db={{} as never}
+        onVolver={() => {}}
+        onAnular={() => {}}
+      />,
+    );
+
+    expect(screen.queryByText(/^Cliente:/)).toBeNull();
+  });
+
   it('"Volver a Historial" llama a onVolver', () => {
     mocks.useDoc.mockReturnValue({ datos: null, cargando: false, error: null });
     const onVolver = vi.fn();

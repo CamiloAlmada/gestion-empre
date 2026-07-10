@@ -12,6 +12,12 @@ export interface ListaVentasProps {
  * `ListaProductos` en Stock), con número, fecha/hora, cantidad de ítems,
  * total, medio de pago y badge de anulada si corresponde. Tocar una fila
  * selecciona la venta (el llamador decide qué hacer — ver `Historial.tsx`).
+ *
+ * `clienteNombre` (doc 07: denormalizado en la venta "para no depender de un
+ * join al mostrar el historial") se muestra en esta misma fila secundaria
+ * cuando la venta tiene cliente asociado. Una venta anónima no agrega nada
+ * en su lugar — no hay "sin cliente" que ensucie la fila por defecto, doc
+ * 06 §1 "menos, ante la duda".
  */
 export function ListaVentas({ ventas, onSeleccionar }: ListaVentasProps) {
   return (
@@ -33,6 +39,7 @@ export function ListaVentas({ ventas, onSeleccionar }: ListaVentasProps) {
               <span>{formatearFechaHora(venta.fecha)}</span>
               <span>{textoCantidadItems(venta.items.length)}</span>
               <span>{ETIQUETAS_MEDIO_PAGO[venta.medioPago]}</span>
+              {venta.clienteNombre !== undefined && <span>{venta.clienteNombre}</span>}
             </div>
             <BadgeEstadoVenta estado={venta.estado} />
           </button>

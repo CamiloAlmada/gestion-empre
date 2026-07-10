@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router';
 import { collection, doc, orderBy, query, where } from 'firebase/firestore';
 import { formatearMoney, type Venta } from '@gestion/core';
@@ -16,6 +16,7 @@ import { Button, DataTable, StatCard, useToasts, type ColumnaDataTable } from '@
 import { db } from '../firebase';
 import { useHeader } from '../componentes/header/ContextoHeader';
 import { formatearFecha } from '../componentes/stock/resumen';
+import { BadgeEstadoVenta } from '../componentes/historial/BadgeEstadoVenta';
 import { ETIQUETAS_MEDIO_PAGO, formatearFechaHora } from '../componentes/historial/formato';
 import {
   calcularDiasDesdeUltimaCompra,
@@ -164,16 +165,50 @@ export function DetalleClientePantalla() {
   const ticketPromedio = calcularTicketPromedio(datosCliente.stats);
   const diasDesdeUltimaCompra = calcularDiasDesdeUltimaCompra(datosCliente.stats);
 
+  // La query trae TODAS las ventas del cliente (también las anuladas: no se
+  // filtran — mostrar el badge es más honesto que ocultarlas, ver
+  // `BadgeEstadoVenta`). Sin esto, las stats ya revertidas ("2 ventas") no
+  // reconciliarían con filas indistinguibles en la tabla. Cada celda de una
+  // fila anulada se de-enfatiza (`opacity-60`, `DataTable` no expone
+  // className por fila) — mismo criterio visual que el badge: el color no es
+  // la única señal, el texto "Anulada" lo es.
+  function celda(contenido: ReactNode, anulada: boolean) {
+    return anulada ? <span className="opacity-60">{contenido}</span> : contenido;
+  }
+
   const columnasVentas: ColumnaDataTable<Venta>[] = [
-    { clave: 'numero', titulo: 'N°', render: (v) => `#${v.numero}` },
-    { clave: 'fecha', titulo: 'Fecha', render: (v) => formatearFechaHora(v.fecha) },
-    { clave: 'medioPago', titulo: 'Medio de pago', render: (v) => ETIQUETAS_MEDIO_PAGO[v.medioPago] },
-    { clave: 'total', titulo: 'Total', alinear: 'derecha', render: (v) => formatearMoney(v.totalCents) },
+    {
+      clave: 'numero',
+      titulo: 'N°',
+      render: (v) => celda(`#${v.numero}`, v.estado === 'anulada'),
+    },
+    {
+      clave: 'fecha',
+      titulo: 'Fecha',
+      render: (v) => celda(formatearFechaHora(v.fecha), v.estado === 'anulada'),
+    },
+    {
+      clave: 'medioPago',
+      titulo: 'Medio de pago',
+      render: (v) => celda(ETIQUETAS_MEDIO_PAGO[v.medioPago], v.estado === 'anulada'),
+    },
+    {
+      clave: 'total',
+      titulo: 'Total',
+      alinear: 'derecha',
+      render: (v) => celda(formatearMoney(v.totalCents), v.estado === 'anulada'),
+    },
+    {
+      clave: 'estado',
+      titulo: 'Estado',
+      render: (v) => <BadgeEstadoVenta estado={v.estado} />,
+    },
   ];
 
   function filaCompactaVenta(v: Venta) {
+    const anulada = v.estado === 'anulada';
     return (
-      <div className="flex min-h-[56px] flex-col gap-1 p-4">
+      <div className={`flex min-h-[56px] flex-col gap-1 p-4 ${anulada ? 'opacity-60' : ''}`}>
         <div className="flex items-baseline justify-between gap-2">
           <span className="font-medium text-texto">Venta #{v.numero}</span>
           <span className="tabular-nums font-semibold text-texto">{formatearMoney(v.totalCents)}</span>
@@ -182,6 +217,7 @@ export function DetalleClientePantalla() {
           <span>{formatearFechaHora(v.fecha)}</span>
           <span>{ETIQUETAS_MEDIO_PAGO[v.medioPago]}</span>
         </div>
+        <BadgeEstadoVenta estado={v.estado} />
       </div>
     );
   }

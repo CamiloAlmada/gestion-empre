@@ -32,12 +32,20 @@ const MS_POR_DIA = 24 * 60 * 60 * 1000;
  * defecto, el momento de la llamada — parametrizado para tests
  * determinísticos). Redondea hacia abajo: comprar "hace 23 horas" cuenta como
  * "0 días". `null` si el cliente no registra ninguna compra todavía.
+ *
+ * También devuelve `null` con `cantidadVentas <= 0` aunque `ultimaCompra`
+ * siga presente: `primeraCompra`/`ultimaCompra` son cache APROXIMADO que la
+ * anulación no rebobina (doc 07 — `StatsCliente`, decisión documentada, NO
+ * se toca esa fuente). Sin este blindaje, anular la única venta de un
+ * cliente dejaría "0 ventas" pero "Última compra: hace N días" en la ficha —
+ * números que no reconcilian a la vista. Mismo criterio que
+ * `calcularTicketPromedio`, que ya devuelve `null` en ese caso.
  */
 export function calcularDiasDesdeUltimaCompra(
   stats: StatsCliente,
   ahora: Date = new Date(),
 ): number | null {
-  if (stats.ultimaCompra === undefined) return null;
+  if (stats.cantidadVentas <= 0 || stats.ultimaCompra === undefined) return null;
   const diffMs = ahora.getTime() - stats.ultimaCompra.getTime();
   return Math.max(0, Math.floor(diffMs / MS_POR_DIA));
 }

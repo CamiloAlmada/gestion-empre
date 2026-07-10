@@ -49,6 +49,20 @@ describe('ListaVentas', () => {
     expect(screen.queryByText('Anulada')).toBeNull();
   });
 
+  it('venta con cliente asociado: muestra el nombre del cliente (denormalizado, doc 07)', () => {
+    render(
+      <ListaVentas ventas={[venta({ clienteId: 'c1', clienteNombre: 'Ana Pérez' })]} onSeleccionar={() => {}} />,
+    );
+
+    expect(screen.getByText('Ana Pérez')).toBeTruthy();
+  });
+
+  it('venta anónima (sin clienteNombre): no agrega ningún placeholder tipo "sin cliente"', () => {
+    render(<ListaVentas ventas={[venta()]} onSeleccionar={() => {}} />);
+
+    expect(screen.queryByText(/sin cliente/i)).toBeNull();
+  });
+
   it('tocar una fila llama a onSeleccionar con la venta', () => {
     const onSeleccionar = vi.fn();
     const v = venta();

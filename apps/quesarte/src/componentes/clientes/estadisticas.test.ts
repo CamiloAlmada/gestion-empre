@@ -29,7 +29,7 @@ describe('calcularDiasDesdeUltimaCompra', () => {
 
   it('calcula días enteros entre la última compra y "ahora"', () => {
     const resultado = calcularDiasDesdeUltimaCompra(
-      stats({ ultimaCompra: new Date('2026-07-01T10:00:00') }),
+      stats({ cantidadVentas: 1, ultimaCompra: new Date('2026-07-01T10:00:00') }),
       new Date('2026-07-09T10:00:00'),
     );
     expect(resultado).toBe(8);
@@ -37,7 +37,7 @@ describe('calcularDiasDesdeUltimaCompra', () => {
 
   it('redondea hacia abajo: menos de 24hs desde la última compra cuenta como 0 días', () => {
     const resultado = calcularDiasDesdeUltimaCompra(
-      stats({ ultimaCompra: new Date('2026-07-09T08:00:00') }),
+      stats({ cantidadVentas: 1, ultimaCompra: new Date('2026-07-09T08:00:00') }),
       new Date('2026-07-09T20:00:00'),
     );
     expect(resultado).toBe(0);
@@ -45,9 +45,20 @@ describe('calcularDiasDesdeUltimaCompra', () => {
 
   it('nunca devuelve un valor negativo aunque "ahora" sea anterior a la última compra registrada', () => {
     const resultado = calcularDiasDesdeUltimaCompra(
-      stats({ ultimaCompra: new Date('2026-07-10T00:00:00') }),
+      stats({ cantidadVentas: 1, ultimaCompra: new Date('2026-07-10T00:00:00') }),
       new Date('2026-07-09T00:00:00'),
     );
     expect(resultado).toBe(0);
+  });
+
+  it('cantidadVentas en 0 con ultimaCompra todavía presente (anular la única venta): devuelve null', () => {
+    // `ultimaCompra` es cache aproximado que la anulación no rebobina (doc
+    // 07): sin este blindaje, un cliente con "0 ventas" mostraría igual
+    // "Última compra: hace N días" con la fecha vieja.
+    const resultado = calcularDiasDesdeUltimaCompra(
+      stats({ cantidadVentas: 0, ultimaCompra: new Date('2026-07-01T10:00:00') }),
+      new Date('2026-07-09T10:00:00'),
+    );
+    expect(resultado).toBeNull();
   });
 });

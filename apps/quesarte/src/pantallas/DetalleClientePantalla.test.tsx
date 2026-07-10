@@ -234,6 +234,30 @@ describe('DetalleClientePantalla - estadísticas', () => {
     // Dos "—": ticket promedio y última compra.
     expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(2);
   });
+
+  it('tras anular la única venta (cantidadVentas vuelve a 0 pero ultimaCompra queda con la fecha vieja): "Última compra" muestra "—", no "Hace N días"', () => {
+    configurarAuth('admin');
+    configurarCliente(
+      estadoOkDoc(
+        clienteDe({
+          id: 'c1',
+          nombre: 'Ana Pérez',
+          stats: {
+            cantidadVentas: 0,
+            totalHistoricoCents: money(0),
+            ultimaCompra: new Date('2026-01-01'),
+          },
+        }),
+      ),
+    );
+    configurarVentas({ datos: [], cargando: false, error: null });
+
+    renderizar();
+
+    expect(screen.queryByText(/Hace \d+ día/)).toBeNull();
+    expect(screen.queryByText('Hoy')).toBeNull();
+    expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(2);
+  });
 });
 
 describe('DetalleClientePantalla - historial de ventas', () => {
@@ -258,6 +282,49 @@ describe('DetalleClientePantalla - historial de ventas', () => {
     renderizar();
 
     expect(screen.getByText('Este cliente todavía no tiene ventas registradas.')).toBeTruthy();
+  });
+
+  it('NO filtra las ventas anuladas de la lista: aparecen con el badge "Anulada" (reconcilia con stats ya revertidas)', () => {
+    configurarAuth('admin');
+    // Stats coherentes con UNA venta anulada de las 3 que trae el historial:
+    // "2 ventas" en las stats, pero la tabla muestra las 3 (con la anulada
+    // distinguible por su badge) — nunca 3 filas indistinguibles.
+    configurarCliente(
+      estadoOkDoc(
+        clienteDe({
+          id: 'c1',
+          nombre: 'Ana Pérez',
+          stats: { cantidadVentas: 2, totalHistoricoCents: money(100000) },
+        }),
+      ),
+    );
+    configurarVentas(
+      estadoOkColeccion([
+        ventaDe({ id: 'v1', numero: 1001, estado: 'completada' }),
+        ventaDe({ id: 'v2', numero: 1002, estado: 'anulada' }),
+        ventaDe({ id: 'v3', numero: 1003, estado: 'completada' }),
+      ]),
+    );
+
+    renderizar();
+
+    const tabla = within(screen.getByRole('table'));
+    expect(tabla.getByText('#1001')).toBeTruthy();
+    expect(tabla.getByText('#1002')).toBeTruthy();
+    expect(tabla.getByText('#1003')).toBeTruthy();
+    expect(tabla.getByText('Anulada')).toBeTruthy();
+    // Solo una fila anulada: el badge no aparece más de una vez.
+    expect(tabla.getAllByText('Anulada').length).toBe(1);
+  });
+
+  it('una venta completada no muestra el badge "Anulada"', () => {
+    configurarAuth('admin');
+    configurarCliente(estadoOkDoc(clienteDe({ id: 'c1', nombre: 'Ana Pérez' })));
+    configurarVentas(estadoOkColeccion([ventaDe({ id: 'v1', numero: 1001, estado: 'completada' })]));
+
+    renderizar();
+
+    expect(within(screen.getByRole('table')).queryByText('Anulada')).toBeNull();
   });
 });
 

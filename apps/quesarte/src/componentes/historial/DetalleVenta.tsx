@@ -122,6 +122,9 @@ export function DetalleVenta({ venta, esAdmin, db, onVolver, onAnular }: Detalle
         <p className="text-sm text-texto-secundario">
           Medio de pago: {ETIQUETAS_MEDIO_PAGO[venta.medioPago]}
         </p>
+        {venta.clienteNombre !== undefined && (
+          <p className="text-sm text-texto-secundario">Cliente: {venta.clienteNombre}</p>
+        )}
       </div>
 
       <DataTable
