@@ -650,7 +650,7 @@ describe('Venta - cliente (docs/07-clientes-proveedores.md §POS)', () => {
   it('alta rápida: crea el cliente con solo el nombre y lo asocia a la venta', async () => {
     configurarAuth();
     mocks.registrarVenta.mockResolvedValue({ ventaId: 'v1' });
-    mocks.crearCliente.mockResolvedValue({ clienteId: 'nuevo-1' });
+    mocks.crearCliente.mockReturnValue({ clienteId: 'nuevo-1', confirmacion: Promise.resolve() });
     agregarUnidadAlCarrito([]);
 
     abrirSelectorCliente();
@@ -672,15 +672,16 @@ describe('Venta - cliente (docs/07-clientes-proveedores.md §POS)', () => {
     expect(entrada.cliente).toEqual({ id: 'nuevo-1', nombre: 'Cliente Nuevo', esPrimeraCompra: true });
   });
 
-  it('alta rápida offline: no espera el ack, cierra el modal y asocia en cuanto resuelve', async () => {
+  it('alta rápida offline: asocia el cliente a la venta en curso YA (id síncrono), sin esperar el ack', async () => {
     configurarAuth();
     mocks.useOnlineStatus.mockReturnValue(false);
-    let resolverCreacion: (valor: { clienteId: string }) => void;
-    mocks.crearCliente.mockReturnValue(
-      new Promise((resolve) => {
-        resolverCreacion = resolve;
-      }),
-    );
+    // `crearCliente` devuelve el id de forma SÍNCRONA; `confirmacion` (el ack)
+    // queda pendiente para siempre en este test, y aun así el cliente debe
+    // quedar asociado a la venta al instante (criterio doc 07: alta offline).
+    mocks.crearCliente.mockReturnValue({
+      clienteId: 'offline-1',
+      confirmacion: new Promise<void>(() => {}),
+    });
     agregarUnidadAlCarrito([]);
 
     abrirSelectorCliente();
@@ -689,14 +690,21 @@ describe('Venta - cliente (docs/07-clientes-proveedores.md §POS)', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: 'Crear «Offline Cliente»' }));
 
-    // El modal cierra YA, sin esperar el ack: no queda un botón "Creando…"
-    // colgado (docs/06-ui-ux.md §8).
-    expect(await screen.findByText('Cliente guardado sin conexión. Se asociará a la venta al sincronizar.')).toBeTruthy();
+    // Sin conexión y sin resolver el ack: el modal cierra YA y el cliente ya
+    // está asociado a la venta en curso (docs/06-ui-ux.md §8, doc 07).
+    expect(await screen.findByText('Cliente guardado sin conexión. Se sincronizará al reconectar.')).toBeTruthy();
     expect(screen.queryByRole('dialog')).toBeNull();
-    expect(screen.queryAllByText(/Cliente: Offline Cliente/).length).toBe(0);
+    expect(screen.getAllByText('Cliente: Offline Cliente').length).toBeGreaterThan(0);
 
-    resolverCreacion!({ clienteId: 'offline-1' });
-    await waitFor(() => expect(screen.getAllByText('Cliente: Offline Cliente').length).toBeGreaterThan(0));
+    // Y la venta se cobra asociada a ese cliente, sin haber esperado nunca el ack.
+    mocks.registrarVenta.mockResolvedValue({ ventaId: 'v1' });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Cobrar' })[0]!);
+    fireEvent.click(screen.getByRole('button', { name: 'Efectivo' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }));
+
+    await waitFor(() => expect(mocks.registrarVenta).toHaveBeenCalledTimes(1));
+    const [, entrada] = mocks.registrarVenta.mock.calls[0] as [unknown, EntradaVenta];
+    expect(entrada.cliente).toEqual({ id: 'offline-1', nombre: 'Offline Cliente', esPrimeraCompra: true });
   });
 
   it('cobrar limpia el cliente asociado: la venta siguiente vuelve a ser anónima', async () => {

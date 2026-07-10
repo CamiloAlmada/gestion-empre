@@ -77,28 +77,33 @@ export function Clientes() {
    * conexión dispara sin esperar (la caché local ya la aplicó), cierra el
    * modal al toque y avisa que falta sincronizar.
    */
-  async function handleGuardar(datos: DatosCliente) {
-    const escritura = crearCliente(db, datos);
+  function handleGuardar(datos: DatosCliente) {
+    // `crearCliente` genera el id client-side y devuelve `confirmacion` (el ack
+    // del setDoc). Esta pantalla no necesita el id (navega al listado), solo
+    // observa `confirmacion` para el aviso online/offline.
+    const { confirmacion } = crearCliente(db, datos);
 
     if (!enLinea) {
       setAltaAbierta(false);
       mostrarToast('Guardado sin conexión. Se sincronizará al reconectar.', 'info');
-      escritura.catch(() => {
+      confirmacion.catch(() => {
         mostrarToast('No se pudo sincronizar el cliente creado.', 'error');
       });
       return;
     }
 
     setGuardando(true);
-    try {
-      await escritura;
-      mostrarToast('Cliente creado.', 'exito');
-      setAltaAbierta(false);
-    } catch {
-      mostrarToast('No se pudo crear el cliente. Intentá de nuevo.', 'error');
-    } finally {
-      setGuardando(false);
-    }
+    confirmacion
+      .then(() => {
+        mostrarToast('Cliente creado.', 'exito');
+        setAltaAbierta(false);
+      })
+      .catch(() => {
+        mostrarToast('No se pudo crear el cliente. Intentá de nuevo.', 'error');
+      })
+      .finally(() => {
+        setGuardando(false);
+      });
   }
 
   let contenido;
@@ -162,7 +167,7 @@ export function Clientes() {
         abierto={altaAbierta}
         cliente={null}
         guardando={guardando}
-        onGuardar={(datos) => void handleGuardar(datos)}
+        onGuardar={handleGuardar}
         onCerrar={() => setAltaAbierta(false)}
       />
     </div>

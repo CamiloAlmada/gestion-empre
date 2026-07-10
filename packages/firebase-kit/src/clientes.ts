@@ -69,12 +69,22 @@ function copiarContacto(datos: DatosCliente, destino: DocumentData): void {
  * Sirve para el alta rápida (solo `nombre`) y para el alta completa (con datos de
  * contacto). No lee de Firestore: el alta rápida debe funcionar offline (doc 06 §8).
  *
- * @throws {ClienteInvalidoError} si el nombre queda vacío tras `trim()`.
+ * Devuelve el `clienteId` de forma SÍNCRONA: el id se genera 100% client-side
+ * (`doc(collection(...))`), sin round-trip al servidor, así que el POS puede
+ * asociar el cliente recién creado a la venta EN CURSO al instante, con o sin
+ * conexión (criterio del doc 07: "alta rápida desde el POS funcionando offline";
+ * patrón de escrituras del doc 06 §8). `confirmacion` es la promesa del `setDoc`:
+ * resuelve cuando el servidor acusa la escritura (offline, recién al reconectar).
+ * El caller usa el id ya mismo y decide si observa `confirmacion` (para avisar de
+ * un fallo de sincronización) o la ignora — nunca necesita esperarla para el id.
+ *
+ * @throws {ClienteInvalidoError} si el nombre queda vacío tras `trim()`. Falla
+ *   SINCRÓNICAMENTE, antes de generar id o escribir nada.
  */
-export async function crearCliente(
+export function crearCliente(
   db: Firestore,
   datos: DatosCliente,
-): Promise<{ clienteId: string }> {
+): { clienteId: string; confirmacion: Promise<void> } {
   const nombre = exigirNombre(datos.nombre);
 
   const ref = doc(collection(db, 'clientes')).withConverter(clienteConverter);
@@ -90,9 +100,9 @@ export async function crearCliente(
     activo: true,
     stats: { cantidadVentas: 0, totalHistoricoCents: money(0) },
   };
-  await setDoc(ref, cliente);
+  const confirmacion = setDoc(ref, cliente);
 
-  return { clienteId: ref.id };
+  return { clienteId: ref.id, confirmacion };
 }
 
 /**

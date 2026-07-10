@@ -244,7 +244,7 @@ describe('Clientes - alta', () => {
 
   it('con conexión: crea el cliente, muestra el toast de éxito y cierra el modal', async () => {
     configurarClientes(estadoOk([]));
-    mocks.crearCliente.mockResolvedValue({ clienteId: 'nuevo' });
+    mocks.crearCliente.mockReturnValue({ clienteId: 'nuevo', confirmacion: Promise.resolve() });
     renderizar();
 
     fireEvent.click(screen.getAllByRole('button', { name: 'Agregar cliente' })[0]!);
@@ -260,7 +260,7 @@ describe('Clientes - alta', () => {
   it('sin conexión: guarda sin esperar el ack, cierra el modal al instante y avisa que falta sincronizar', async () => {
     configurarClientes(estadoOk([]));
     mocks.useOnlineStatus.mockReturnValue(false);
-    mocks.crearCliente.mockResolvedValue({ clienteId: 'nuevo' });
+    mocks.crearCliente.mockReturnValue({ clienteId: 'nuevo', confirmacion: Promise.resolve() });
     renderizar();
 
     fireEvent.click(screen.getAllByRole('button', { name: 'Agregar cliente' })[0]!);
@@ -275,9 +275,12 @@ describe('Clientes - alta', () => {
     ).toBeTruthy();
   });
 
-  it('si crearCliente falla, muestra un toast de error', async () => {
+  it('si la escritura falla (online), muestra un toast de error', async () => {
     configurarClientes(estadoOk([]));
-    mocks.crearCliente.mockRejectedValue(new Error('boom'));
+    mocks.crearCliente.mockReturnValue({
+      clienteId: 'nuevo',
+      confirmacion: Promise.reject(new Error('boom')),
+    });
     renderizar();
 
     fireEvent.click(screen.getAllByRole('button', { name: 'Agregar cliente' })[0]!);

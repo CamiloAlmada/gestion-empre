@@ -47,9 +47,21 @@ beforeEach(() => {
 });
 
 describe('crearCliente', () => {
-  it('alta rápida (solo nombre): stats en cero, activo true, fechaAlta y sin opcionales', async () => {
+  it('expone el clienteId SÍNCRONAMENTE (sin esperar el ack) y una confirmacion que resuelve', async () => {
+    // El id se genera client-side: está disponible en el objeto devuelto, sin
+    // await. `confirmacion` es la promesa del setDoc (el ack del servidor).
+    const resultado = crearCliente(db, { nombre: 'Marta' });
+    expect(typeof resultado.clienteId).toBe('string');
+    expect(resultado.clienteId.length).toBeGreaterThan(0);
+    expect(resultado.confirmacion).toBeInstanceOf(Promise);
+    // El setDoc ya se disparó de forma síncrona dentro de crearCliente.
+    expect(mocks.setDoc).toHaveBeenCalledTimes(1);
+    await expect(resultado.confirmacion).resolves.toBeUndefined();
+  });
+
+  it('alta rápida (solo nombre): stats en cero, activo true, fechaAlta y sin opcionales', () => {
     const antes = Date.now();
-    const { clienteId } = await crearCliente(db, { nombre: '  Marta  ' });
+    const { clienteId } = crearCliente(db, { nombre: '  Marta  ' });
     const despues = Date.now();
 
     const [ref, cliente] = mocks.setDoc.mock.calls[0] as [RefFalsa, Record<string, unknown>];
@@ -67,8 +79,8 @@ describe('crearCliente', () => {
     expect(cliente.telefono).toBeUndefined();
   });
 
-  it('alta completa: guarda los datos de contacto provistos', async () => {
-    await crearCliente(db, {
+  it('alta completa: guarda los datos de contacto provistos', () => {
+    crearCliente(db, {
       nombre: 'Marta González',
       alias: 'Marta la de enfrente',
       telefono: '099123456',
@@ -81,8 +93,8 @@ describe('crearCliente', () => {
     expect(cliente.email).toBeUndefined();
   });
 
-  it('rechaza nombre vacío tras trim y no escribe', async () => {
-    await expect(crearCliente(db, { nombre: '   ' })).rejects.toThrow(ClienteInvalidoError);
+  it('rechaza nombre vacío tras trim SINCRÓNICAMENTE y no escribe', () => {
+    expect(() => crearCliente(db, { nombre: '   ' })).toThrow(ClienteInvalidoError);
     expect(mocks.setDoc).not.toHaveBeenCalled();
   });
 });

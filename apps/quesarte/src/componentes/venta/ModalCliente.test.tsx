@@ -25,7 +25,6 @@ function renderModal(props: Partial<ModalClienteProps> = {}) {
       clientes={[marta, juan]}
       cargando={false}
       error={false}
-      creando={false}
       onSeleccionar={vi.fn()}
       onCrear={vi.fn()}
       {...props}
@@ -122,17 +121,6 @@ describe('ModalCliente', () => {
     expect(onCrear).toHaveBeenCalledWith('Nuevo Cliente');
   });
 
-  it('creando: el botón de alta rápida se deshabilita y cambia de texto', () => {
-    renderModal({ creando: true });
-
-    fireEvent.change(screen.getByLabelText('Buscar por nombre, alias o teléfono'), {
-      target: { value: 'Alguien' },
-    });
-
-    const boton = screen.getByRole('button', { name: 'Creando…' }) as HTMLButtonElement;
-    expect(boton.disabled).toBe(true);
-  });
-
   it('al reabrir, la búsqueda arranca en blanco (no arrastra la anterior)', () => {
     const { rerender } = renderModal({ abierto: false });
     rerender(
@@ -142,7 +130,6 @@ describe('ModalCliente', () => {
         clientes={[marta, juan]}
         cargando={false}
         error={false}
-        creando={false}
         onSeleccionar={vi.fn()}
         onCrear={vi.fn()}
       />,

@@ -30,13 +30,11 @@ export interface ModalClienteProps {
   clientes: Cliente[];
   cargando: boolean;
   error: boolean;
-  /** `true` mientras se está creando el cliente del alta rápida (deshabilita
-   * el botón "Crear" para evitar doble alta con dos toques rápidos). */
-  creando: boolean;
   onSeleccionar: (cliente: Cliente) => void;
   /** Alta rápida: crea un cliente con SOLO el nombre tipeado y lo asocia.
-   * La escritura a Firestore (con su rama online/offline, doc 06 §8) la
-   * resuelve `Venta.tsx` — este modal solo reporta el nombre confirmado. */
+   * `Venta.tsx` resuelve todo sincrónicamente (el id es client-side) y cierra
+   * este modal al instante, así que NO hace falta un estado "creando": el modal
+   * se desmonta antes de que un segundo toque pueda repetir el alta. */
   onCrear: (nombre: string) => void;
 }
 
@@ -52,7 +50,6 @@ export function ModalCliente({
   clientes,
   cargando,
   error,
-  creando,
   onSeleccionar,
   onCrear,
 }: ModalClienteProps) {
@@ -110,10 +107,9 @@ export function ModalCliente({
           <Button
             variante="secundaria"
             onClick={() => onCrear(textoLimpio)}
-            disabled={creando}
             className="min-h-11 w-full"
           >
-            {creando ? 'Creando…' : `Crear «${textoLimpio}»`}
+            {`Crear «${textoLimpio}»`}
           </Button>
         )}
       </div>

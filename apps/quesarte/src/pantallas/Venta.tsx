@@ -117,10 +117,6 @@ export function Venta() {
   const [modalCobroAbierto, setModalCobroAbierto] = useState(false);
   const [cobrando, setCobrando] = useState(false);
   const [modalClienteAbierto, setModalClienteAbierto] = useState(false);
-  // `true` mientras se espera el ack del alta rápida ONLINE (ver
-  // `confirmarAltaRapidaCliente`): deshabilita el botón "Crear" del modal
-  // para que dos toques rápidos no den de alta el mismo nombre dos veces.
-  const [creandoCliente, setCreandoCliente] = useState(false);
 
   const productosQuery = useMemo(
     () =>
@@ -228,54 +224,39 @@ export function Venta() {
   }
 
   /**
-   * Alta rápida (solo nombre) + asociación a la venta en curso. Sigue el
-   * patrón híbrido online/offline de `docs/06-ui-ux.md §8` (mismo criterio
-   * que `Productos.tsx`/`confirmarCobro`, abajo), con una diferencia clave:
-   * a diferencia de esas escrituras, ACÁ sí necesitamos el `clienteId` que
-   * devuelve `crearCliente` para poder asociarlo — por eso NO se dispara
-   * "a ciegas" sin mirar el resultado ni offline ni online: lo que cambia
-   * entre ramas es solo CUÁNDO se cierra el modal y aviso al vendedor, nunca
-   * si se espera o no el resultado (un `await` incondicional colgaría el
-   * botón "Creando…" para siempre sin conexión, que es exactamente lo que
-   * `docs/06-ui-ux.md §8` prohíbe).
+   * Alta rápida (solo nombre) + asociación a la venta en curso.
+   *
+   * El `clienteId` es 100% client-side (`crearCliente` lo genera con
+   * `doc(collection(...))` y lo devuelve SÍNCRONAMENTE), así que asociamos el
+   * cliente a la venta en curso y cerramos el modal AL INSTANTE, haya o no
+   * conexión — sin `.then()` diferido, que es justo lo que rompía el criterio
+   * "alta rápida offline" del doc 07 (antes, sin conexión, el cliente no se
+   * asociaba hasta reconectar). La escritura se encola y solo se OBSERVA para
+   * avisar si finalmente falla (patrón de escrituras del doc 06 §8, igual que
+   * `confirmarCobro` abajo). El toast de éxito es inmediato.
    *
    * Un cliente recién creado siempre tiene `stats.cantidadVentas === 0`
    * (`crearCliente` los inicializa en cero): `esPrimeraCompra: true` sin
    * necesidad de leer nada.
    */
   function confirmarAltaRapidaCliente(nombre: string) {
-    const escritura = crearCliente(db, { nombre });
+    const { clienteId, confirmacion } = crearCliente(db, { nombre });
+
+    seleccionarCliente({ id: clienteId, nombre, esPrimeraCompra: true });
+    cerrarModalCliente();
 
     if (!enLinea) {
-      // No se espera el ack: se cierra el modal YA (el vendedor sigue
-      // armando la venta) y se asocia el cliente en cuanto la escritura
-      // resuelva (offline, recién al reconectar) — nunca se deja el botón
-      // "Creando…" esperando algo que no va a llegar.
-      cerrarModalCliente();
-      mostrarToast('Cliente guardado sin conexión. Se asociará a la venta al sincronizar.', 'info');
-      escritura
-        .then(({ clienteId }) => {
-          seleccionarCliente({ id: clienteId, nombre, esPrimeraCompra: true });
-        })
-        .catch(() => {
-          mostrarToast(`No se pudo crear "${nombre}" sin conexión. La venta no quedó asociada.`, 'error');
-        });
+      mostrarToast('Cliente guardado sin conexión. Se sincronizará al reconectar.', 'info');
+      confirmacion.catch(() => {
+        mostrarToast(`No se pudo guardar el cliente "${nombre}". Revisá al reconectar.`, 'error');
+      });
       return;
     }
 
-    setCreandoCliente(true);
-    escritura
-      .then(({ clienteId }) => {
-        seleccionarCliente({ id: clienteId, nombre, esPrimeraCompra: true });
-        mostrarToast('Cliente creado.', 'exito');
-        cerrarModalCliente();
-      })
-      .catch(() => {
-        mostrarToast('No se pudo crear el cliente. Intentá de nuevo.', 'error');
-      })
-      .finally(() => {
-        setCreandoCliente(false);
-      });
+    mostrarToast('Cliente creado.', 'exito');
+    confirmacion.catch(() => {
+      mostrarToast('No se pudo crear el cliente. Intentá de nuevo.', 'error');
+    });
   }
 
   /**
@@ -436,7 +417,6 @@ export function Venta() {
         clientes={clientes.datos}
         cargando={clientes.cargando}
         error={clientes.error !== null}
-        creando={creandoCliente}
         onSeleccionar={seleccionarClienteExistente}
         onCrear={confirmarAltaRapidaCliente}
       />
