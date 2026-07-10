@@ -40,6 +40,22 @@
         { "fieldPath": "activo", "order": "ASCENDING" },
         { "fieldPath": "nombre", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "compras",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "proveedorId", "order": "ASCENDING" },
+        { "fieldPath": "fecha", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "compras",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "estado", "order": "ASCENDING" },
+        { "fieldPath": "fecha", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

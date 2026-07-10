@@ -67,6 +67,19 @@ service cloud.firestore {
       return d.get('stockGranelGramos', 0) >= 0 && d.get('stockUnidades', 0) >= 0;
     }
 
+    // Monotonía del stock agregado para el vendedor: una venta solo puede BAJAR
+    // `stockGranelGramos`/`stockUnidades`, nunca subirlos (cierra el hueco de Fase
+    // 1: hasta acá solo las piezas tenían monotonía). El valor RESULTANTE del
+    // increment no puede superar al actual. Ingresos por compra y la reversa de
+    // una anulación (que SÍ suben el stock) son de admin, que usa su propia regla.
+    // `get(campo, 0)` en ambos lados neutraliza el campo ausente (0 <= 0).
+    function stockAgregadoNoSube() {
+      let vieja = resource.data;
+      let nueva = request.resource.data;
+      return nueva.get('stockGranelGramos', 0) <= vieja.get('stockGranelGramos', 0)
+        && nueva.get('stockUnidades', 0) <= vieja.get('stockUnidades', 0);
+    }
+
     // Shape estricto para invitar un usuario (create de admin): exactamente
     // { nombre, email, rol in ['admin','vendedor'], activo: bool }.
     function usuarioInvitacionValida() {
@@ -185,11 +198,13 @@ service cloud.firestore {
       allow create, delete: if esAdmin();
       // Admin edita cualquier campo del producto.
       allow update: if esAdmin();
-      // Vendedor solo ajusta stock agregado como efecto de una venta, y nunca lo
-      // deja en negativo (piso cero sobre el valor resultante del increment).
+      // Vendedor solo ajusta stock agregado como efecto de una venta: nunca lo
+      // deja en negativo (piso cero) ni lo SUBE (una venta solo descuenta; los
+      // ingresos y la reversa de anulación son de admin).
       allow update: if esVendedor()
         && soloCambian(['stockGranelGramos', 'stockUnidades', 'actualizadoEn'])
-        && stockAgregadoNoNegativo();
+        && stockAgregadoNoNegativo()
+        && stockAgregadoNoSube();
     }
 
     match /piezas/{id} {
@@ -271,8 +286,20 @@ service cloud.firestore {
     }
 
     match /compras/{id} {
-      // Compras (Fase 2): solo admin, colección cerrada al resto ya desde ahora.
-      allow read, write: if esAdmin();
+      // Compras (Fase 2, doc 03): solo admin (el vendedor no ve costos de compra).
+      allow read: if esAdmin();
+      // Una compra NACE como borrador: la confirmación es una TRANSICIÓN de estado,
+      // nunca un create directo a 'confirmada' (así no se saltea el flujo de draft).
+      allow create: if esAdmin() && request.resource.data.estado == 'borrador';
+      // Editable/confirmable SOLO desde borrador: `resource.data.estado ==
+      // 'borrador'` garantiza que una compra 'confirmada' sea INMUTABLE (doc 03,
+      // "correcciones = ajustes"). La transición válida deja el estado en 'borrador'
+      // (sigue editando) o 'confirmada' (efectos ya aplicados en el batch).
+      allow update: if esAdmin()
+        && resource.data.estado == 'borrador'
+        && request.resource.data.estado in ['borrador', 'confirmada'];
+      // Se borran solo borradores; una confirmada JAMÁS (auditoría + efectos ya aplicados).
+      allow delete: if esAdmin() && resource.data.estado == 'borrador';
     }
 
     match /configuracion/{id} {

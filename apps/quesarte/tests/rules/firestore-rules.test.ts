@@ -78,6 +78,23 @@ function clienteAltaRapida(nombre = 'Nuevo') {
   };
 }
 
+// Compra mínima con el `estado` dado (doc 03). Los efectos no importan a las
+// reglas, que solo miran el `estado` y su transición.
+function compraSeed(estado: 'borrador' | 'confirmada') {
+  return {
+    fecha: Date.now(),
+    usuarioId: ADMIN,
+    estado,
+    proveedorId: 'prov-1',
+    proveedorNombre: 'Lácteos Colonia',
+    items: [],
+    gastos: [],
+    totalFacturaCents: 0,
+    totalGastosCents: 0,
+    totalRealCents: 0,
+  };
+}
+
 // Movimiento válido a nombre de un usuario.
 function movimientoValido(usuarioId: string) {
   return {
@@ -159,7 +176,9 @@ beforeEach(async () => {
       estado: 'completada',
     });
     await setDoc(doc(seed, 'movimientos', 'mov-1'), movimientoValido(VENDEDOR));
-    await setDoc(doc(seed, 'compras', 'compra-1'), { proveedor: 'X', totalCents: 100000 });
+    // Compras (doc 03): una en borrador (editable) y una confirmada (inmutable).
+    await setDoc(doc(seed, 'compras', 'compra-1'), compraSeed('borrador'));
+    await setDoc(doc(seed, 'compras', 'compra-conf'), compraSeed('confirmada'));
     // Cliente con historial (stats no en cero) para probar los updates.
     await setDoc(doc(seed, 'clientes', 'cli-1'), {
       nombre: 'Marta',
@@ -381,6 +400,28 @@ describe('productos', () => {
     await assertFails(
       updateDoc(doc(db(VENDEDOR), 'productos', 'prod-nuez'), {
         stockGranelGramos: increment(-99999),
+      }),
+    );
+  });
+
+  it('vendedor NO SUBE el stock granel (una venta solo descuenta)', async () => {
+    await assertFails(
+      updateDoc(doc(db(VENDEDOR), 'productos', 'prod-nuez'), {
+        stockGranelGramos: increment(500),
+      }),
+    );
+  });
+
+  it('vendedor NO SUBE el stock granel con valor absoluto tampoco', async () => {
+    await assertFails(
+      updateDoc(doc(db(VENDEDOR), 'productos', 'prod-nuez'), { stockGranelGramos: 20000 }),
+    );
+  });
+
+  it('admin SÍ sube el stock (ingreso de compra / reversa de anulación)', async () => {
+    await assertSucceeds(
+      updateDoc(doc(db(ADMIN), 'productos', 'prod-nuez'), {
+        stockGranelGramos: increment(500),
       }),
     );
   });
@@ -716,10 +757,10 @@ describe('movimientos (inmutables)', () => {
   });
 });
 
-describe('compras (solo admin)', () => {
+describe('compras (solo admin, borrador → confirmada)', () => {
   it('vendedor NO crea compras', async () => {
     await assertFails(
-      setDoc(doc(db(VENDEDOR), 'compras', 'compra-x'), { proveedor: 'Y', totalCents: 1 }),
+      setDoc(doc(db(VENDEDOR), 'compras', 'compra-x'), compraSeed('borrador')),
     );
   });
 
@@ -727,11 +768,53 @@ describe('compras (solo admin)', () => {
     await assertFails(getDoc(doc(db(VENDEDOR), 'compras', 'compra-1')));
   });
 
-  it('admin lee y crea compras', async () => {
+  it('admin lee compras', async () => {
     await assertSucceeds(getDoc(doc(db(ADMIN), 'compras', 'compra-1')));
+  });
+
+  it('admin crea una compra en borrador', async () => {
     await assertSucceeds(
-      setDoc(doc(db(ADMIN), 'compras', 'compra-x'), { proveedor: 'Y', totalCents: 1 }),
+      setDoc(doc(db(ADMIN), 'compras', 'compra-x'), compraSeed('borrador')),
     );
+  });
+
+  it('admin NO crea una compra directamente en confirmada (debe nacer borrador)', async () => {
+    await assertFails(
+      setDoc(doc(db(ADMIN), 'compras', 'compra-x'), compraSeed('confirmada')),
+    );
+  });
+
+  it('admin edita un borrador (borrador → borrador)', async () => {
+    await assertSucceeds(
+      updateDoc(doc(db(ADMIN), 'compras', 'compra-1'), { totalFacturaCents: 50000 }),
+    );
+  });
+
+  it('admin confirma un borrador (borrador → confirmada)', async () => {
+    await assertSucceeds(
+      updateDoc(doc(db(ADMIN), 'compras', 'compra-1'), { estado: 'confirmada' }),
+    );
+  });
+
+  it('una compra confirmada es inmutable (no se puede editar ningún campo)', async () => {
+    await assertFails(
+      updateDoc(doc(db(ADMIN), 'compras', 'compra-conf'), { totalFacturaCents: 50000 }),
+    );
+  });
+
+  it('una compra confirmada no puede volver a borrador', async () => {
+    await assertFails(
+      updateDoc(doc(db(ADMIN), 'compras', 'compra-conf'), { estado: 'borrador' }),
+    );
+  });
+
+  it('admin borra un borrador pero NO una confirmada', async () => {
+    await assertSucceeds(deleteDoc(doc(db(ADMIN), 'compras', 'compra-1')));
+    await assertFails(deleteDoc(doc(db(ADMIN), 'compras', 'compra-conf')));
+  });
+
+  it('vendedor NO borra compras', async () => {
+    await assertFails(deleteDoc(doc(db(VENDEDOR), 'compras', 'compra-1')));
   });
 });
 
