@@ -68,7 +68,7 @@ function mensajeErrorConfirmar(error: unknown): string {
  * Detalle/edición de UNA compra (F2-F1, doc 03): drill-down sin selector de
  * sección (docs/06-ui-ux.md §2 — "en drill-down el selector desaparece y
  * rige la flecha ‹"). Ruta `/stock/compra/:id`; `id === 'nueva'` es el
- * sentinel de alta (sin documento todavío — ver más abajo).
+ * sentinel de alta (sin documento todavía — ver más abajo).
  *
  * Flujo borrador → confirmada (doc 03):
  * - Mientras `estado === 'borrador'`, todo el formulario (proveedor, ítems,
