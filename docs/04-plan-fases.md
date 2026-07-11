@@ -280,6 +280,11 @@ Notas para Fase 3 (arrastradas de los reviews de esta fase):
   Suspense si el chunk lazy aún no cargó (el contenido real entra después sin
   transición). Cosmético, solo la primera vez por sección. Candidato: prefetch
   del chunk en `touchstart`/`mouseenter` del ítem del selector.
+- (UI-4f, auditoría del autor) Mismo gotcha de recorte del ring de foco en
+  eje perpendicular, no confirmado en pantalla: `ChipsFiltro` (fila
+  `overflow-x-auto` con `Chip` usando `ring-offset-1`, 3px de protrusión —
+  podría recortarse arriba/abajo) y `DataTable` (sin auditar en profundidad).
+  Verificar y aplicar el patrón `px/-mx` compensado si corresponde.
 
 Criterios de aceptación:
 - [x] Una compra con $2.000 de combustible reparte exactamente $2.000 entre los
