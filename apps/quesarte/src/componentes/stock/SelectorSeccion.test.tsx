@@ -41,6 +41,16 @@ describe('SelectorSeccion', () => {
     expect(screen.queryByRole('tablist')).toBeNull();
   });
 
+  it('el <nav> lleva scroll-padding inline (UI-4f) para que el auto-scroll a un extremo no recorte el contenedor', () => {
+    renderizar('/stock');
+
+    const nav = screen.getByRole('navigation', { name: 'Secciones de Stock' });
+    // 5px = border (1px) + p-1 (4px) del div interior — el mismo respiro
+    // que scrollIntoView({ inline: 'nearest' }) debe respetar en los
+    // extremos para no dejar el contenedor cortado (docs/06 §2, UI-4f).
+    expect(nav.className).toContain('scroll-px-[5px]');
+  });
+
   it('renderiza cada ítem como link real a su ruta', () => {
     renderizar('/stock');
 

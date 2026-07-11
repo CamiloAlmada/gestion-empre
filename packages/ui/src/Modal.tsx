@@ -136,7 +136,33 @@ export function Modal({ abierto, onCerrar, titulo, children, acciones }: ModalPr
         <h2 id={tituloId} className="text-lg font-semibold text-texto">
           {titulo}
         </h2>
-        <div className="overflow-y-auto text-texto">{children}</div>
+        {/* `px-0.5 -mx-0.5` (UI-4f, validación del dueño — "anillo de foco
+            recortado en formularios de modales"): causa exacta, un gotcha
+            conocido de CSS Overflow — este `div` fija `overflow-y-auto`
+            (scroll vertical del contenido cuando es más alto que `85vh`),
+            pero la spec de `overflow` dice que si un eje se especifica
+            `visible` y el otro no, AMBOS ejes computan como si el otro
+            valor también rigiera; en la práctica no hay forma de declarar
+            "scroll solo en Y, overflow-x realmente visible" — `overflow-x`
+            computa a `auto` igual, así que este `div` también recorta en X.
+            Los campos de `children` (`Input`, `CampoBusqueda`, etc., ver
+            packages/ui/src/Input.tsx) son ítems flex de un contenedor
+            `flex-col` con `align-items: stretch` (default): quedan a ancho
+            completo, tocando los bordes de ESTE `div` — su
+            `focus-visible:ring-2` (2px de box-shadow, SIN ring-offset en
+            los inputs de formulario) se dibuja 2px afuera del borde y
+            queda recortado por el `overflow-x: auto` implícito.
+            Fix: `px-0.5` (2px) le da a este `div` el margen exacto que el
+            ring necesita ANTES de tocar su propio borde de recorte —
+            `-mx-0.5` (−2px) compensa ese padding para que el `div` ocupe
+            2px más a cada lado (invadiendo el `p-6` del contenedor padre,
+            que sobra de sobra) y el contenido quede exactamente en la
+            misma posición visual que antes. Cero cambio de layout visible:
+            solo se mueve 2px hacia afuera el límite de recorte, no el
+            contenido. (La barra de scroll vertical, si aparece, queda 2px
+            más adentro del padding del modal — imperceptible, sigue
+            sobrando ancho de sobra en el `p-6`.) */}
+        <div className="-mx-0.5 overflow-y-auto px-0.5 text-texto">{children}</div>
         {acciones !== undefined && <div className="flex justify-end gap-2 pt-2">{acciones}</div>}
       </div>
     </dialog>

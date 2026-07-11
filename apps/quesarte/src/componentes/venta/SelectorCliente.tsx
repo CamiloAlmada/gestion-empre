@@ -75,7 +75,14 @@ export function SelectorCliente({
             No se pudo cargar la lista de clientes. Podés crear uno nuevo igual.
           </p>
         ) : (
-          <ul className="flex max-h-64 flex-col gap-1 overflow-y-auto">
+          // `px-0.5 -mx-0.5` (UI-4f, mismo recorte y mismo fix que
+          // `packages/ui/src/Modal.tsx`): los botones son ítems `w-full` de
+          // este `<ul>` (flex-col, align-items: stretch), tocan sus bordes,
+          // y `overflow-y-auto` también recorta en X (spec de CSS Overflow:
+          // no se puede tener un eje `visible` de verdad si el otro no lo
+          // es). `px-0.5` da los 2px que el ring necesita antes del borde de
+          // recorte; `-mx-0.5` compensa para no correr el ancho visible.
+          <ul className="-mx-0.5 flex max-h-64 flex-col gap-1 overflow-y-auto px-0.5">
             {resultados.length === 0 ? (
               <li className="px-1 py-2 text-sm text-texto-secundario">Sin resultados.</li>
             ) : (

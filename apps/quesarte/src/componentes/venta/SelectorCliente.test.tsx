@@ -44,6 +44,14 @@ describe('SelectorCliente', () => {
     expect(screen.getByText('Juan Pérez')).toBeTruthy();
   });
 
+  it('la lista scrolleable lleva aire lateral para que el ring de foco de cada resultado no se recorte (UI-4f)', () => {
+    renderModal();
+    const lista = screen.getByRole('list');
+    expect(lista.className).toContain('overflow-y-auto');
+    expect(lista.className).toContain('px-0.5');
+    expect(lista.className).toContain('-mx-0.5');
+  });
+
   it('cargando: muestra el estado de carga, no la lista', () => {
     renderModal({ cargando: true });
     expect(screen.getByText('Cargando clientes…')).toBeTruthy();
