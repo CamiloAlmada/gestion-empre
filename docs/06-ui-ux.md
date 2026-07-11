@@ -86,7 +86,10 @@ tech lead; no se ignora en silencio.
     con más secciones que ancho de pantalla, al navegar (tap, swipe o URL
     directa) el selector desplaza su scroll horizontal para que el ítem
     activo quede completamente a la vista (auto-scroll, patrón estándar de
-    tabs scrolleables); suave, salvo `prefers-reduced-motion`.
+    tabs scrolleables); suave, salvo `prefers-reduced-motion`. El scrollport
+    lleva `scroll-padding` (UI-4f): en los extremos el auto-scroll no deja el
+    ítem al ras del recorte — el contenedor (borde + padding propio) queda
+    entero a la vista.
   - **Swipe entre secciones** (UI-4, pedido del dueño): deslizar horizontal
     sobre el contenido navega a la sección vecina (respetando el filtro por
     rol). El área del gesto cubre TODO el alto visible de la sección —
@@ -202,7 +205,9 @@ tech lead; no se ignora en silencio.
       (solo combinaciones aprobadas de §7).
 - [ ] Targets táctiles ≥44×44px (≥48px en POS y tab bar).
 - [ ] Foco visible: ring de 2px en color primario con `focus-visible`, en TODO
-      elemento interactivo.
+      elemento interactivo. El ring se dibuja FUERA del elemento: todo
+      contenedor con overflow (modales scrolleables, áreas con clip) debe dar
+      aire suficiente para que no se recorte (UI-4f, validación del dueño).
 - [ ] Inputs con `label` asociado; botones-ícono con `aria-label`.
 - [ ] Toasts: `role="status"` (info) / `role="alert"` (error). Errores de
       formulario asociados con `aria-describedby`.
