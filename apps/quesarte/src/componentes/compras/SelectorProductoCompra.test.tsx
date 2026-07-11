@@ -83,6 +83,17 @@ describe('SelectorProductoCompra', () => {
     expect(onSeleccionar).toHaveBeenCalledWith(producto);
   });
 
+  it('el contenedor scrolleable de resultados lleva aire lateral para que el ring de foco no se recorte (UI-4f)', () => {
+    const { container } = renderizar({
+      productos: [productoDe({ id: 'p1', nombre: 'Queso Colonia' })],
+    });
+
+    const scrolleable = container.querySelector('.overflow-y-auto') as HTMLElement;
+    expect(scrolleable).toBeTruthy();
+    expect(scrolleable.className).toContain('px-0.5');
+    expect(scrolleable.className).toContain('-mx-0.5');
+  });
+
   it('un producto ya agregado muestra el badge "Agregado" pero sigue tocable', () => {
     const producto = productoDe({ id: 'p1', nombre: 'Queso Colonia' });
     const { onSeleccionar } = renderizar({ productos: [producto], productoIdsAgregados: new Set(['p1']) });

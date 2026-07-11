@@ -96,7 +96,15 @@ export function SelectorProductoCompra({
         ) : sugeridos.length === 0 && resto.length === 0 ? (
           <p className="px-1 py-2 text-sm text-texto-secundario">Sin resultados.</p>
         ) : (
-          <div className="flex max-h-80 flex-col gap-3 overflow-y-auto">
+          // `px-0.5 -mx-0.5` (UI-4f, mismo recorte y mismo fix que
+          // `packages/ui/src/Modal.tsx`): los botones de `fila()` son
+          // `w-full`, tocan los bordes de este `div` con `overflow-y-auto`
+          // (que también recorta en X, gotcha de CSS Overflow: no hay forma
+          // de que un eje quede realmente `visible` si el otro no lo es).
+          // `px-0.5` da los 2px que el `focus-visible:ring-2` necesita antes
+          // del borde de recorte; `-mx-0.5` compensa para no correr el
+          // ancho visible del listado.
+          <div className="-mx-0.5 flex max-h-80 flex-col gap-3 overflow-y-auto px-0.5">
             {sugeridos.length > 0 && (
               <div className="flex flex-col gap-1">
                 <p className="px-1 text-xs font-medium uppercase tracking-wide text-texto-secundario">

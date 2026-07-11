@@ -93,6 +93,18 @@ function prefiereMovimientoReducido(): boolean {
  * `overflow-x-auto` + scrollbar oculto por navegador (`scrollbar-width`,
  * `-ms-overflow-style`, `::-webkit-scrollbar`), el contenido sigue
  * scrolleable con gesto táctil/rueda aunque la barra no se vea.
+ *
+ * `scroll-px-[5px]` (UI-4f, validación del dueño): sin esto, el auto-scroll
+ * al ítem activo (`scrollIntoView({ inline: 'nearest' })`, más abajo) alinea
+ * el borde del `<a>` con el borde del scrollport — en los extremos (Stock
+ * primero, Categorías último) eso deja el respiro del contenedor interior
+ * (el `div` de abajo: `border` 1px + `p-1` 4px = 5px) fuera de vista, con el
+ * selector visualmente "cortado". `scroll-padding-inline` en el scrollport
+ * le dice al navegador que trate ese margen como zona seguro-visible al
+ * calcular "nearest": en los extremos, como no se puede scrollear más allá
+ * de 0 ni del máximo, el navegador clampea ahí — mostrando el contenedor
+ * entero. 5px = el mismo cálculo (borde + padding) del `div` de abajo, no un
+ * valor arbitrario.
  */
 export function SelectorSeccion({ items }: SelectorSeccionProps) {
   const location = useLocation();
@@ -123,7 +135,7 @@ export function SelectorSeccion({ items }: SelectorSeccionProps) {
   return (
     <nav
       aria-label="Secciones de Stock"
-      className="overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      className="overflow-x-auto scroll-px-[5px] [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
     >
       {/* Sin <ul>/<li> a propósito (mismo criterio que `BarraPestanas`, que
           tampoco envuelve sus botones en una lista): un ítem por ruta no

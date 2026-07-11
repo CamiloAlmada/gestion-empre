@@ -254,4 +254,22 @@ describe('Modal', () => {
     fireEvent.keyDown(dialogConTexto('Abrir B'), { key: 'Escape' });
     expect(document.body.style.overflow).toBe('');
   });
+
+  it('el área scrolleable del contenido lleva aire lateral para que el ring de foco no se recorte (UI-4f)', () => {
+    render(<ModalDeCasoDePrueba />);
+    fireEvent.click(screen.getByRole('button', { name: 'Abrir modal' }));
+
+    // "Contenido" es un string pasado directo como `children`: el propio
+    // `div.overflow-y-auto` es el elemento con ese texto (no hay un wrapper
+    // intermedio), así que `getByText` ya devuelve el contenedor a probar.
+    const contenedorScrolleable = screen.getByText('Contenido');
+    expect(contenedorScrolleable.className).toContain('overflow-y-auto');
+    // `px-0.5` (2px) le da al contenedor el margen exacto que necesita el
+    // `focus-visible:ring-2` (2px, sin ring-offset en los inputs de
+    // formulario) antes de su propio borde de recorte; `-mx-0.5` compensa
+    // ese padding para que el ancho visible del contenido no cambie
+    // (docs/06-ui-ux.md §5, UI-4f).
+    expect(contenedorScrolleable.className).toContain('px-0.5');
+    expect(contenedorScrolleable.className).toContain('-mx-0.5');
+  });
 });
