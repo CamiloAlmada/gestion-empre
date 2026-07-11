@@ -31,3 +31,16 @@ if (
     this.dispatchEvent(new Event('close'));
   };
 }
+
+/**
+ * jsdom (29.x) no implementa `Element.prototype.scrollIntoView` (queda
+ * `undefined`) — lo necesita el auto-scroll del ítem activo de
+ * `SelectorSeccion` (docs/06-ui-ux.md §2, UI-4d). Mismo criterio que el
+ * polyfill de `<dialog>` de arriba: un stub no-op SOLO para que el método
+ * exista en el entorno de test y se pueda espiar con `vi.spyOn` (sin el
+ * stub, `vi.spyOn` tira "not a function" porque no hay nada que envolver) —
+ * todos los navegadores objetivo lo implementan nativamente hace años.
+ */
+if (typeof Element !== 'undefined' && typeof Element.prototype.scrollIntoView !== 'function') {
+  Element.prototype.scrollIntoView = function scrollIntoView() {};
+}

@@ -215,7 +215,18 @@ function ShellInterior() {
             esto, un error de render en cualquier pantalla desmontaba TODA la
             app (pantalla blanca), no solo el contenido ruteado. `key` por
             ruta: navegar a otra pantalla remonta el boundary y limpia el
-            error, así que "Volver a Venta" funciona sin recargar. */}
+            error, así que "Volver a Venta" funciona sin recargar.
+            Este `Suspense` sigue cubriendo TODAS las rutas (Venta, Clientes,
+            Reportes, Ajustes, fichas de detalle) como red de fallback
+            general. Las secciones raíz de Stock (UI-4d, docs/06-ui-ux.md §2)
+            tienen ADEMÁS su propio `Suspense` interno en `StockLayout.tsx`,
+            envolviendo solo su `Outlet`: sin ese, este de acá (por ENCIMA de
+            todo `StockLayout`) mostraba su fallback ante un chunk frío,
+            reemplazando también el `SelectorSeccion` — perdía su scroll
+            horizontal en cada carga fría. El de `StockLayout` intercepta la
+            suspensión primero (React resuelve el `Suspense` ANCESTRO más
+            cercano), así que este de acá ya no lo ve para esas rutas; sigue
+            siendo el único para el resto. */}
         <ErrorBoundaryRuta key={location.pathname}>
           <Suspense fallback={<FallbackPantalla />}>
             <Outlet />

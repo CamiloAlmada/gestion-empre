@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { itemsSelectorStock, SelectorSeccion } from './SelectorSeccion';
@@ -135,5 +135,65 @@ describe('SelectorSeccion', () => {
         expect(item.className).not.toContain('view-transition-name');
       }
     }
+  });
+});
+
+describe('SelectorSeccion — auto-scroll del ítem activo (docs/06-ui-ux.md §2, UI-4d)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('al montar (entrada directa por URL), desplaza el <nav> para que el activo quede completamente visible', () => {
+    // jsdom no implementa `scrollIntoView` (stub no-op agregado en
+    // test-setup.ts): se espía para verificar que se invoca, con los
+    // parámetros correctos, sin depender de layout real (jsdom no calcula
+    // posiciones, así que no hay forma de verificar "quedó fuera de vista"
+    // más que confirmar que el mecanismo se dispara).
+    const scrollIntoViewSpy = vi
+      .spyOn(HTMLAnchorElement.prototype, 'scrollIntoView')
+      .mockImplementation(() => {});
+
+    // Última sección: la más probable de quedar fuera de vista con el
+    // selector recién montado (scroll horizontal arrancando en 0).
+    renderizar('/stock/categorias');
+
+    expect(scrollIntoViewSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ inline: 'nearest', block: 'nearest', behavior: 'smooth' }),
+    );
+  });
+
+  it('al navegar a otra sección, vuelve a invocar el desplazamiento para el nuevo activo', () => {
+    const scrollIntoViewSpy = vi
+      .spyOn(HTMLAnchorElement.prototype, 'scrollIntoView')
+      .mockImplementation(() => {});
+
+    renderizar('/stock');
+    scrollIntoViewSpy.mockClear(); // descarta la llamada del propio montaje
+
+    fireEvent.click(screen.getByRole('link', { name: 'Categorías' }));
+
+    expect(scrollIntoViewSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ inline: 'nearest', block: 'nearest' }),
+    );
+  });
+
+  it('prefers-reduced-motion: el desplazamiento es instantáneo ("auto"), no "smooth"', () => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn().mockReturnValue({
+        matches: true,
+        media: '(prefers-reduced-motion: reduce)',
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      }),
+    );
+    const scrollIntoViewSpy = vi
+      .spyOn(HTMLAnchorElement.prototype, 'scrollIntoView')
+      .mockImplementation(() => {});
+
+    renderizar('/stock');
+
+    expect(scrollIntoViewSpy).toHaveBeenCalledWith(expect.objectContaining({ behavior: 'auto' }));
   });
 });

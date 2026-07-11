@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router';
 
 export interface ItemSelectorSeccion {
@@ -44,6 +45,19 @@ export interface SelectorSeccionProps {
 }
 
 /**
+ * `matchMedia` no existe en jsdom (ver `MetaThemeColor.test.tsx`) — se
+ * consulta con un chequeo de tipo, no `vi.spyOn`. Duplicado del helper que ya
+ * usa `Carrito.tsx` para su propio gesto: cada archivo con una interacción
+ * corta y puntual que depende de `prefers-reduced-motion` lo resuelve en el
+ * momento, sin estado ni listener (no hace falta reaccionar a un cambio de
+ * la preferencia del SO a mitad de una navegación).
+ */
+function prefiereMovimientoReducido(): boolean {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+/**
  * Selector de sección ("secondary tabs" de Material 3, docs/06-ui-ux.md §2,
  * 2026-07-10, decidido con el dueño): fila horizontal scrolleable de rutas
  * HERMANAS dentro del tab Stock, contenida en una superficie redondeada —
@@ -82,6 +96,29 @@ export interface SelectorSeccionProps {
  */
 export function SelectorSeccion({ items }: SelectorSeccionProps) {
   const location = useLocation();
+  // Apunta SIEMPRE al `<a>` del ítem activo (se reasigna solo: React limpia
+  // la referencia vieja al desactivarse un ítem y la vuelve a fijar en el
+  // nuevo antes de correr efectos, así que el efecto de abajo siempre lee el
+  // nodo correcto para el pathname actual).
+  const activoRef = useRef<HTMLAnchorElement | null>(null);
+
+  // Auto-scroll del ítem activo (docs/06-ui-ux.md §2, UI-4d): con más
+  // secciones que ancho de pantalla, el scroll horizontal del `<nav>` puede
+  // dejar el activo fuera de vista al navegar — y, sin este efecto, también
+  // en la entrada DIRECTA por URL (primer render, el `<nav>` arranca
+  // scrolleado al inicio). Corre en cada cambio de `pathname`, INCLUIDO el
+  // montaje inicial (los efectos siempre corren después del primer render).
+  useEffect(() => {
+    activoRef.current?.scrollIntoView({
+      inline: 'nearest', // mueve lo mínimo necesario, no siempre al centro
+      // CRÍTICO: sin esto, `scrollIntoView` además intenta llevar el
+      // elemento a la vista VERTICAL de la PÁGINA (el <nav> vive en el
+      // flujo normal del documento, no aislado) y scrollearía la pantalla
+      // entera — acá solo interesa el scroll horizontal interno del <nav>.
+      block: 'nearest',
+      behavior: prefiereMovimientoReducido() ? 'auto' : 'smooth',
+    });
+  }, [location.pathname]);
 
   return (
     <nav
@@ -99,6 +136,7 @@ export function SelectorSeccion({ items }: SelectorSeccionProps) {
           return (
             <Link
               key={item.id}
+              ref={activo ? activoRef : undefined}
               to={item.a}
               viewTransition
               aria-current={activo ? 'page' : undefined}
