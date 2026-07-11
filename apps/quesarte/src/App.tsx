@@ -13,7 +13,10 @@ import { MetaThemeColor } from './componentes/MetaThemeColor';
  * Code-splitting por ruta (F2-D0, docs/04): cada pantalla ruteada pasa a su
  * propio chunk, cargado on-demand con `React.lazy`. El fallback de
  * `<Suspense>` vive en `Shell.tsx` (envuelve el `<Outlet />`, no las rutas
- * acá) para que header y tab bar queden montados durante la carga.
+ * acá) para que header y tab bar queden montados durante la carga. Las
+ * secciones raíz de Stock (UI-4d, docs/06-ui-ux.md §2) tienen ADEMÁS su
+ * propio `Suspense` en `StockLayout.tsx`, más cerca de sus rutas: así una
+ * carga fría no desmonta el `SelectorSeccion` (ver el comentario ahí).
  *
  * `Venta` (home del POS, mostrador) y `Login` (entrada previa al shell)
  * quedan FUERA de este split a propósito: son las pantallas críticas del
