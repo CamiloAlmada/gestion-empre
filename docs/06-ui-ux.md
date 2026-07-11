@@ -79,14 +79,25 @@ tech lead; no se ignora en silencio.
     selector no se remonta al cambiar de sección (conserva su scroll
     horizontal) y es el único dueño del gesto de swipe. Las fichas de detalle
     (producto, compra, proveedor) quedan FUERA del layout: sin selector y sin
-    swipe.
+    swipe. El `Suspense` de los chunks lazy de las secciones vive DENTRO del
+    layout (alrededor de su `Outlet`, UI-4d): un chunk frío jamás desmonta el
+    selector (si lo hiciera, perdería su scroll horizontal).
+  - **Ítem activo siempre visible** (UI-4d, validación del dueño en campo):
+    con más secciones que ancho de pantalla, al navegar (tap, swipe o URL
+    directa) el selector desplaza su scroll horizontal para que el ítem
+    activo quede completamente a la vista (auto-scroll, patrón estándar de
+    tabs scrolleables); suave, salvo `prefers-reduced-motion`.
   - **Swipe entre secciones** (UI-4, pedido del dueño): deslizar horizontal
     sobre el contenido navega a la sección vecina (respetando el filtro por
-    rol). Discriminación de gesto obligatoria: solo dispara si el movimiento
-    es claramente horizontal (umbral de distancia + dominancia de eje, mismo
-    criterio que el arrastre del carrito §6) y NUNCA si el gesto nace en un
-    contenedor con scroll horizontal propio (el selector mismo, tablas). En
-    los extremos no hay wrap-around.
+    rol). El área del gesto cubre TODO el alto visible de la sección —
+    incluido el espacio vacío bajo el contenido corto (UI-4d): el contenedor
+    del layout se estira al viewport disponible; el gesto no puede depender
+    de dónde termina la última card. Discriminación de gesto obligatoria:
+    solo dispara si el movimiento es claramente horizontal (umbral de
+    distancia + dominancia de eje, mismo criterio que el arrastre del
+    carrito §6) y NUNCA si el gesto nace en un contenedor con scroll
+    horizontal propio (el selector mismo, tablas). En los extremos no hay
+    wrap-around.
   - **Píldora animada** (UI-4): la transición del ítem activo del selector se
     anima con la **View Transitions API** nativa (`view-transition-name` en la
     píldora + navegación con `viewTransition` de react-router): el navegador
