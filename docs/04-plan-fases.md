@@ -250,7 +250,13 @@ selector en `/stock/categorias`, reemplazando el modal de Catálogo (b), y
 swipe entre secciones + píldora del selector animada con View Transitions (c).
 Review senior integral: APROBAR CON OBSERVACIONES — sin bloqueantes; selector
 a 48px y cobertura extra del gesto corregidos por el autor; el edge de
-Suspense con chunk frío quedó anotado en las notas de Fase 3.
+Suspense con chunk frío quedó anotado en las notas de Fase 3. Validación del
+dueño en campo → UI-4d (ítem activo del selector siempre visible por
+auto-scroll, Suspense propio dentro del layout, área de swipe estirada al
+viewport) y UI-4e (el ErrorBoundaryRuta de B1 dejó de usar
+`key={pathname}` — remontaba todo el subtree en cada navegación, incluido el
+layout persistente de Stock — y pasa a auto-resetear su error por cambio de
+ruta, con test de integración de identidad del selector a través del Shell).
 
 Notas para Fase 3 (arrastradas de los reviews de esta fase):
 - Promover `calcularCostoRealUnidadCents` a core (hoy Compras reusa
