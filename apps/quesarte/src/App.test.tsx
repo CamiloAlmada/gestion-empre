@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { ProveedorTema, ProveedorToasts } from '@gestion/ui';
 import { App } from './App';
@@ -250,6 +250,35 @@ describe('App - rutas', () => {
     renderizarEn('/stock/producto/abc123');
 
     expect(await screen.findByText('Contenido de DetalleProductoPantalla')).toBeTruthy();
+  });
+
+  // Objetivo de UI-4e, verificado a través del árbol real App/Shell (el
+  // `StockLayout.test.tsx` lo comprueba en aislamiento, SIN el
+  // `ErrorBoundaryRuta` del Shell — que era justo quien lo remontaba). El
+  // autor de UI-4d escribió un test equivalente que detectaba el remount
+  // causado por el viejo `key={location.pathname}` y lo descartó; este es el
+  // equivalente que ahora debe pasar.
+  it('sin error, navegar entre secciones hermanas de Stock NO remonta el selector: mismo nodo <nav> (UI-4e)', async () => {
+    configurarAuth('admin');
+
+    renderizarEn('/stock');
+
+    // El `SelectorSeccion` (nav) lo monta `StockLayout`, que es eager y vive
+    // por ENCIMA del Suspense de las secciones lazy: está presente desde el
+    // primer render, sin esperar al chunk de la sección.
+    const navAntes = await screen.findByRole('navigation', { name: 'Secciones de Stock' });
+
+    // Navegación REAL entre secciones hermanas (click en un link del selector).
+    fireEvent.click(screen.getByRole('link', { name: 'Catálogo' }));
+
+    // Identidad de nodo (`toBe`, no `toEqual`): con el viejo
+    // `key={location.pathname}` en el `ErrorBoundaryRuta` de Shell, cambiar de
+    // ruta remontaba el boundary y TODO su subtree —incluido este `<nav>`—,
+    // devolviendo un nodo del DOM distinto. Con el auto-reset por `rutaActual`
+    // (UI-4e) el boundary sobrevive a la navegación y el `<nav>` es el MISMO
+    // nodo, conservando su instancia (y su scroll horizontal).
+    const navDespues = await screen.findByRole('navigation', { name: 'Secciones de Stock' });
+    expect(navDespues).toBe(navAntes);
   });
 
   it('vendedor que navega a /stock/proveedores es redirigido a Venta (docs/07: solo admin)', () => {
