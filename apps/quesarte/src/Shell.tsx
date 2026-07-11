@@ -213,9 +213,13 @@ function ShellInterior() {
             fallo al cargar el chunk, no solo errores de render de la
             pantalla ya cargada) — hallazgo B1 del review de Fase 2: sin
             esto, un error de render en cualquier pantalla desmontaba TODA la
-            app (pantalla blanca), no solo el contenido ruteado. `key` por
-            ruta: navegar a otra pantalla remonta el boundary y limpia el
-            error, así que "Volver a Venta" funciona sin recargar.
+            app (pantalla blanca), no solo el contenido ruteado. El recovery
+            ("Volver a Venta" sin recargar) lo da ahora `rutaActual`: el
+            boundary se auto-resetea al cambiar la ruta SOLO si tiene un error
+            (UI-4e, ver su JSDoc). Antes era `key={location.pathname}`, que
+            remontaba el boundary y TODO su subtree en cada navegación —incluido
+            el `StockLayout` persistente de Stock (docs/06-ui-ux.md §2), que no
+            debe remontarse al navegar entre secciones hermanas.
             Este `Suspense` sigue cubriendo TODAS las rutas (Venta, Clientes,
             Reportes, Ajustes, fichas de detalle) como red de fallback
             general. Las secciones raíz de Stock (UI-4d, docs/06-ui-ux.md §2)
@@ -227,7 +231,7 @@ function ShellInterior() {
             suspensión primero (React resuelve el `Suspense` ANCESTRO más
             cercano), así que este de acá ya no lo ve para esas rutas; sigue
             siendo el único para el resto. */}
-        <ErrorBoundaryRuta key={location.pathname}>
+        <ErrorBoundaryRuta rutaActual={location.pathname}>
           <Suspense fallback={<FallbackPantalla />}>
             <Outlet />
           </Suspense>
