@@ -24,6 +24,7 @@ import {
   calcularTicketPromedio,
 } from '../componentes/clientes/estadisticas';
 import { ModalDesactivarCliente } from '../componentes/clientes/ModalDesactivarCliente';
+import { BotonWhatsApp } from '../componentes/whatsapp/BotonWhatsApp';
 import { ModalCliente } from './ModalCliente';
 
 type Modal = 'edicion' | 'desactivar' | null;
@@ -266,7 +267,12 @@ export function DetalleClientePantalla() {
             </span>
           )}
         </div>
-        {datosCliente.telefono !== undefined && (
+        {/* Privacidad (doc 08, WA-C2): el teléfono es dato personal — visible
+            en TEXTO solo para `admin`. Un `vendedor` no ve el número acá,
+            pero el botón de WhatsApp de más abajo SÍ le aparece (el número
+            solo viaja dentro del link `wa.me`, nunca queda expuesto en
+            pantalla). */}
+        {esAdmin && datosCliente.telefono !== undefined && (
           <p className="text-sm text-texto-secundario">Teléfono: {datosCliente.telefono}</p>
         )}
         {datosCliente.email !== undefined && (
@@ -279,6 +285,14 @@ export function DetalleClientePantalla() {
           <p className="text-sm text-texto-secundario">Notas: {datosCliente.notas}</p>
         )}
         <p className="text-sm text-texto-secundario">Cliente desde {formatearFecha(datosCliente.fechaAlta)}</p>
+        <BotonWhatsApp
+          telefono={datosCliente.telefono}
+          telefonoE164={datosCliente.telefonoE164}
+          contexto="cliente"
+          valores={{ cliente: datosCliente.nombre }}
+          db={db}
+          className="mt-1 w-fit"
+        />
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">

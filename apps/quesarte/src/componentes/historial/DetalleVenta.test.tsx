@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import { money, peso, type Usuario, type Venta } from '@gestion/core';
+import type { FirestoreError } from 'firebase/firestore';
+import { money, peso, type Cliente, type Usuario, type Venta } from '@gestion/core';
 import { DetalleVenta } from './DetalleVenta';
 
 // `DataTable` con `filaCompacta` (docs/06-ui-ux.md §3) renderiza SIEMPRE la
@@ -13,10 +14,16 @@ function tabla() {
 
 const mocks = vi.hoisted(() => ({ useDoc: vi.fn() }));
 
-vi.mock('@gestion/firebase-kit', () => ({
-  useDoc: mocks.useDoc,
-  usuarioConverter: {},
-}));
+// `importOriginal` (no un stub manual): `DetalleVenta` ahora también importa
+// `clienteConverter` (lookup del cliente para el botón de WhatsApp, WA-C2) y
+// `BotonWhatsApp` importa a su vez `configuracionConverter`/
+// `plantillasWhatsAppConverter` — más simple reusar los reales (nunca se
+// invocan de verdad: la ref falsa de abajo ignora `.withConverter(...)`) que
+// mantener un stub manual sincronizado con cada converter nuevo.
+vi.mock('@gestion/firebase-kit', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@gestion/firebase-kit')>();
+  return { ...actual, useDoc: mocks.useDoc };
+});
 
 interface RefFalsa {
   __path: string;
@@ -70,6 +77,51 @@ function usuario(over: Partial<Usuario> = {}): Usuario {
     activo: true,
     ...over,
   };
+}
+
+function cliente(over: Partial<Cliente> & Pick<Cliente, 'id' | 'nombre'>): Cliente {
+  return {
+    fechaAlta: new Date('2026-01-01'),
+    activo: true,
+    stats: { cantidadVentas: 1, totalHistoricoCents: money(80000) },
+    ...over,
+  };
+}
+
+interface EstadoDocFalso<T> {
+  datos: T | null;
+  cargando: boolean;
+  error: FirestoreError | null;
+}
+
+function ok<T>(datos: T | null): EstadoDocFalso<T> {
+  return { datos, cargando: false, error: null };
+}
+
+interface RefFalsa {
+  __path: string;
+}
+
+/** Enruta `useDoc` por el `__path` de la ref falsa (mismo criterio que
+ * `DetalleClientePantalla.test.tsx`): `DetalleVenta` suscribe hasta CUATRO
+ * documentos distintos (usuario del vendedor, cliente de la venta, y los DOS
+ * que arma `BotonWhatsApp` por dentro: configuración general y plantillas). */
+function configurarUseDoc(opciones: {
+  usuario?: EstadoDocFalso<Usuario>;
+  cliente?: EstadoDocFalso<Cliente>;
+  plantillas?: EstadoDocFalso<{ id: string; nombre: string; contexto: string; texto: string }[]>;
+}) {
+  mocks.useDoc.mockImplementation((ref: RefFalsa | null) => {
+    if (ref === null) return ok(null);
+    if (ref.__path.startsWith('usuarios/')) return opciones.usuario ?? ok(null);
+    if (ref.__path.startsWith('clientes/')) return opciones.cliente ?? ok(null);
+    if (ref.__path === 'configuracion/plantillasWhatsApp') return opciones.plantillas ?? ok(null);
+    // `configuracion/general` (codigoPaisDefault/nombreNegocio): sin
+    // configuración explícita en estos tests — `BotonWhatsApp` ya cubre sus
+    // fallbacks (`{negocio}` literal, `codigoPaisDefault` default) en su
+    // propia suite.
+    return ok(null);
+  });
 }
 
 afterEach(() => {
@@ -284,5 +336,90 @@ describe('DetalleVenta - fila compacta (mobile, docs/06-ui-ux.md §3)', () => {
     expect(lista.getByText('$ 500,00')).toBeTruthy();
     expect(lista.getByText('Miel 500g')).toBeTruthy();
     expect(lista.getByText('2 unidades')).toBeTruthy();
+  });
+});
+
+describe('DetalleVenta - botón WhatsApp (WA-C2, doc 08)', () => {
+  it('venta con cliente con teléfono: muestra el botón con {items}/{total} resueltos', () => {
+    configurarUseDoc({
+      cliente: ok(cliente({ id: 'c1', nombre: 'Ana Pérez', telefonoE164: '59899123456' })),
+      plantillas: ok([{ id: 'p1', nombre: 'Pedido listo', contexto: 'venta', texto: 'Hola {cliente}: {items}. Total {total}' }]),
+    });
+    const spy = vi.spyOn(window, 'open').mockImplementation(() => null);
+
+    render(
+      <DetalleVenta
+        venta={venta({ clienteId: 'c1', clienteNombre: 'Ana Pérez' })}
+        esAdmin={false}
+        db={{} as never}
+        onVolver={() => {}}
+        onAnular={() => {}}
+      />,
+    );
+
+    const boton = screen.getByRole('button', { name: 'Enviar WhatsApp a Ana Pérez' });
+    fireEvent.click(boton);
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    const [url] = spy.mock.calls[0] as [string];
+    expect(url).toBe(
+      `https://wa.me/59899123456?text=${encodeURIComponent(
+        'Hola Ana Pérez: Queso Colonia 500 g, Miel 500g 2 unidades. Total $ 800,00',
+      )}`,
+    );
+  });
+
+  it('venta sin cliente asociado: no muestra el botón WhatsApp', () => {
+    configurarUseDoc({});
+
+    render(
+      <DetalleVenta
+        venta={venta()}
+        esAdmin={false}
+        db={{} as never}
+        onVolver={() => {}}
+        onAnular={() => {}}
+      />,
+    );
+
+    expect(screen.queryByRole('button', { name: /Enviar WhatsApp/ })).toBeNull();
+  });
+
+  it('venta anulada, aunque tenga cliente con teléfono: no muestra el botón WhatsApp (no hay "pedido listo" que avisar)', () => {
+    configurarUseDoc({
+      cliente: ok(cliente({ id: 'c1', nombre: 'Ana Pérez', telefonoE164: '59899123456' })),
+      plantillas: ok([{ id: 'p1', nombre: 'Pedido listo', contexto: 'venta', texto: 'Hola {cliente}' }]),
+    });
+
+    render(
+      <DetalleVenta
+        venta={venta({ clienteId: 'c1', clienteNombre: 'Ana Pérez', estado: 'anulada' })}
+        esAdmin={false}
+        db={{} as never}
+        onVolver={() => {}}
+        onAnular={() => {}}
+      />,
+    );
+
+    expect(screen.queryByRole('button', { name: /Enviar WhatsApp/ })).toBeNull();
+  });
+
+  it('cliente asociado sin teléfono normalizable: no muestra el botón WhatsApp', () => {
+    configurarUseDoc({
+      cliente: ok(cliente({ id: 'c1', nombre: 'Ana Pérez' })),
+      plantillas: ok([{ id: 'p1', nombre: 'Pedido listo', contexto: 'venta', texto: 'Hola {cliente}' }]),
+    });
+
+    render(
+      <DetalleVenta
+        venta={venta({ clienteId: 'c1', clienteNombre: 'Ana Pérez' })}
+        esAdmin={false}
+        db={{} as never}
+        onVolver={() => {}}
+        onAnular={() => {}}
+      />,
+    );
+
+    expect(screen.queryByRole('button', { name: /Enviar WhatsApp/ })).toBeNull();
   });
 });

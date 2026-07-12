@@ -11,6 +11,21 @@ const mocks = vi.hoisted(() => ({
   useOnlineStatus: vi.fn(() => true),
   useCollection: vi.fn(),
   crearCliente: vi.fn(),
+  // Default admin: `Clientes.tsx` ahora llama a `useAuth()` (gate de la
+  // acción "Inactivos", WA-C2) y el `useAuth` real explota sin
+  // `<ProveedorAuth>`. Se fija un default acá (sobrevive a
+  // `vi.clearAllMocks()`, que solo limpia calls/results, no la
+  // implementación) para no tener que tocar todos los tests preexistentes de
+  // este archivo — el único test que necesita `vendedor` lo pisa con
+  // `configurarAuth('vendedor')`.
+  useAuth: vi.fn(() => ({
+    usuario: { uid: 'u-actor' },
+    perfil: { uid: 'u-actor', nombre: 'Actor', email: 'actor@a.com', rol: 'admin', activo: true },
+    cargando: false,
+    ingresarConEmail: vi.fn(),
+    restablecerPassword: vi.fn(),
+    salir: vi.fn(),
+  })),
 }));
 
 // Mismo criterio que `Productos.test.tsx`: `clienteConverter` se deja pasar
@@ -23,6 +38,7 @@ vi.mock('@gestion/firebase-kit', async (importOriginal) => {
     useOnlineStatus: mocks.useOnlineStatus,
     useCollection: mocks.useCollection,
     crearCliente: mocks.crearCliente,
+    useAuth: mocks.useAuth,
   };
 });
 
@@ -61,6 +77,17 @@ function cliente(over: Partial<Cliente> & Pick<Cliente, 'id' | 'nombre'>): Clien
     stats: { cantidadVentas: 0, totalHistoricoCents: money(0) },
     ...over,
   };
+}
+
+function configurarAuth(rol: 'admin' | 'vendedor') {
+  mocks.useAuth.mockReturnValue({
+    usuario: { uid: 'u-actor' },
+    perfil: { uid: 'u-actor', nombre: 'Actor', email: 'actor@a.com', rol, activo: true },
+    cargando: false,
+    ingresarConEmail: vi.fn(),
+    restablecerPassword: vi.fn(),
+    salir: vi.fn(),
+  });
 }
 
 function configurarClientes(estado: EstadoFalso<Cliente>) {
@@ -309,5 +336,33 @@ describe('Clientes - alta', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
 
     expect(await screen.findByText('No se pudo crear el cliente. Intentá de nuevo.')).toBeTruthy();
+  });
+});
+
+describe('Clientes - acción "Inactivos" (WA-C2, doc 08)', () => {
+  it('admin: ve el link "Inactivos" hacia /clientes/inactivos, entre "Historial" y "Agregar"', () => {
+    configurarAuth('admin');
+    configurarClientes(estadoOk([cliente({ id: 'c1', nombre: 'Ana Pérez' })]));
+    renderizar();
+
+    const enlace = screen.getByRole('link', { name: 'Inactivos' });
+    expect(enlace.getAttribute('href')).toBe('/clientes/inactivos');
+
+    const contenedor = screen.getByTestId('acciones-header');
+    const hijos = Array.from(contenedor.children);
+    const indiceHistorial = hijos.findIndex((el) => el.textContent === 'Historial');
+    const indiceInactivos = hijos.findIndex((el) => el.textContent === 'Inactivos');
+    const indiceAgregar = hijos.findIndex((el) => el.getAttribute('aria-label') === 'Agregar cliente');
+
+    expect(indiceInactivos).toBeGreaterThan(indiceHistorial);
+    expect(indiceAgregar).toBeGreaterThan(indiceInactivos);
+  });
+
+  it('vendedor: NO ve el link "Inactivos" (herramienta de fidelización del dueño, doc 08)', () => {
+    configurarAuth('vendedor');
+    configurarClientes(estadoOk([cliente({ id: 'c1', nombre: 'Ana Pérez' })]));
+    renderizar();
+
+    expect(screen.queryByRole('link', { name: 'Inactivos' })).toBeNull();
   });
 });

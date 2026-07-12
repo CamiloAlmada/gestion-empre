@@ -1,14 +1,16 @@
 import { useMemo } from 'react';
 import { doc, type Firestore } from 'firebase/firestore';
 import { formatearMoney, type ItemVenta, type Venta } from '@gestion/core';
-import { useDoc, usuarioConverter } from '@gestion/firebase-kit';
+import { clienteConverter, useDoc, usuarioConverter } from '@gestion/firebase-kit';
 import { Button, DataTable, type ColumnaDataTable } from '@gestion/ui';
+import { BotonWhatsApp } from '../whatsapp/BotonWhatsApp';
 import { BadgeEstadoVenta } from './BadgeEstadoVenta';
 import {
   ETIQUETAS_MEDIO_PAGO,
   formatearFechaHora,
   textoCantidadItem,
   textoPrecioUnitario,
+  textoResumenItems,
 } from './formato';
 
 export interface DetalleVentaProps {
@@ -53,6 +55,21 @@ export function DetalleVenta({ venta, esAdmin, db, onVolver, onAnular }: Detalle
   const usuarioVendedor = useDoc(usuarioRef);
   const idCorto = venta.usuarioId.slice(0, 8);
   const vendedorLabel = esAdmin ? (usuarioVendedor.datos?.nombre ?? idCorto) : '—';
+
+  // Lookup del cliente asociado (si lo hay) para el botón de WhatsApp (doc
+  // 08, WA-C2): la venta solo denormaliza `clienteId`/`clienteNombre`, el
+  // teléfono vive en el documento de `clientes`. A diferencia del lookup de
+  // vendedor, este NO está gateado por `esAdmin` — las reglas de Firestore
+  // permiten leer `clientes/{id}` a cualquier rol autenticado (a diferencia
+  // de `usuarios/{uid}`, doc 07).
+  const clienteRef = useMemo(
+    () =>
+      venta.clienteId !== undefined
+        ? doc(db, 'clientes', venta.clienteId).withConverter(clienteConverter)
+        : null,
+    [db, venta.clienteId],
+  );
+  const clienteVenta = useDoc(clienteRef);
 
   const filasItems: FilaItem[] = venta.items.map((item, indice) => ({
     item,
@@ -140,13 +157,32 @@ export function DetalleVenta({ venta, esAdmin, db, onVolver, onAnular }: Detalle
         Total: {formatearMoney(venta.totalCents)}
       </p>
 
-      {esAdmin && venta.estado === 'completada' && (
-        <div className="flex justify-end">
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        {/* WhatsApp (doc 08, WA-C2): solo con cliente asociado Y venta
+            completada — una venta anulada no tiene "pedido listo" que avisar
+            (no tiene sentido felicitar/avisar de algo que se deshizo). No
+            gateado por rol: a diferencia del lookup de vendedor, cualquiera
+            que vea el detalle puede avisarle al cliente. `BotonWhatsApp` se
+            autooculta si el cliente no tiene teléfono normalizable. */}
+        {venta.estado === 'completada' && clienteVenta.datos !== null && (
+          <BotonWhatsApp
+            telefono={clienteVenta.datos.telefono}
+            telefonoE164={clienteVenta.datos.telefonoE164}
+            contexto="venta"
+            valores={{
+              cliente: clienteVenta.datos.nombre,
+              total: formatearMoney(venta.totalCents),
+              items: textoResumenItems(venta.items),
+            }}
+            db={db}
+          />
+        )}
+        {esAdmin && venta.estado === 'completada' && (
           <Button variante="peligro" onClick={onAnular}>
             Anular venta
           </Button>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
