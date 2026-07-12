@@ -3,6 +3,8 @@ import { Link } from 'react-router';
 import { Button, useTema, type Estilo, type Tema } from '@gestion/ui';
 import { useAuth } from '@gestion/firebase-kit';
 import { useHeader } from '../componentes/header/ContextoHeader';
+import { SeccionNegocio } from '../componentes/ajustes/SeccionNegocio';
+import { SeccionPlantillasWhatsApp } from '../componentes/ajustes/SeccionPlantillasWhatsApp';
 
 const OPCIONES_TEMA: { valor: Tema; etiqueta: string }[] = [
   { valor: 'light', etiqueta: 'Claro' },
@@ -114,7 +116,12 @@ function SelectorEstilo() {
 /**
  * Pantalla de Ajustes: Apariencia (tema), Cuenta (datos del perfil + Salir,
  * mudado acá desde el header) y, solo para admin, el acceso a la gestión de
- * Usuarios (`/ajustes/usuarios`, ver Usuarios.tsx).
+ * Usuarios (`/ajustes/usuarios`, ver Usuarios.tsx), la configuración del
+ * negocio (`SeccionNegocio`, doc 08) y las plantillas de WhatsApp
+ * (`SeccionPlantillasWhatsApp`, doc 08). Estas dos últimas viven inline (a
+ * diferencia de Usuarios, que es un link-out a su propia ruta): son
+ * formularios/listas chicas, sin selector de sección propio que justifique
+ * una ruta aparte — mismo criterio de tamaño que "Apariencia"/"Cuenta".
  */
 export function Ajustes() {
   const { perfil, salir } = useAuth();
@@ -154,6 +161,18 @@ export function Ajustes() {
               ›
             </span>
           </Link>
+        </Seccion>
+      )}
+
+      {perfil?.rol === 'admin' && (
+        <Seccion titulo="Negocio">
+          <SeccionNegocio />
+        </Seccion>
+      )}
+
+      {perfil?.rol === 'admin' && (
+        <Seccion titulo="Plantillas de WhatsApp">
+          <SeccionPlantillasWhatsApp />
         </Seccion>
       )}
     </div>

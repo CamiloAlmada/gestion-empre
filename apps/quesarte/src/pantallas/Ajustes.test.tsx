@@ -13,6 +13,19 @@ vi.mock('@gestion/firebase-kit', () => ({
   useAuth: mocks.useAuth,
 }));
 
+// `SeccionNegocio`/`SeccionPlantillasWhatsApp` tienen sus propias suites
+// (`componentes/ajustes/*.test.tsx`) con el mock completo de Firestore que
+// necesitan sus lecturas/escrituras en vivo. Acá solo importa el GATEO por
+// rol (admin ve las 2 secciones, vendedor ninguna) — mockearlas a un
+// placeholder evita duplicar ese mock pesado en un archivo que, si no,
+// seguiría siendo el más liviano de las pantallas.
+vi.mock('../componentes/ajustes/SeccionNegocio', () => ({
+  SeccionNegocio: () => <div data-testid="seccion-negocio" />,
+}));
+vi.mock('../componentes/ajustes/SeccionPlantillasWhatsApp', () => ({
+  SeccionPlantillasWhatsApp: () => <div data-testid="seccion-plantillas-whatsapp" />,
+}));
+
 function configurarAuth(overrides: Partial<ReturnType<typeof authPorDefecto>> = {}) {
   const valor = { ...authPorDefecto(), ...overrides };
   mocks.useAuth.mockReturnValue(valor);
@@ -166,5 +179,27 @@ describe('Ajustes', () => {
 
     const link = screen.getByRole('link', { name: /Gestión de usuarios/ });
     expect(link.getAttribute('href')).toBe('/ajustes/usuarios');
+  });
+
+  it('vendedor no ve las secciones "Negocio" ni "Plantillas de WhatsApp" (doc 08)', () => {
+    configurarAuth();
+
+    renderizar();
+
+    expect(screen.queryByText('Negocio')).toBeNull();
+    expect(screen.queryByText('Plantillas de WhatsApp')).toBeNull();
+    expect(screen.queryByTestId('seccion-negocio')).toBeNull();
+    expect(screen.queryByTestId('seccion-plantillas-whatsapp')).toBeNull();
+  });
+
+  it('admin ve las secciones "Negocio" y "Plantillas de WhatsApp" (doc 08)', () => {
+    configurarAuth({ perfil: { ...authPorDefecto().perfil, rol: 'admin' } });
+
+    renderizar();
+
+    expect(screen.getByText('Negocio')).toBeTruthy();
+    expect(screen.getByText('Plantillas de WhatsApp')).toBeTruthy();
+    expect(screen.getByTestId('seccion-negocio')).toBeTruthy();
+    expect(screen.getByTestId('seccion-plantillas-whatsapp')).toBeTruthy();
   });
 });
