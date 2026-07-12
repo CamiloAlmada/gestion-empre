@@ -296,6 +296,33 @@ Criterios de aceptación:
       (como lista "bajo objetivo" en Precios, enlazada desde la compra
       confirmada — pull, no notificación push).
 
+## Tanda WA — Demo clientes + WhatsApp (doc 08) — EN CURSO
+
+Repriorización (2026-07-11, decidida por Camilo): objetivo concreto, una DEMO
+funcionando de clientes + WhatsApp para la sesión de elicitación con Adrián
+(doc 10). Se antepone a Fase 3.
+
+Alcance: doc 08 COMPLETO salvo el pronóstico de ventas (necesita semanas de
+datos reales; no entra en la demo) + seed de datos de prueba cargable SOLO en
+el proyecto dev (allowlist dura de projectId). La base de clientes del doc 07
+ya estaba en producción desde Fase 1.5 (nada que rehacer); proveedores ya
+existe y no se toca. Restricción dura del doc 08: solo links `wa.me`, ningún
+envío automático/masivo/programado — punto explícito de la DoD del review
+senior.
+
+Tareas: WA-A core (normalizarTelefono, resolver de plantillas + link wa.me,
+clasificación de inactivos — senior), WA-B modelo/kit/reglas (`telefonoE164`
+derivado con fallback de lectura, colección `configuracion` con
+`general.codigoPaisDefault` y `plantillasWhatsApp` — senior), WA-C1 Ajustes
+plantillas (semi), WA-C2 botones WhatsApp + lista de inactivos + privacidad
+del teléfono (semi), WA-D seed demo (semi), review integral senior.
+
+POSPUESTO hasta después de la demo: doc 09 §B borradores, §C insumos, §D
+fotos (doc aún no versionado en el repo) y cualquier trabajo nuevo de
+proveedores del doc 07 (la parte ya en producción queda como está). El doc 09
+§A sigue EN PAUSA. La sesión de elicitación (doc 10 §8) reordena el roadmap
+post-demo, incluida Fase 3.
+
 ## Fase 3 — Inteligencia de negocio
 
 Objetivo: reportes que responden preguntas de plata.
