@@ -63,6 +63,9 @@ const DetalleClientePantalla = lazy(() =>
     default: m.DetalleClientePantalla,
   })),
 );
+const ClientesInactivos = lazy(() =>
+  import('./pantallas/ClientesInactivos').then((m) => ({ default: m.ClientesInactivos })),
+);
 const Reportes = lazy(() =>
   import('./pantallas/Reportes').then((m) => ({ default: m.Reportes })),
 );
@@ -159,6 +162,17 @@ export function App() {
           {/* Clientes es la raíz del tab (docs/06-ui-ux.md §2, 2026-07-10). */}
           <Route path="clientes" element={<Clientes />} />
           <Route path="clientes/cliente/:id" element={<DetalleClientePantalla />} />
+          {/* Inactivos (doc 08, "Fidelización", WA-C2): herramienta de
+              reconquista del dueño, solo admin — mismo criterio que
+              Compras/Proveedores/Precios de Stock. */}
+          <Route
+            path="clientes/inactivos"
+            element={
+              <RutaSoloAdmin>
+                <ClientesInactivos />
+              </RutaSoloAdmin>
+            }
+          />
           {/* Historial general (DE VENTAS) cuelga del tab Venta en la
               jerarquía (volverA + tab activo, ver Shell.tsx, docs/06-ui-ux.md
               §2, 2026-07-10) pero su URL no cambió: hay PWAs instaladas con

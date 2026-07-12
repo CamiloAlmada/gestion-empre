@@ -49,3 +49,15 @@ export function textoPrecioUnitario(item: ItemVenta): string {
   const monto = formatearMoney(item.precioUnitCents);
   return item.gramos !== undefined ? `${monto} /kg` : `${monto} /u`;
 }
+
+/**
+ * Resumen legible de los ítems de una venta, para el placeholder `{items}`
+ * del mensaje de WhatsApp "Pedido listo" (doc 08, WA-C2): nombre + peso o
+ * cantidad de cada ítem, separados por coma (p. ej. "Queso Colonia 500 g,
+ * Miel 500g 2 unidades"). Reusa `textoCantidadItem` (mismo texto que ya
+ * muestra la tabla/lista compacta del detalle) para no duplicar el
+ * formateo de peso/unidades.
+ */
+export function textoResumenItems(items: ItemVenta[]): string {
+  return items.map((item) => `${item.nombreProducto} ${textoCantidadItem(item)}`).join(', ');
+}

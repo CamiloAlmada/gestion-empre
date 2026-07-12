@@ -390,6 +390,48 @@ describe('DetalleClientePantalla - gates de rol', () => {
   });
 });
 
+describe('DetalleClientePantalla - privacidad del teléfono y botón WhatsApp (WA-C2, doc 08)', () => {
+  it('admin: ve el teléfono en texto Y el botón de WhatsApp', () => {
+    configurarAuth('admin');
+    configurarCliente(
+      estadoOkDoc(
+        clienteDe({ id: 'c1', nombre: 'Ana Pérez', telefono: '099 123 456', telefonoE164: '59899123456' }),
+      ),
+    );
+    configurarVentas(estadoOkColeccion([]));
+
+    renderizar();
+
+    expect(screen.getByText('Teléfono: 099 123 456')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Enviar WhatsApp a Ana Pérez' })).toBeTruthy();
+  });
+
+  it('vendedor: NO ve el teléfono en texto, pero SÍ ve el botón de WhatsApp (doc 08 — el número solo viaja dentro del link)', () => {
+    configurarAuth('vendedor');
+    configurarCliente(
+      estadoOkDoc(
+        clienteDe({ id: 'c1', nombre: 'Ana Pérez', telefono: '099 123 456', telefonoE164: '59899123456' }),
+      ),
+    );
+    configurarVentas(estadoOkColeccion([]));
+
+    renderizar();
+
+    expect(screen.queryByText(/^Teléfono:/)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Enviar WhatsApp a Ana Pérez' })).toBeTruthy();
+  });
+
+  it('cliente sin teléfono normalizable: no aparece el botón de WhatsApp (ni para admin)', () => {
+    configurarAuth('admin');
+    configurarCliente(estadoOkDoc(clienteDe({ id: 'c1', nombre: 'Ana Pérez' })));
+    configurarVentas(estadoOkColeccion([]));
+
+    renderizar();
+
+    expect(screen.queryByRole('button', { name: /Enviar WhatsApp/ })).toBeNull();
+  });
+});
+
 describe('DetalleClientePantalla - edición', () => {
   it('admin: edita datos de contacto y llama a actualizarCliente', async () => {
     configurarAuth('admin');

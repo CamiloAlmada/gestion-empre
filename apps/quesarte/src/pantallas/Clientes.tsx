@@ -2,7 +2,13 @@ import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { collection, orderBy, query } from 'firebase/firestore';
 import { Button, CampoBusqueda, Chip, useToasts } from '@gestion/ui';
-import { clienteConverter, crearCliente, useCollection, useOnlineStatus } from '@gestion/firebase-kit';
+import {
+  clienteConverter,
+  crearCliente,
+  useAuth,
+  useCollection,
+  useOnlineStatus,
+} from '@gestion/firebase-kit';
 import type { DatosCliente } from '@gestion/firebase-kit';
 import { db } from '../firebase';
 import { useHeader } from '../componentes/header/ContextoHeader';
@@ -36,6 +42,8 @@ export function Clientes() {
   const navigate = useNavigate();
   const enLinea = useOnlineStatus();
   const { mostrarToast } = useToasts();
+  const { perfil } = useAuth();
+  const esAdmin = perfil?.rol === 'admin';
 
   const [busqueda, setBusqueda] = useState('');
   const [mostrarInactivos, setMostrarInactivos] = useState(false);
@@ -59,6 +67,23 @@ export function Clientes() {
         >
           Historial
         </Link>
+        {/* Inactivos (doc 08, "Fidelización", WA-C2): herramienta de
+            reconquista del dueño — mismo criterio de privacidad que
+            Compras/Proveedores/Precios de Stock, solo `admin`. La ruta
+            (`/clientes/inactivos`) también está protegida con
+            `RutaSoloAdmin` (App.tsx): esto solo evita mostrarle a un
+            vendedor un link a algo a lo que igual sería redirigido
+            (docs/06-ui-ux.md §2 — "los tabs se filtran por rol, nunca se
+            muestran deshabilitados"). A la izquierda del "+", que ocupa
+            SIEMPRE el extremo derecho. */}
+        {esAdmin && (
+          <Link
+            to="/clientes/inactivos"
+            className="inline-flex min-h-[48px] items-center justify-center rounded-control border border-borde bg-superficie px-3 text-sm font-medium text-texto hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
+          >
+            Inactivos
+          </Link>
+        )}
         <button
           type="button"
           onClick={() => setAltaAbierta(true)}
