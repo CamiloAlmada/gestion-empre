@@ -66,3 +66,17 @@ export {
   redondearComercial,
   precioSugerido,
 } from './margen.js';
+export { normalizarTelefono } from './telefono.js';
+export {
+  type ContextoPlantilla,
+  type PlantillaWhatsApp,
+  resolverPlantilla,
+  construirLinkWhatsApp,
+  PLANTILLAS_SEED,
+} from './whatsapp.js';
+export {
+  type ConfigInactividad,
+  type EntradaInactividad,
+  type ResultadoInactividad,
+  clasificarInactividad,
+} from './fidelizacion.js';
