@@ -78,6 +78,16 @@ function clienteAltaRapida(nombre = 'Nuevo') {
   };
 }
 
+// Una plantilla de WhatsApp con shape válido (doc 08). `sobre` permite romperla.
+function plantillaWa(sobre: Record<string, unknown> = {}) {
+  return { id: 'p1', nombre: 'Pedido listo', contexto: 'venta', texto: 'Hola {cliente}', ...sobre };
+}
+
+// Doc `configuracion/plantillasWhatsApp` con la lista dada (default: una válida).
+function plantillasWaDoc(plantillas: unknown[] = [plantillaWa()]) {
+  return { plantillas };
+}
+
 // Compra mínima con el `estado` dado (doc 03). Los efectos no importan a las
 // reglas, que solo miran el `estado` y su transición.
 function compraSeed(estado: 'borrador' | 'confirmada') {
@@ -693,6 +703,64 @@ describe('clientes', () => {
     );
   });
 
+  it('vendedor crea cliente CON telefonoE164 válido (derivado, doc 08)', async () => {
+    await assertSucceeds(
+      setDoc(doc(db(VENDEDOR), 'clientes', 'cli-wa'), {
+        ...clienteAltaRapida(),
+        telefono: '099 123 456',
+        telefonoE164: '59899123456',
+      }),
+    );
+  });
+
+  it('vendedor crea cliente SIN telefonoE164 (sigue siendo válido)', async () => {
+    await assertSucceeds(
+      setDoc(doc(db(VENDEDOR), 'clientes', 'cli-sin-wa'), {
+        ...clienteAltaRapida(),
+        telefono: 'no tengo',
+      }),
+    );
+  });
+
+  it('vendedor NO crea cliente con telefonoE164 con letras', async () => {
+    await assertFails(
+      setDoc(doc(db(VENDEDOR), 'clientes', 'cli-mal'), {
+        ...clienteAltaRapida(),
+        telefonoE164: '5989ABC123',
+      }),
+    );
+  });
+
+  it('vendedor NO crea cliente con telefonoE164 fuera de rango (muy corto)', async () => {
+    await assertFails(
+      setDoc(doc(db(VENDEDOR), 'clientes', 'cli-corto'), {
+        ...clienteAltaRapida(),
+        telefonoE164: '123',
+      }),
+    );
+  });
+
+  it('admin setea telefonoE164 válido en un cliente existente', async () => {
+    await assertSucceeds(
+      updateDoc(doc(db(ADMIN), 'clientes', 'cli-1'), {
+        telefono: '099 000 111',
+        telefonoE164: '59899000111',
+      }),
+    );
+  });
+
+  it('admin update que SOLO cambia telefonoE164 (válido)', async () => {
+    await assertSucceeds(
+      updateDoc(doc(db(ADMIN), 'clientes', 'cli-1'), { telefonoE164: '59899000111' }),
+    );
+  });
+
+  it('admin NO setea un telefonoE164 con letras', async () => {
+    await assertFails(
+      updateDoc(doc(db(ADMIN), 'clientes', 'cli-1'), { telefonoE164: 'ABC12345' }),
+    );
+  });
+
   it('nadie borra clientes (ni el admin)', async () => {
     await assertFails(deleteDoc(doc(db(ADMIN), 'clientes', 'cli-1')));
   });
@@ -832,6 +900,148 @@ describe('configuracion', () => {
   it('admin modifica configuración', async () => {
     await assertSucceeds(
       updateDoc(doc(db(ADMIN), 'configuracion', 'general'), { umbralPiezaAgotadaGramos: 10 }),
+    );
+  });
+
+  // `general` tiene shape estricto = SUPERSET de claves conocidas (docs 02/03/08),
+  // todas opcionales y validadas por tipo/rango. El merge no destructivo del kit
+  // deja que un update toque una sola clave.
+  it('admin puede agregar codigoPaisDefault a general sin perder la config previa', async () => {
+    await assertSucceeds(
+      updateDoc(doc(db(ADMIN), 'configuracion', 'general'), {
+        codigoPaisDefault: '598',
+        nombreNegocio: 'Quesarte',
+      }),
+    );
+  });
+
+  it('admin acepta cada clave conocida con tipo correcto', async () => {
+    await assertSucceeds(
+      updateDoc(doc(db(ADMIN), 'configuracion', 'general'), { nombreNegocio: 'Nueva Quesería' }),
+    );
+    await assertSucceeds(
+      updateDoc(doc(db(ADMIN), 'configuracion', 'general'), { umbralPiezaAgotadaGramos: 25 }),
+    );
+    await assertSucceeds(
+      updateDoc(doc(db(ADMIN), 'configuracion', 'general'), { metodoProrrateo: 'por_peso' }),
+    );
+    await assertSucceeds(
+      updateDoc(doc(db(ADMIN), 'configuracion', 'general'), { codigoPaisDefault: '54' }),
+    );
+  });
+
+  it('admin NO agrega una clave desconocida a general', async () => {
+    await assertFails(
+      updateDoc(doc(db(ADMIN), 'configuracion', 'general'), { colorTema: 'rojo' }),
+    );
+  });
+
+  it('admin NO pone umbralPiezaAgotadaGramos negativo', async () => {
+    await assertFails(
+      updateDoc(doc(db(ADMIN), 'configuracion', 'general'), { umbralPiezaAgotadaGramos: -5 }),
+    );
+  });
+
+  it('admin NO pone umbralPiezaAgotadaGramos float (no entero)', async () => {
+    await assertFails(
+      updateDoc(doc(db(ADMIN), 'configuracion', 'general'), { umbralPiezaAgotadaGramos: 5.5 }),
+    );
+  });
+
+  it('admin NO pone metodoProrrateo fuera de la unión', async () => {
+    await assertFails(
+      updateDoc(doc(db(ADMIN), 'configuracion', 'general'), { metodoProrrateo: 'por_capricho' }),
+    );
+  });
+
+  it('admin NO pone nombreNegocio de más de 80 caracteres', async () => {
+    await assertFails(
+      updateDoc(doc(db(ADMIN), 'configuracion', 'general'), { nombreNegocio: 'x'.repeat(81) }),
+    );
+  });
+
+  it('admin NO pone codigoPaisDefault con letras', async () => {
+    await assertFails(
+      updateDoc(doc(db(ADMIN), 'configuracion', 'general'), { codigoPaisDefault: '59A' }),
+    );
+  });
+
+  it('admin NO pone codigoPaisDefault de más de 4 dígitos', async () => {
+    await assertFails(
+      updateDoc(doc(db(ADMIN), 'configuracion', 'general'), { codigoPaisDefault: '12345' }),
+    );
+  });
+});
+
+describe('configuracion/plantillasWhatsApp (doc 08, solo admin, shape estricto)', () => {
+  it('admin escribe una lista de plantillas válida', async () => {
+    await assertSucceeds(
+      setDoc(doc(db(ADMIN), 'configuracion', 'plantillasWhatsApp'), plantillasWaDoc()),
+    );
+  });
+
+  it('admin escribe una lista vacía (deja sin plantillas)', async () => {
+    await assertSucceeds(
+      setDoc(doc(db(ADMIN), 'configuracion', 'plantillasWhatsApp'), plantillasWaDoc([])),
+    );
+  });
+
+  it('vendedor NO escribe plantillas', async () => {
+    await assertFails(
+      setDoc(doc(db(VENDEDOR), 'configuracion', 'plantillasWhatsApp'), plantillasWaDoc()),
+    );
+  });
+
+  it('vendedor SÍ lee plantillas (usuario activo)', async () => {
+    await assertSucceeds(getDoc(doc(db(VENDEDOR), 'configuracion', 'plantillasWhatsApp')));
+  });
+
+  it('admin NO escribe el doc con una clave de más (fuera de {plantillas})', async () => {
+    await assertFails(
+      setDoc(doc(db(ADMIN), 'configuracion', 'plantillasWhatsApp'), {
+        plantillas: [plantillaWa()],
+        otra: 1,
+      }),
+    );
+  });
+
+  it('admin NO escribe una plantilla con contexto inválido', async () => {
+    await assertFails(
+      setDoc(
+        doc(db(ADMIN), 'configuracion', 'plantillasWhatsApp'),
+        plantillasWaDoc([plantillaWa({ contexto: 'promo' })]),
+      ),
+    );
+  });
+
+  it('admin NO escribe una plantilla con una clave de más', async () => {
+    await assertFails(
+      setDoc(
+        doc(db(ADMIN), 'configuracion', 'plantillasWhatsApp'),
+        plantillasWaDoc([plantillaWa({ color: 'rojo' })]),
+      ),
+    );
+  });
+
+  it('admin NO escribe una plantilla con id vacío', async () => {
+    await assertFails(
+      setDoc(
+        doc(db(ADMIN), 'configuracion', 'plantillasWhatsApp'),
+        plantillasWaDoc([plantillaWa({ id: '' })]),
+      ),
+    );
+  });
+
+  it('admin NO escribe más de 20 plantillas', async () => {
+    const muchas = Array.from({ length: 21 }, (_, i) => plantillaWa({ id: `p${i}` }));
+    await assertFails(
+      setDoc(doc(db(ADMIN), 'configuracion', 'plantillasWhatsApp'), plantillasWaDoc(muchas)),
+    );
+  });
+
+  it('admin NO escribe si plantillas no es lista', async () => {
+    await assertFails(
+      setDoc(doc(db(ADMIN), 'configuracion', 'plantillasWhatsApp'), { plantillas: 'nop' }),
     );
   });
 });

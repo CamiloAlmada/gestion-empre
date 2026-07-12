@@ -37,6 +37,17 @@ describe('configuracionConverter.fromFirestore', () => {
       configuracionConverter.fromFirestore(snapshotDe('general', docCorrupto), {}),
     ).toThrow(RangeError);
   });
+
+  it('reconstruye codigoPaisDefault (doc 08) cuando está presente', () => {
+    const conCodigo = { ...docCompleto, codigoPaisDefault: '598' };
+    const configuracion = configuracionConverter.fromFirestore(snapshotDe('general', conCodigo), {});
+    expect(configuracion.codigoPaisDefault).toBe('598');
+  });
+
+  it('codigoPaisDefault ausente (config previa a WA) queda undefined', () => {
+    const configuracion = configuracionConverter.fromFirestore(snapshotDe('general', docCompleto), {});
+    expect(configuracion.codigoPaisDefault).toBeUndefined();
+  });
 });
 
 describe('configuracionConverter.toFirestore', () => {
@@ -51,5 +62,18 @@ describe('configuracionConverter.toFirestore', () => {
     const reconstruido = configuracionConverter.fromFirestore(snapshotDe('general', doc), {});
 
     expect(reconstruido).toEqual(configuracion);
+  });
+
+  it('omite codigoPaisDefault del doc cuando es undefined (nunca null)', () => {
+    const doc = configuracionConverter.toFirestore(configuracion);
+    expect(doc).not.toHaveProperty('codigoPaisDefault');
+  });
+
+  it('round-trip con codigoPaisDefault presente', () => {
+    const conCodigo: Configuracion = { ...configuracion, codigoPaisDefault: '598' };
+    const doc = configuracionConverter.toFirestore(conCodigo);
+    expect(doc.codigoPaisDefault).toBe('598');
+    const reconstruido = configuracionConverter.fromFirestore(snapshotDe('general', doc), {});
+    expect(reconstruido).toEqual(conCodigo);
   });
 });

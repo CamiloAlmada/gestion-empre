@@ -16,6 +16,7 @@ interface ConfiguracionDoc {
   nombreNegocio: string;
   umbralPiezaAgotadaGramos: number;
   metodoProrrateo: MetodoProrrateo;
+  codigoPaisDefault?: string;
 }
 
 /**
@@ -31,8 +32,13 @@ interface ConfiguracionDoc {
  */
 export const configuracionConverter: FirestoreDataConverter<Configuracion> = {
   toFirestore(configuracion: WithFieldValue<Configuracion>): DocumentData {
-    const { nombreNegocio, umbralPiezaAgotadaGramos, metodoProrrateo } = configuracion;
-    return { nombreNegocio, umbralPiezaAgotadaGramos, metodoProrrateo };
+    const { nombreNegocio, umbralPiezaAgotadaGramos, metodoProrrateo, codigoPaisDefault } =
+      configuracion;
+    const doc: DocumentData = { nombreNegocio, umbralPiezaAgotadaGramos, metodoProrrateo };
+    // `codigoPaisDefault` es opcional (doc 08): ausente en negocios previos a WA.
+    // Se omite si `undefined` (coherente con el resto de converters: nunca `null`).
+    if (codigoPaisDefault !== undefined) doc.codigoPaisDefault = codigoPaisDefault;
+    return doc;
   },
   fromFirestore(snapshot: QueryDocumentSnapshot, options?: SnapshotOptions): Configuracion {
     const datos = snapshot.data(options) as ConfiguracionDoc;
@@ -40,6 +46,7 @@ export const configuracionConverter: FirestoreDataConverter<Configuracion> = {
       nombreNegocio: datos.nombreNegocio,
       umbralPiezaAgotadaGramos: peso(datos.umbralPiezaAgotadaGramos),
       metodoProrrateo: datos.metodoProrrateo,
+      codigoPaisDefault: datos.codigoPaisDefault,
     };
   },
 };

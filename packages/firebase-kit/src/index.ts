@@ -10,6 +10,7 @@ export { piezaConverter } from './converters/pieza';
 export { ventaConverter } from './converters/venta';
 export { movimientoConverter } from './converters/movimiento';
 export { configuracionConverter } from './converters/configuracion';
+export { plantillasWhatsAppConverter } from './converters/plantillasWhatsApp';
 export { categoriaConverter } from './converters/categoria';
 export { clienteConverter } from './converters/cliente';
 export { proveedorConverter } from './converters/proveedor';
@@ -53,6 +54,11 @@ export {
   type EntradaConfirmarCompra,
   type EfectoProductoCompra,
 } from './compras';
+export {
+  guardarConfiguracionGeneral,
+  guardarPlantillasWhatsApp,
+  type DatosConfiguracionGeneral,
+} from './configuracion';
 export { invitarUsuario, type EntradaInvitacion } from './invitaciones';
 export {
   crearCategoria,
@@ -75,6 +81,8 @@ export {
   ClienteInvalidoError,
   ErrorProveedor,
   ProveedorInvalidoError,
+  ErrorConfiguracion,
+  ConfiguracionInvalidaError,
   ErrorCompra,
   CompraVaciaError,
   EstadoCompraInvalidoError,

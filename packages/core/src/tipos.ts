@@ -199,6 +199,14 @@ export interface Configuracion {
   umbralPiezaAgotadaGramos: Peso;
   /** Reparto de gastos de viaje al confirmar una compra (dedup con `core`). */
   metodoProrrateo: MetodoProrrateo;
+  /**
+   * Código de país (solo dígitos, sin `+`) que se antepone a los teléfonos
+   * locales al derivar `Cliente.telefonoE164` para armar links `wa.me` (doc 08).
+   * Lo edita el admin en Ajustes; la UI se lo pasa a `crearCliente` /
+   * `actualizarCliente`. Ausente en un negocio recién instalado: el caller usa el
+   * default `'598'` (Uruguay). No es un umbral ni dinero: es una cadena de dígitos.
+   */
+  codigoPaisDefault?: string;
 }
 
 /**
@@ -237,6 +245,16 @@ export interface Cliente {
   /** Apodo de mostrador ("Marta la de enfrente"). */
   alias?: string;
   telefono?: string;
+  /**
+   * Teléfono normalizado a E.164 sin `+` (solo dígitos, con código de país),
+   * DERIVADO de `telefono` vía `normalizarTelefono(telefono, codigoPais)` en la
+   * escritura (`crearCliente` / `actualizarCliente`, doc 08). Es el número que
+   * consume el link `wa.me`; `telefono` guarda el display tal como lo tipeó el
+   * usuario. AUSENTE si no hay teléfono o si no es normalizable de forma
+   * inequívoca (en ese caso el botón de WhatsApp no se muestra). Los clientes de
+   * Fase 1.5 no lo tienen: es válido, la lectura hace fallback (WA-C2).
+   */
+  telefonoE164?: string;
   email?: string;
   direccion?: string;
   notas?: string;
