@@ -29,6 +29,7 @@ interface ClienteDoc {
   nombre: string;
   alias?: string;
   telefono?: string;
+  telefonoE164?: string;
   email?: string;
   direccion?: string;
   notas?: string;
@@ -64,6 +65,11 @@ function statsDeDoc(doc: StatsClienteDoc): StatsCliente {
  * - Campos opcionales de contacto y las fechas de `stats` ausentes en Firestore ↔
  *   `undefined` en dominio; si están `undefined` al escribir, se omiten del doc
  *   (nunca `null`).
+ * - `telefonoE164` es DERIVADO de `telefono` (no lo escribe una pantalla): lo
+ *   calcula `crearCliente` / `actualizarCliente` con `normalizarTelefono` (doc 08).
+ *   El converter solo lo transporta (omite `undefined` como el resto). El BORRADO
+ *   del campo en un update (teléfono no normalizable) NO pasa por acá: va como
+ *   `deleteField()` en el `updateDoc` parcial de `actualizarCliente`.
  *
  * IMPORTANTE: los increments de `stats` en la venta/anulación NO pasan por este
  * converter (usan `batch.update` sobre rutas de campo `stats.x` con
@@ -72,7 +78,8 @@ function statsDeDoc(doc: StatsClienteDoc): StatsCliente {
  */
 export const clienteConverter: FirestoreDataConverter<Cliente> = {
   toFirestore(cliente: WithFieldValue<Cliente>): DocumentData {
-    const { nombre, alias, telefono, email, direccion, notas, fechaAlta, activo } = cliente;
+    const { nombre, alias, telefono, telefonoE164, email, direccion, notas, fechaAlta, activo } =
+      cliente;
     const doc: DocumentData = {
       nombre,
       fechaAlta,
@@ -81,6 +88,7 @@ export const clienteConverter: FirestoreDataConverter<Cliente> = {
     };
     if (alias !== undefined) doc.alias = alias;
     if (telefono !== undefined) doc.telefono = telefono;
+    if (telefonoE164 !== undefined) doc.telefonoE164 = telefonoE164;
     if (email !== undefined) doc.email = email;
     if (direccion !== undefined) doc.direccion = direccion;
     if (notas !== undefined) doc.notas = notas;
@@ -93,6 +101,7 @@ export const clienteConverter: FirestoreDataConverter<Cliente> = {
       nombre: datos.nombre,
       alias: datos.alias,
       telefono: datos.telefono,
+      telefonoE164: datos.telefonoE164,
       email: datos.email,
       direccion: datos.direccion,
       notas: datos.notas,

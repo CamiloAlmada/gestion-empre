@@ -113,11 +113,22 @@ service cloud.firestore {
         && d.orden is int && d.orden >= 0;
     }
 
-    // Claves permitidas de un cliente (doc 07). Ninguna otra puede aparecer, ni en
-    // el alta rápida del vendedor ni en la edición del admin.
+    // Claves permitidas de un cliente (doc 07 + `telefonoE164` de doc 08). Ninguna
+    // otra puede aparecer, ni en el alta rápida del vendedor ni en la edición del
+    // admin. `telefonoE164` es el número derivado que consume el link `wa.me`.
     function clienteClavesConocidas() {
       return request.resource.data.keys().hasOnly(
-        ['nombre', 'alias', 'telefono', 'email', 'direccion', 'notas', 'fechaAlta', 'activo', 'stats']);
+        ['nombre', 'alias', 'telefono', 'telefonoE164', 'email', 'direccion', 'notas',
+         'fechaAlta', 'activo', 'stats']);
+    }
+
+    // `telefonoE164` (doc 08), si está presente, es E.164 sin `+`: solo dígitos,
+    // 8-15 (mismo rango plausible que `normalizarTelefono` en `core`). Ausente es
+    // válido (no hay teléfono normalizable). No exige coherencia con `telefono`
+    // display: eso es responsabilidad del kit (lo deriva), no de las reglas.
+    function telefonoE164ValidoSiPresente(d) {
+      return !('telefonoE164' in d)
+        || (d.telefonoE164 is string && d.telefonoE164.matches('^[0-9]{8,15}$'));
     }
 
     // Shape estricto para el ALTA de un cliente (create de vendedor o admin): el
@@ -135,6 +146,7 @@ service cloud.firestore {
         && d.activo == true
         && (!('alias' in d) || d.alias is string)
         && (!('telefono' in d) || d.telefono is string)
+        && telefonoE164ValidoSiPresente(d)
         && (!('email' in d) || d.email is string)
         && (!('direccion' in d) || d.direccion is string)
         && (!('notas' in d) || d.notas is string)
@@ -160,6 +172,34 @@ service cloud.firestore {
         && nueva.cantidadVentas == vieja.cantidadVentas + 1
         && nueva.totalHistoricoCents is int
         && nueva.totalHistoricoCents > vieja.totalHistoricoCents;
+    }
+
+    // Shape de UNA plantilla de WhatsApp (doc 08): exactamente
+    // { id, nombre, texto, contexto in ['venta','cliente','inactivo'] }, strings
+    // acotados. Se aplica al primer elemento de la lista (ver `plantillasWhatsAppValidas`).
+    function plantillaWhatsAppValida(p) {
+      return p is map
+        && p.keys().hasOnly(['id', 'nombre', 'texto', 'contexto'])
+        && p.keys().hasAll(['id', 'nombre', 'texto', 'contexto'])
+        && p.id is string && p.id.size() >= 1 && p.id.size() <= 40
+        && p.nombre is string && p.nombre.size() >= 1 && p.nombre.size() <= 60
+        && p.texto is string && p.texto.size() >= 1 && p.texto.size() <= 1000
+        && p.contexto in ['venta', 'cliente', 'inactivo'];
+    }
+
+    // Shape estricto de `configuracion/plantillasWhatsApp` (doc 08): un único doc
+    // con la clave `plantillas` (lista de ≤ 20 mapas). LÍMITE PRÁCTICO: el lenguaje
+    // de reglas no itera listas de largo arbitrario, así que se valida el TAMAÑO de
+    // la lista + su única clave + el shape del PRIMER elemento como representante.
+    // La validación exhaustiva por elemento (largos, contexto de cada plantilla, ids
+    // únicos) la hace `guardarPlantillasWhatsApp` en el kit, client-side, antes de
+    // escribir; estas reglas son el backstop de shape (ver reporte WA-B).
+    function plantillasWhatsAppValidas() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['plantillas'])
+        && d.plantillas is list
+        && d.plantillas.size() <= 20
+        && (d.plantillas.size() == 0 || plantillaWhatsAppValida(d.plantillas[0]));
     }
 
     // --- Colecciones ---
@@ -255,8 +295,12 @@ service cloud.firestore {
       allow create: if usuarioActivo() && clienteAltaValida();
       // Admin edita datos de contacto/activo y revierte el cache de stats al anular
       // (decrementos): puede cambiar cualquier campo conocido, sin introducir
-      // claves nuevas (preserva el shape).
-      allow update: if esAdmin() && clienteClavesConocidas();
+      // claves nuevas (preserva el shape) y con `telefonoE164` bien formado si está
+      // presente (doc 08). Un update que SOLO cambia `telefonoE164` (o lo borra) cae
+      // acá igual: `clienteClavesConocidas` no exige que cambie tal o cual campo.
+      allow update: if esAdmin()
+        && clienteClavesConocidas()
+        && telefonoE164ValidoSiPresente(request.resource.data);
       // Vendedor solo suma al cache `stats` el efecto de UNA venta (nunca resta ni
       // toca datos de contacto).
       allow update: if esVendedor()
@@ -305,7 +349,17 @@ service cloud.firestore {
     match /configuracion/{id} {
       // Configuración legible por usuario activo; solo admin la modifica.
       allow read: if usuarioActivo();
-      allow write: if esAdmin();
+      // `plantillasWhatsApp` (doc 08): admin, con shape estricto (lista de plantillas).
+      allow write: if esAdmin() && id == 'plantillasWhatsApp' && plantillasWhatsAppValidas();
+      // `general` y cualquier otro doc de configuración: admin, SIN shape estricto.
+      // NOTA WA-B: la instrucción de bloquear `general` a solo
+      // {codigoPaisDefault, nombreNegocio} quedó PENDIENTE de decisión del tech lead.
+      // Contradice la config viva de Fase 2 que este doc ya guarda
+      // (umbralPiezaAgotadaGramos, metodoProrrateo — leída por CompraPantalla y
+      // cubierta por un test existente): endurecerla a esas 2 claves borraría esa
+      // config (regresión de Fase 2). Se mantiene el comportamiento previo
+      // (admin-write) hasta ratificar el shape (superset o doc aparte). Ver reporte.
+      allow write: if esAdmin() && id != 'plantillasWhatsApp';
     }
 
     // Catch-all: deniega explícitamente cualquier otra ruta (refuerza el deny

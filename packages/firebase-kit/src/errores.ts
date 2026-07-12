@@ -152,6 +152,27 @@ export class ProveedorInvalidoError extends ErrorProveedor {
 }
 
 /**
+ * Errores de la configuración del negocio (`configuracion.ts`): edición de la
+ * config general y de las plantillas de WhatsApp (doc 08), ambas solo-admin en
+ * Ajustes. Validación previa local (fail fast en español antes de tocar Firestore)
+ * como el resto de las familias; las reglas son el backstop en el servidor.
+ */
+export abstract class ErrorConfiguracion extends Error {}
+
+/**
+ * La configuración a guardar es inválida: código de país que no es 1-4 dígitos,
+ * nombre de negocio vacío o demasiado largo, o una lista de plantillas de WhatsApp
+ * mal formada (demasiadas, ids duplicados, contexto fuera de la unión, o campos
+ * fuera de rango). El mensaje dice cuál.
+ */
+export class ConfiguracionInvalidaError extends ErrorConfiguracion {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ConfiguracionInvalidaError';
+  }
+}
+
+/**
  * Errores del módulo de compras (`compras.ts`, doc 03).
  *
  * Mismo patrón que las otras familias: una raíz abstracta para el `catch` genérico

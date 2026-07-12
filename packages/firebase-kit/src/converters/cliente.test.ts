@@ -63,12 +63,19 @@ describe('clienteConverter.fromFirestore', () => {
 
     expect(cliente.alias).toBeUndefined();
     expect(cliente.telefono).toBeUndefined();
+    expect(cliente.telefonoE164).toBeUndefined();
     expect(cliente.email).toBeUndefined();
     expect(cliente.direccion).toBeUndefined();
     expect(cliente.notas).toBeUndefined();
     expect(cliente.stats.primeraCompra).toBeUndefined();
     expect(cliente.stats.ultimaCompra).toBeUndefined();
     expect(cliente.stats.totalHistoricoCents).toBe(0);
+  });
+
+  it('reconstruye telefonoE164 (derivado) cuando está presente en el doc', () => {
+    const conE164 = { ...docCompleto, telefonoE164: '59899123456' };
+    const cliente = clienteConverter.fromFirestore(snapshotDe('c4', conE164), {});
+    expect(cliente.telefonoE164).toBe('59899123456');
   });
 
   it('rechaza totalHistoricoCents no entero (doc corrupto)', () => {
@@ -103,6 +110,11 @@ describe('clienteConverter.toFirestore', () => {
     expect(doc).not.toHaveProperty('id');
   });
 
+  it('persiste telefonoE164 (derivado) cuando está presente', () => {
+    const doc = clienteConverter.toFirestore({ ...cliente, telefonoE164: '59899123456' });
+    expect(doc.telefonoE164).toBe('59899123456');
+  });
+
   it('round-trip: toFirestore » fromFirestore preserva los datos (menos el id)', () => {
     const doc = clienteConverter.toFirestore(cliente);
     const statsDoc = doc.stats as Record<string, unknown>;
@@ -134,6 +146,7 @@ describe('clienteConverter.toFirestore', () => {
 
     expect(doc).not.toHaveProperty('alias');
     expect(doc).not.toHaveProperty('telefono');
+    expect(doc).not.toHaveProperty('telefonoE164');
     expect(doc).not.toHaveProperty('email');
     expect(doc).not.toHaveProperty('direccion');
     expect(doc).not.toHaveProperty('notas');

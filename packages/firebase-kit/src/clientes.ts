@@ -1,12 +1,13 @@
 import {
   collection,
+  deleteField,
   doc,
   setDoc,
   updateDoc,
   type DocumentData,
   type Firestore,
 } from 'firebase/firestore';
-import { money, type Cliente } from '@gestion/core';
+import { money, normalizarTelefono, type Cliente } from '@gestion/core';
 import { clienteConverter } from './converters/cliente';
 import { ClienteInvalidoError } from './errores';
 
@@ -78,21 +79,34 @@ function copiarContacto(datos: DatosCliente, destino: DocumentData): void {
  * El caller usa el id ya mismo y decide si observa `confirmacion` (para avisar de
  * un fallo de sincronización) o la ignora — nunca necesita esperarla para el id.
  *
+ * `codigoPais` (default `'598'`) es el código que la UI toma de
+ * `configuracion.general.codigoPaisDefault` en pantalla y pasa acá para derivar
+ * `telefonoE164`; no se lee de Firestore (el alta rápida funciona offline).
+ *
  * @throws {ClienteInvalidoError} si el nombre queda vacío tras `trim()`. Falla
  *   SINCRÓNICAMENTE, antes de generar id o escribir nada.
  */
 export function crearCliente(
   db: Firestore,
   datos: DatosCliente,
+  codigoPais: string = '598',
 ): { clienteId: string; confirmacion: Promise<void> } {
   const nombre = exigirNombre(datos.nombre);
+
+  const telefono = datos.telefono?.trim() || undefined;
+  // `telefonoE164` se DERIVA del display (doc 08): normalizable → dígitos E.164;
+  // ausente o no normalizable → se omite (el converter no lo escribe), y el botón
+  // de WhatsApp no aparece. Cero lecturas: `codigoPais` lo trae el caller.
+  const telefonoE164 =
+    telefono !== undefined ? (normalizarTelefono(telefono, codigoPais) ?? undefined) : undefined;
 
   const ref = doc(collection(db, 'clientes')).withConverter(clienteConverter);
   const cliente: Cliente = {
     id: ref.id,
     nombre,
     alias: datos.alias?.trim() || undefined,
-    telefono: datos.telefono?.trim() || undefined,
+    telefono,
+    telefonoE164,
     email: datos.email?.trim() || undefined,
     direccion: datos.direccion?.trim() || undefined,
     notas: datos.notas?.trim() || undefined,
@@ -110,15 +124,31 @@ export function crearCliente(
  * ni `activo` (usar `desactivarCliente`). Escribe solo los campos provistos y no
  * pasa por el converter: es un update parcial, no un reemplazo del doc.
  *
+ * `telefonoE164` (derivado, doc 08) espeja el `telefono` display que este update
+ * escribe: solo se recalcula cuando el update efectivamente escribe `telefono`
+ * (i.e. viene no vacío tras `trim()`, misma condición que el resto del contacto en
+ * `copiarContacto`). Reescribir el teléfono a algo NO normalizable ELIMINA el
+ * `telefonoE164` viejo con `deleteField()` (un link a un número que ya no coincide
+ * es peor que ninguno). Dejar el teléfono sin tocar deja su E164 intacto: limpiar
+ * el teléfono display no lo modela esta superficie (igual que en Fase 1.5).
+ *
+ * `codigoPais` (default `'598'`): igual que en `crearCliente`, lo pasa la UI desde
+ * la config en pantalla; no se lee de Firestore.
+ *
  * @throws {ClienteInvalidoError} si el nombre queda vacío tras `trim()`.
  */
 export async function actualizarCliente(
   db: Firestore,
   clienteId: string,
   datos: DatosCliente,
+  codigoPais: string = '598',
 ): Promise<void> {
   const cambios: DocumentData = { nombre: exigirNombre(datos.nombre) };
   copiarContacto(datos, cambios);
+  if (cambios.telefono !== undefined) {
+    const e164 = normalizarTelefono(cambios.telefono as string, codigoPais);
+    cambios.telefonoE164 = e164 ?? deleteField();
+  }
   await updateDoc(doc(db, 'clientes', clienteId), cambios);
 }
 
