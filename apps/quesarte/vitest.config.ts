@@ -6,7 +6,12 @@ export default defineConfig({
     // test-setup.ts: polyfill de <dialog> para jsdom, necesario desde que
     // Productos.tsx renderiza el `Modal` de @gestion/ui en tests.
     setupFiles: ['./src/test-setup.ts'],
-    include: ['src/**/*.test.{ts,tsx}'],
+    // `scripts/**` (WA-D, seed de demo): módulos puros del generador, cubiertos
+    // acá para reusar la resolución de workspace (`@gestion/core`,
+    // `@gestion/firebase-kit`) que ya usa el resto de la suite. `seed-demo.mjs`
+    // (el shell con `firebase-admin`) NO tiene test unitario: es el orquestador
+    // fino, sin lógica propia más allá del guardrail (manual, ver README).
+    include: ['src/**/*.test.{ts,tsx}', 'scripts/**/*.test.mjs'],
     // Valores falsos: alcanzan para que `src/firebase.ts` no aborte por
     // validación de env vars. `@gestion/firebase-kit` se mockea en los tests
     // que lo necesitan, así que nunca se usan para hablar con Firebase real.

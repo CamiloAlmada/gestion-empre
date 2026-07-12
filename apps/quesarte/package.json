@@ -9,7 +9,10 @@
     "lint": "eslint .",
     "test": "NODE_OPTIONS=--no-experimental-webstorage vitest run",
     "test:rules": "firebase emulators:exec --only firestore --project demo-quesarte \"vitest run --config vitest.rules.config.ts\"",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "seed:demo": "tsx scripts/seed-demo.mjs",
+    "seed:demo:limpiar": "tsx scripts/seed-demo.mjs --limpiar",
+    "seed:demo:verificar": "tsx scripts/seed-demo.mjs --verificar"
   },
   "dependencies": {
     "@gestion/core": "workspace:*",
@@ -29,9 +32,11 @@
     "@vitejs/plugin-react": "^6.0.3",
     "eslint": "^10.6.0",
     "firebase": "^12.15.0",
+    "firebase-admin": "^14.1.0",
     "firebase-tools": "^15.0.0",
     "jsdom": "^29.1.1",
     "tailwindcss": "^4.3.2",
+    "tsx": "^4.23.0",
     "typescript": "6.0.3",
     "vite": "^8.1.3",
     "vite-plugin-pwa": "^1.3.0",
