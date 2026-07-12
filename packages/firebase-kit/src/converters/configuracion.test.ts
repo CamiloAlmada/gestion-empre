@@ -48,6 +48,44 @@ describe('configuracionConverter.fromFirestore', () => {
     const configuracion = configuracionConverter.fromFirestore(snapshotDe('general', docCompleto), {});
     expect(configuracion.codigoPaisDefault).toBeUndefined();
   });
+
+  // WA-B2: el doc se escribe con merge parcial (las 4 claves son opcionales en las
+  // reglas). fromFirestore debe tolerar CUALQUIER subconjunto sin romper.
+  it('doc VACÍO (instalación recién creada) → todas las claves undefined, sin error', () => {
+    const configuracion = configuracionConverter.fromFirestore(snapshotDe('general', {}), {});
+    expect(configuracion).toEqual({
+      nombreNegocio: undefined,
+      umbralPiezaAgotadaGramos: undefined,
+      metodoProrrateo: undefined,
+      codigoPaisDefault: undefined,
+    });
+  });
+
+  it('doc SOLO-WhatsApp {nombreNegocio, codigoPaisDefault} (escenario de fallo) NO rompe', () => {
+    const soloWa = { nombreNegocio: 'Quesarte', codigoPaisDefault: '598' };
+    const configuracion = configuracionConverter.fromFirestore(snapshotDe('general', soloWa), {});
+    expect(configuracion.nombreNegocio).toBe('Quesarte');
+    expect(configuracion.codigoPaisDefault).toBe('598');
+    // Ausentes: sin `peso()` sobre undefined, sin RangeError.
+    expect(configuracion.umbralPiezaAgotadaGramos).toBeUndefined();
+    expect(configuracion.metodoProrrateo).toBeUndefined();
+  });
+
+  it('doc SOLO-Fase2 {umbralPiezaAgotadaGramos, metodoProrrateo} se reconstruye igual', () => {
+    const soloFase2 = { umbralPiezaAgotadaGramos: 50, metodoProrrateo: 'por_peso' };
+    const configuracion = configuracionConverter.fromFirestore(snapshotDe('general', soloFase2), {});
+    expect(configuracion.umbralPiezaAgotadaGramos).toBe(50);
+    expect(configuracion.metodoProrrateo).toBe('por_peso');
+    expect(configuracion.nombreNegocio).toBeUndefined();
+    expect(configuracion.codigoPaisDefault).toBeUndefined();
+  });
+
+  it('umbral PRESENTE pero float sigue explotando aunque el resto falte (tipo inválido)', () => {
+    // Presente-pero-inválido conserva el comportamiento anterior: falla al leer.
+    expect(() =>
+      configuracionConverter.fromFirestore(snapshotDe('general', { umbralPiezaAgotadaGramos: 5.5 }), {}),
+    ).toThrow(RangeError);
+  });
 });
 
 describe('configuracionConverter.toFirestore', () => {
@@ -75,5 +113,13 @@ describe('configuracionConverter.toFirestore', () => {
     expect(doc.codigoPaisDefault).toBe('598');
     const reconstruido = configuracionConverter.fromFirestore(snapshotDe('general', doc), {});
     expect(reconstruido).toEqual(conCodigo);
+  });
+
+  it('config PARCIAL solo escribe las claves presentes (omite las undefined)', () => {
+    const parcial: Configuracion = { nombreNegocio: 'Quesarte', codigoPaisDefault: '598' };
+    const doc = configuracionConverter.toFirestore(parcial);
+    expect(doc).toEqual({ nombreNegocio: 'Quesarte', codigoPaisDefault: '598' });
+    expect(doc).not.toHaveProperty('umbralPiezaAgotadaGramos');
+    expect(doc).not.toHaveProperty('metodoProrrateo');
   });
 });
