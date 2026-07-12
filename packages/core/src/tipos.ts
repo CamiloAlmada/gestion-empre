@@ -192,13 +192,19 @@ export interface Usuario {
 /**
  * Configuración general del negocio. Documento único (`configuracion/general`),
  * sin `id` propio: no hay colección de configuraciones que trazar por id.
+ *
+ * TODOS los campos son OPCIONALES: el doc se escribe con merge parcial
+ * (`guardarConfiguracionGeneral`, doc 08) y las reglas (`configuracionGeneralValida`)
+ * declaran las 4 claves opcionales, así que cualquier subconjunto es un doc legal —
+ * incluido el vacío en una instalación recién creada. Cada consumidor aplica su
+ * propio default en el punto de uso (p. ej. `metodoProrrateo ?? 'por_valor'`).
  */
 export interface Configuracion {
-  nombreNegocio: string;
+  nombreNegocio?: string;
   /** Umbral de peso restante (gramos) para ofrecer marcar una pieza como agotada. */
-  umbralPiezaAgotadaGramos: Peso;
+  umbralPiezaAgotadaGramos?: Peso;
   /** Reparto de gastos de viaje al confirmar una compra (dedup con `core`). */
-  metodoProrrateo: MetodoProrrateo;
+  metodoProrrateo?: MetodoProrrateo;
   /**
    * Código de país (solo dígitos, sin `+`) que se antepone a los teléfonos
    * locales al derivar `Cliente.telefonoE164` para armar links `wa.me` (doc 08).
