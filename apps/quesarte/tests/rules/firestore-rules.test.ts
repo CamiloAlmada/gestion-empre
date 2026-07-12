@@ -903,14 +903,72 @@ describe('configuracion', () => {
     );
   });
 
-  // `general` mantiene la config viva de Fase 2 (WA-B no la endureció; ver reporte):
-  // el admin puede seguir agregando/tocando esas claves.
+  // `general` tiene shape estricto = SUPERSET de claves conocidas (docs 02/03/08),
+  // todas opcionales y validadas por tipo/rango. El merge no destructivo del kit
+  // deja que un update toque una sola clave.
   it('admin puede agregar codigoPaisDefault a general sin perder la config previa', async () => {
     await assertSucceeds(
       updateDoc(doc(db(ADMIN), 'configuracion', 'general'), {
         codigoPaisDefault: '598',
         nombreNegocio: 'Quesarte',
       }),
+    );
+  });
+
+  it('admin acepta cada clave conocida con tipo correcto', async () => {
+    await assertSucceeds(
+      updateDoc(doc(db(ADMIN), 'configuracion', 'general'), { nombreNegocio: 'Nueva Quesería' }),
+    );
+    await assertSucceeds(
+      updateDoc(doc(db(ADMIN), 'configuracion', 'general'), { umbralPiezaAgotadaGramos: 25 }),
+    );
+    await assertSucceeds(
+      updateDoc(doc(db(ADMIN), 'configuracion', 'general'), { metodoProrrateo: 'por_peso' }),
+    );
+    await assertSucceeds(
+      updateDoc(doc(db(ADMIN), 'configuracion', 'general'), { codigoPaisDefault: '54' }),
+    );
+  });
+
+  it('admin NO agrega una clave desconocida a general', async () => {
+    await assertFails(
+      updateDoc(doc(db(ADMIN), 'configuracion', 'general'), { colorTema: 'rojo' }),
+    );
+  });
+
+  it('admin NO pone umbralPiezaAgotadaGramos negativo', async () => {
+    await assertFails(
+      updateDoc(doc(db(ADMIN), 'configuracion', 'general'), { umbralPiezaAgotadaGramos: -5 }),
+    );
+  });
+
+  it('admin NO pone umbralPiezaAgotadaGramos float (no entero)', async () => {
+    await assertFails(
+      updateDoc(doc(db(ADMIN), 'configuracion', 'general'), { umbralPiezaAgotadaGramos: 5.5 }),
+    );
+  });
+
+  it('admin NO pone metodoProrrateo fuera de la unión', async () => {
+    await assertFails(
+      updateDoc(doc(db(ADMIN), 'configuracion', 'general'), { metodoProrrateo: 'por_capricho' }),
+    );
+  });
+
+  it('admin NO pone nombreNegocio de más de 80 caracteres', async () => {
+    await assertFails(
+      updateDoc(doc(db(ADMIN), 'configuracion', 'general'), { nombreNegocio: 'x'.repeat(81) }),
+    );
+  });
+
+  it('admin NO pone codigoPaisDefault con letras', async () => {
+    await assertFails(
+      updateDoc(doc(db(ADMIN), 'configuracion', 'general'), { codigoPaisDefault: '59A' }),
+    );
+  });
+
+  it('admin NO pone codigoPaisDefault de más de 4 dígitos', async () => {
+    await assertFails(
+      updateDoc(doc(db(ADMIN), 'configuracion', 'general'), { codigoPaisDefault: '12345' }),
     );
   });
 });
