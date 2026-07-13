@@ -276,8 +276,9 @@ Notas para Fase 3 (arrastradas de los reviews de esta fase):
 - Índice `compras (estado, fecha desc)` quedó sin consumidor (el listado ordena
   por fecha y filtra client-side) — mismo criterio que el de proveedores: se
   deja declarado.
-- `formatearBps`/entrada de porcentaje duplicados en Precios/ModalPrecio —
-  candidato a `PorcentajeInput` en @gestion/ui.
+- `formatearBps`/entrada de porcentaje: la duplicación se resolvió en WA-H
+  (`CampoPorcentaje` compartido dentro de la app); queda solo el candidato a
+  promoverlo a `PorcentajeInput` en @gestion/ui cuando otra app lo necesite.
 - Edge menor: en una compra, el botón Editar de un ítem cuyo producto fue
   desactivado después queda mudo (sin aviso).
 - (UI-4, review senior) Primera visita a una sección de Stock con View
