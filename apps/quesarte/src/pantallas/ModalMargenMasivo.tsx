@@ -5,7 +5,7 @@ import { CampoPorcentaje, normalizarPorcentaje } from '../componentes/stock/Camp
 
 export interface ModalMargenMasivoProps {
   abierto: boolean;
-  /** Cantidad de productos filtrados (búsqueda + categoría + "solo bajo
+  /** Cantidad de productos filtrados (búsqueda + categoría + "bajo
    * objetivo") que van a recibir el margen — ya excluye sin costo y margen
    * no comparable (`elegibleParaMargenMasivo`, ver `Precios.tsx`). */
   cantidadElegibles: number;
@@ -23,11 +23,13 @@ export interface ModalMargenMasivoProps {
 }
 
 /**
- * Modal de "Margen para los filtrados" (WA-H, doc 03) — margen objetivo
- * masivo sobre los productos actualmente filtrados en `Precios.tsx`. Reusa
- * `CampoPorcentaje`/`normalizarPorcentaje` de `../componentes/stock/CampoPorcentaje`
- * (mismo formato bps que el editor individual de `ModalPrecio`, extraído a
- * un módulo compartido para no triplicarlo — nota de docs/04-plan-fases.md).
+ * Modal de margen objetivo masivo sobre los productos actualmente filtrados
+ * en `Precios.tsx` (WA-H, doc 03), disparado por el botón "Ajustar margen"
+ * (WA-H2: el conteo de alcanzados ya no va en la etiqueta del botón — vive
+ * acá, ver `textoResumen`). Reusa `CampoPorcentaje`/`normalizarPorcentaje` de
+ * `../componentes/stock/CampoPorcentaje` (mismo formato bps que el editor
+ * individual de `ModalPrecio`, extraído a un módulo compartido para no
+ * triplicarlo — nota de docs/04-plan-fases.md).
  *
  * No sigue el patrón "instancia estable con último valor mostrado" de
  * `ModalPrecio`: acá no hay un producto concreto que preservar, solo
@@ -85,6 +87,12 @@ export function ModalMargenMasivo({
     if (bps !== null) onFijarYAplicar(bps);
   }
 
+  // Frase líder con el conteo bien al frente (WA-H2, feedback del dueño en la
+  // demo: el botón que abre este modal ya no lleva el número en la etiqueta
+  // — "Ajustar margen" a secas, ver Precios.tsx — así que acá tiene que
+  // quedar inequívoco a cuántos productos se les va a aplicar el cambio.
+  const textoResumen = `Se aplicará a ${cantidadElegibles} producto(s) filtrado(s) (con costo y margen calculable). "Fijar y aplicar precios" además actualiza el precio de venta al sugerido, con el redondeo comercial de siempre.`;
+
   // Un solo nodo de texto (en vez de armarlo con JSX intercalado) para que
   // el mensaje sea un párrafo legible de una — y fácil de matchear en tests
   // con `getByText`, que trabaja sobre el `textContent` completo del
@@ -123,11 +131,7 @@ export function ModalMargenMasivo({
       }
     >
       <div className="flex flex-col gap-4">
-        <p className="text-sm text-texto-secundario">
-          Se va a fijar el mismo margen objetivo en los {cantidadElegibles} producto(s) actualmente filtrados que
-          tienen costo y margen calculable. "Fijar y aplicar precios" además actualiza el precio de venta de esos
-          productos al precio sugerido, con el redondeo comercial de siempre.
-        </p>
+        <p className="text-sm text-texto-secundario">{textoResumen}</p>
 
         <CampoPorcentaje
           label="Nuevo margen objetivo (%)"
