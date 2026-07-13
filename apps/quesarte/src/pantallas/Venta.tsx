@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
-import { collection, orderBy, query, where } from 'firebase/firestore';
+import { collection, doc, orderBy, query, where } from 'firebase/firestore';
 import type { Categoria, Cliente, MedioPago, Peso, Pieza, Producto } from '@gestion/core';
 import {
   ItemInvalidoError,
@@ -9,12 +9,14 @@ import {
   VentaVaciaError,
   categoriaConverter,
   clienteConverter,
+  configuracionConverter,
   crearCliente,
   piezaConverter,
   productoConverter,
   registrarVenta,
   useAuth,
   useCollection,
+  useDoc,
   useOnlineStatus,
   type EntradaVenta,
 } from '@gestion/firebase-kit';
@@ -136,6 +138,20 @@ export function Venta() {
   const [modalCobroAbierto, setModalCobroAbierto] = useState(false);
   const [cobrando, setCobrando] = useState(false);
   const [modalClienteAbierto, setModalClienteAbierto] = useState(false);
+
+  // `configuracion/general` (WA-F1, hallazgo de integración de la tanda WA):
+  // el alta rápida de cliente del POS (`confirmarAltaRapidaCliente`, más
+  // abajo) necesita el `codigoPais` configurado para que `crearCliente`
+  // derive `telefonoE164` correctamente. `useDoc` es cache-first
+  // (persistencia offline ya habilitada, docs/06-ui-ux.md §8): NO agrega una
+  // espera al camino de cobro — el alta sigue siendo 100% síncrona, esto solo
+  // lee lo que ya esté en caché local (o `undefined` mientras no hay nada, y
+  // el kit aplica su default `'598'`).
+  const configuracionRef = useMemo(
+    () => doc(db, 'configuracion', 'general').withConverter(configuracionConverter),
+    [],
+  );
+  const configuracion = useDoc(configuracionRef);
 
   const productosQuery = useMemo(
     () =>
@@ -267,7 +283,7 @@ export function Venta() {
    * necesidad de leer nada.
    */
   function confirmarAltaRapidaCliente(nombre: string) {
-    const { clienteId, confirmacion } = crearCliente(db, { nombre });
+    const { clienteId, confirmacion } = crearCliente(db, { nombre }, configuracion.datos?.codigoPaisDefault);
 
     seleccionarCliente({ id: clienteId, nombre, esPrimeraCompra: true });
     cerrarModalCliente();

@@ -452,6 +452,69 @@ describe('DetalleClientePantalla - edición', () => {
   });
 });
 
+describe('DetalleClientePantalla - codigoPais al editar (WA-F1, hallazgo de integración de la tanda WA)', () => {
+  // A diferencia de `configurarCliente` (aplica el MISMO estado a cualquier
+  // ref, suficiente para el resto de la suite), acá hace falta enrutar por
+  // `__path`: el cliente (`clientes/{id}`) y `configuracion/general` deben
+  // poder variar independientemente para probar que `actualizarCliente`
+  // recibe el `codigoPaisDefault` correcto.
+  function configurarClienteYConfiguracion(
+    cliente: Cliente,
+    configuracion: { nombreNegocio: string; codigoPaisDefault?: string } | null,
+  ) {
+    mocks.useDoc.mockImplementation((ref: RefFalsa | null) => {
+      if (ref === null) return { datos: null, cargando: false, error: null };
+      if (ref.__path === 'configuracion/general') {
+        return { datos: configuracion, cargando: false, error: null };
+      }
+      return { datos: cliente, cargando: false, error: null };
+    });
+  }
+
+  it('con codigoPaisDefault configurado, lo pasa como 4to argumento a actualizarCliente', async () => {
+    configurarAuth('admin');
+    configurarClienteYConfiguracion(clienteDe({ id: 'c1', nombre: 'Ana Pérez' }), {
+      nombreNegocio: 'Quesarte',
+      codigoPaisDefault: '54',
+    });
+    configurarVentas(estadoOkColeccion([]));
+    mocks.actualizarCliente.mockResolvedValue(undefined);
+
+    renderizar();
+    fireEvent.click(screen.getByRole('button', { name: 'Editar' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+    await waitFor(() => expect(mocks.actualizarCliente).toHaveBeenCalledTimes(1));
+    const [, , , codigoPais] = mocks.actualizarCliente.mock.calls[0] as [
+      unknown,
+      string,
+      unknown,
+      string | undefined,
+    ];
+    expect(codigoPais).toBe('54');
+  });
+
+  it('sin configuracion/general (doc ausente): pasa undefined, el kit aplica su default \'598\'', async () => {
+    configurarAuth('admin');
+    configurarClienteYConfiguracion(clienteDe({ id: 'c1', nombre: 'Ana Pérez' }), null);
+    configurarVentas(estadoOkColeccion([]));
+    mocks.actualizarCliente.mockResolvedValue(undefined);
+
+    renderizar();
+    fireEvent.click(screen.getByRole('button', { name: 'Editar' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+    await waitFor(() => expect(mocks.actualizarCliente).toHaveBeenCalledTimes(1));
+    const [, , , codigoPais] = mocks.actualizarCliente.mock.calls[0] as [
+      unknown,
+      string,
+      unknown,
+      string | undefined,
+    ];
+    expect(codigoPais).toBeUndefined();
+  });
+});
+
 describe('DetalleClientePantalla - desactivación', () => {
   it('admin: confirma la desactivación y llama a desactivarCliente', async () => {
     configurarAuth('admin');

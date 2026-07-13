@@ -5,6 +5,7 @@ import { formatearMoney, type Venta } from '@gestion/core';
 import {
   actualizarCliente,
   clienteConverter,
+  configuracionConverter,
   reactivarCliente,
   useAuth,
   useCollection,
@@ -82,6 +83,18 @@ export function DetalleClientePantalla() {
   );
   const ventas = useCollection<Venta>(ventasQuery);
 
+  // `configuracion/general` (WA-F1, hallazgo de integración de la tanda WA):
+  // `actualizarCliente` deriva `telefonoE164` con el `codigoPais` que se le
+  // pase (default '598' si no se pasa nada) — sin esto, un negocio con
+  // `codigoPaisDefault` distinto persistía el teléfono con el prefijo
+  // uruguayo. `useDoc` es cache-first (persistencia offline ya habilitada):
+  // no agrega una espera al guardado, solo lee lo que ya esté en caché.
+  const configuracionRef = useMemo(
+    () => doc(db, 'configuracion', 'general').withConverter(configuracionConverter),
+    [],
+  );
+  const configuracion = useDoc(configuracionRef);
+
   const cargando = cliente.cargando || ventas.cargando;
   const noEncontrado = !cargando && cliente.error === null && cliente.datos === null;
 
@@ -110,7 +123,7 @@ export function DetalleClientePantalla() {
    * §8, ver `Productos.tsx`). Solo edición acá: el alta vive en `Clientes.tsx`. */
   async function handleGuardar(datos: DatosCliente) {
     if (cliente.datos === null) return;
-    const escritura = actualizarCliente(db, cliente.datos.id, datos);
+    const escritura = actualizarCliente(db, cliente.datos.id, datos, configuracion.datos?.codigoPaisDefault);
 
     if (!enLinea) {
       cerrarModal();

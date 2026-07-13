@@ -1,8 +1,16 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router';
 import type { FirestoreError } from 'firebase/firestore';
-import { money, peso, type Categoria, type Cliente, type Pieza, type Producto } from '@gestion/core';
+import {
+  money,
+  peso,
+  type Categoria,
+  type Cliente,
+  type Configuracion,
+  type Pieza,
+  type Producto,
+} from '@gestion/core';
 import { StockInsuficienteError, type EntradaVenta } from '@gestion/firebase-kit';
 import { ProveedorToasts } from '@gestion/ui';
 import { Venta } from './Venta';
@@ -23,6 +31,7 @@ const mocks = vi.hoisted(() => ({
   useAuth: vi.fn(),
   useOnlineStatus: vi.fn(() => true),
   useCollection: vi.fn(),
+  useDoc: vi.fn(),
   registrarVenta: vi.fn(),
   crearCliente: vi.fn(),
 }));
@@ -34,6 +43,7 @@ vi.mock('@gestion/firebase-kit', async (importOriginal) => {
     useAuth: mocks.useAuth,
     useOnlineStatus: mocks.useOnlineStatus,
     useCollection: mocks.useCollection,
+    useDoc: mocks.useDoc,
     registrarVenta: mocks.registrarVenta,
     crearCliente: mocks.crearCliente,
   };
@@ -53,10 +63,19 @@ function crearRef(path: string): RefFalsa {
 
 vi.mock('firebase/firestore', () => ({
   collection: (_db: unknown, path: string) => crearRef(path),
+  doc: (_db: unknown, coleccion: string, id: string) => crearRef(`${coleccion}/${id}`),
   query: (ref: RefFalsa, ...clausulas: unknown[]) => ({ ...ref, __clausulas: clausulas }),
   where: (...args: unknown[]) => ({ __tipo: 'where', args }),
   orderBy: (...args: unknown[]) => ({ __tipo: 'orderBy', args }),
 }));
+
+/** `useDoc` de `configuracion/general` (WA-F1): default sin datos (el kit
+ * aplica su propio default `'598'`). Re-establecido en cada `beforeEach`
+ * (`vi.clearAllMocks()` limpia calls/results, no la implementación fijada
+ * con `mockReturnValue`). */
+function configurarConfiguracion(datos: Configuracion | null) {
+  mocks.useDoc.mockReturnValue({ datos, cargando: false, error: null });
+}
 
 interface EstadoFalso<T> {
   datos: T[];
@@ -241,6 +260,10 @@ function tipearPeso(texto: string) {
 function lecturaPeso(): string | null {
   return screen.getAllByRole('textbox').find((el) => el.getAttribute('aria-live') === 'polite')?.textContent ?? null;
 }
+
+beforeEach(() => {
+  configurarConfiguracion(null);
+});
 
 afterEach(() => {
   cleanup();
@@ -715,7 +738,9 @@ describe('Venta - cliente (docs/07-clientes-proveedores.md §POS)', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: 'Crear «Cliente Nuevo»' }));
 
-    expect(mocks.crearCliente).toHaveBeenCalledWith({}, { nombre: 'Cliente Nuevo' });
+    // Sin `configuracion/general` en este test (default del `beforeEach`):
+    // 3er argumento `undefined`, el kit aplica su propio default `'598'`.
+    expect(mocks.crearCliente).toHaveBeenCalledWith({}, { nombre: 'Cliente Nuevo' }, undefined);
     await screen.findByText('Cliente creado.');
     expect(screen.getAllByText('Cliente: Cliente Nuevo').length).toBeGreaterThan(0);
 
@@ -726,6 +751,26 @@ describe('Venta - cliente (docs/07-clientes-proveedores.md §POS)', () => {
     await waitFor(() => expect(mocks.registrarVenta).toHaveBeenCalledTimes(1));
     const [, entrada] = mocks.registrarVenta.mock.calls[0] as [unknown, EntradaVenta];
     expect(entrada.cliente).toEqual({ id: 'nuevo-1', nombre: 'Cliente Nuevo', esPrimeraCompra: true });
+  });
+
+  it('alta rápida: pasa el codigoPaisDefault de configuracion/general a crearCliente (WA-F1, hallazgo de integración de la tanda WA)', () => {
+    configurarAuth();
+    configurarConfiguracion({
+      nombreNegocio: 'Quesarte',
+      umbralPiezaAgotadaGramos: 0 as never,
+      metodoProrrateo: 'por_peso',
+      codigoPaisDefault: '54',
+    });
+    mocks.crearCliente.mockReturnValue({ clienteId: 'nuevo-1', confirmacion: Promise.resolve() });
+    agregarUnidadAlCarrito([]);
+
+    abrirSelectorCliente();
+    fireEvent.change(screen.getByLabelText('Buscar por nombre, alias o teléfono'), {
+      target: { value: 'Cliente Nuevo' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Crear «Cliente Nuevo»' }));
+
+    expect(mocks.crearCliente).toHaveBeenCalledWith({}, { nombre: 'Cliente Nuevo' }, '54');
   });
 
   it('alta rápida offline: asocia el cliente a la venta en curso YA (id síncrono), sin esperar el ack', async () => {
