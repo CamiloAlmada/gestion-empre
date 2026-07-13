@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { ProveedorTema, ProveedorToasts } from '@gestion/ui';
 import { money, type Categoria, type Producto } from '@gestion/core';
-import { Precios } from './Precios';
+import { commitEnLotes, Precios, TAMANIO_LOTE_MASIVO } from './Precios';
 import { StockLayout } from '../componentes/stock/StockLayout';
 import { ProveedorHeader } from '../componentes/header/ContextoHeader';
 
@@ -14,14 +14,23 @@ function tabla() {
   return within(screen.getByRole('table'));
 }
 
-const mocks = vi.hoisted(() => ({
-  useOnlineStatus: vi.fn(() => true),
-  useCollection: vi.fn(),
-  updateDoc: vi.fn(),
-  batchUpdate: vi.fn(),
-  batchCommit: vi.fn(),
-  useAuth: vi.fn(),
-}));
+const mocks = vi.hoisted(() => {
+  const objeto = {
+    useOnlineStatus: vi.fn(() => true),
+    useCollection: vi.fn(),
+    updateDoc: vi.fn(),
+    batchUpdate: vi.fn(),
+    batchCommit: vi.fn(),
+    useAuth: vi.fn(),
+    // Envuelto en `vi.fn()` (no una función plana como antes) para poder
+    // contar cuántos `writeBatch` distintos se abrieron — necesario para el
+    // test de chunking de "Margen para los filtrados" (WA-H): con más de
+    // 400 elegibles, `commitEnLotes` (Precios.tsx) abre más de un batch.
+    writeBatch: vi.fn(),
+  };
+  objeto.writeBatch.mockImplementation(() => ({ update: objeto.batchUpdate, commit: objeto.batchCommit }));
+  return objeto;
+});
 
 // `useAuth` (UI-4): la consume `StockLayout`, que ahora envuelve esta ruta —
 // fija un admin, mismo criterio que `Compras.test.tsx`/`Proveedores.test.tsx`.
@@ -49,10 +58,7 @@ vi.mock('firebase/firestore', async (importOriginal) => {
   return {
     ...actual,
     updateDoc: mocks.updateDoc,
-    writeBatch: () => ({
-      update: mocks.batchUpdate,
-      commit: mocks.batchCommit,
-    }),
+    writeBatch: mocks.writeBatch,
   };
 });
 
@@ -436,6 +442,226 @@ describe('Precios', () => {
       renderizar();
 
       expect(screen.getByRole('button', { name: 'Aplicar sugeridos (0)' })).toBeTruthy();
+    });
+  });
+
+  describe('margen objetivo masivo (WA-H): "Margen para los filtrados"', () => {
+    it('sin ningún producto elegible, el botón arranca deshabilitado en 0', () => {
+      configurarCollection({
+        datos: [productoDe({ id: 'p1', nombre: 'Sin costo', costoPromedioCents: money(0) })],
+      });
+      renderizar();
+
+      const boton = screen.getByRole('button', { name: 'Margen para los filtrados (0)' }) as HTMLButtonElement;
+      expect(boton.disabled).toBe(true);
+    });
+
+    it('cuenta los elegibles excluyendo sin costo y margen no comparable', () => {
+      configurarCollection({
+        datos: [
+          productoDe({ id: 'p1', nombre: 'Elegible 1' }),
+          productoDe({ id: 'p2', nombre: 'Elegible 2' }),
+          productoDe({ id: 'p3', nombre: 'Sin costo', costoPromedioCents: money(0) }),
+          productoDe({
+            id: 'p4',
+            nombre: 'No comparable',
+            modoStock: 'pieza_entera',
+            modoPrecio: 'por_unidad',
+          }),
+        ],
+      });
+      renderizar();
+
+      const boton = screen.getByRole('button', { name: 'Margen para los filtrados (2)' }) as HTMLButtonElement;
+      expect(boton.disabled).toBe(false);
+    });
+
+    it('los elegibles respetan la búsqueda, categoría y "solo bajo objetivo" (mismos filtros que la tabla)', () => {
+      configurarCollection({
+        datos: [
+          productoDe({ id: 'p1', nombre: 'Queso Añejo', categoria: 'Quesos' }),
+          productoDe({ id: 'p2', nombre: 'Miel 500g', categoria: 'Miel' }),
+        ],
+      });
+      renderizar();
+
+      fireEvent.change(screen.getByLabelText('Buscar producto'), { target: { value: 'miel' } });
+
+      expect(screen.getByRole('button', { name: 'Margen para los filtrados (1)' })).toBeTruthy();
+    });
+
+    it('el modal muestra cuántos quedan excluidos y por qué', () => {
+      configurarCollection({
+        datos: [
+          productoDe({ id: 'p1', nombre: 'Elegible 1' }),
+          productoDe({ id: 'p3', nombre: 'Sin costo', costoPromedioCents: money(0) }),
+          productoDe({
+            id: 'p4',
+            nombre: 'No comparable',
+            modoStock: 'pieza_entera',
+            modoPrecio: 'por_unidad',
+          }),
+        ],
+      });
+      renderizar();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Margen para los filtrados (1)' }));
+
+      expect(
+        screen.getByText(
+          'Quedan afuera 1 sin costo cargado y 1 con costo y precio en unidades no comparables (pieza vendida por unidad).',
+        ),
+      ).toBeTruthy();
+    });
+
+    it('sin exclusiones, no muestra el texto de "quedan afuera"', () => {
+      configurarCollection({ datos: [productoDe({ id: 'p1', nombre: 'Elegible 1' })] });
+      renderizar();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Margen para los filtrados (1)' }));
+
+      expect(screen.queryByText(/Quedan afuera/)).toBeNull();
+    });
+
+    it('porcentaje inválido: muestra error y no dispara ninguna escritura', () => {
+      configurarCollection({ datos: [productoDe({ id: 'p1', nombre: 'Elegible' })] });
+      renderizar();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Margen para los filtrados (1)' }));
+      fireEvent.change(screen.getByLabelText('Nuevo margen objetivo (%)'), { target: { value: 'abc' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Fijar objetivo' }));
+
+      expect(screen.getByText('Ingresá un porcentaje válido, ej: 40 o 33,33.')).toBeTruthy();
+      expect(mocks.batchCommit).not.toHaveBeenCalled();
+    });
+
+    it('porcentaje fuera de rango (>= 100 %): muestra error y no dispara ninguna escritura', () => {
+      configurarCollection({ datos: [productoDe({ id: 'p1', nombre: 'Elegible' })] });
+      renderizar();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Margen para los filtrados (1)' }));
+      fireEvent.change(screen.getByLabelText('Nuevo margen objetivo (%)'), { target: { value: '100' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Fijar y aplicar precios' }));
+
+      expect(screen.getByText('El margen objetivo debe ser menor a 100 %.')).toBeTruthy();
+      expect(mocks.batchCommit).not.toHaveBeenCalled();
+    });
+
+    it('"Fijar objetivo": escribe margenObjetivoBps (bps enteros) en batch solo a los elegibles filtrados', async () => {
+      configurarCollection({
+        datos: [
+          productoDe({ id: 'p1', nombre: 'Elegible 1' }),
+          productoDe({ id: 'p2', nombre: 'Elegible 2' }),
+          productoDe({ id: 'p3', nombre: 'Sin costo', costoPromedioCents: money(0) }),
+        ],
+      });
+      mocks.batchCommit.mockResolvedValue(undefined);
+      renderizar();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Margen para los filtrados (2)' }));
+      fireEvent.change(screen.getByLabelText('Nuevo margen objetivo (%)'), { target: { value: '45' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Fijar objetivo' }));
+
+      await waitFor(() => expect(mocks.batchCommit).toHaveBeenCalledTimes(1));
+      expect(mocks.batchUpdate).toHaveBeenCalledTimes(2);
+      for (const llamada of mocks.batchUpdate.mock.calls as [unknown, Record<string, unknown>][]) {
+        expect(llamada[1].margenObjetivoBps).toBe(4500);
+        expect(llamada[1].precioVentaCents).toBeUndefined();
+      }
+      expect(await screen.findByText('Se fijó el margen objetivo de 2 productos.')).toBeTruthy();
+    });
+
+    it('"Fijar y aplicar precios": confirmación con el precio redondeado y el batch escribe margen + precio', async () => {
+      configurarCollection({
+        datos: [
+          // costo $300, precio actual $400, objetivo nuevo 40 % → sugerido
+          // exacto $500 (precioDesdeMargen(30000,4000)=50000, ya redondo a $5).
+          productoDe({
+            id: 'p1',
+            nombre: 'Queso Añejo',
+            costoPromedioCents: money(30000),
+            precioVentaCents: money(40000),
+          }),
+        ],
+      });
+      mocks.batchCommit.mockResolvedValue(undefined);
+      renderizar();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Margen para los filtrados (1)' }));
+      fireEvent.change(screen.getByLabelText('Nuevo margen objetivo (%)'), { target: { value: '40' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Fijar y aplicar precios' }));
+
+      expect(screen.getByText('Fijar y aplicar margen a los filtrados')).toBeTruthy();
+      expect(screen.getByText('$ 400,00 → $ 500,00')).toBeTruthy();
+      // No escribe nada hasta confirmar el segundo paso.
+      expect(mocks.batchCommit).not.toHaveBeenCalled();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Aplicar a 1 producto(s)' }));
+
+      await waitFor(() => expect(mocks.batchCommit).toHaveBeenCalledTimes(1));
+      const [, cambios] = mocks.batchUpdate.mock.calls[0] as [unknown, Record<string, unknown>];
+      expect(cambios.margenObjetivoBps).toBe(4000);
+      expect(cambios.precioVentaCents).toBe(money(50000));
+      expect(await screen.findByText('Se actualizó el margen y el precio de 1 producto.')).toBeTruthy();
+    });
+
+    it('cancelar la confirmación de "Fijar y aplicar precios" no escribe nada', () => {
+      configurarCollection({
+        datos: [productoDe({ id: 'p1', nombre: 'Queso Añejo', costoPromedioCents: money(30000), precioVentaCents: money(40000) })],
+      });
+      renderizar();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Margen para los filtrados (1)' }));
+      fireEvent.change(screen.getByLabelText('Nuevo margen objetivo (%)'), { target: { value: '40' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Fijar y aplicar precios' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+
+      expect(mocks.batchCommit).not.toHaveBeenCalled();
+    });
+
+    it('sin conexión: "Fijar objetivo" cierra el modal al instante y avisa que falta sincronizar', async () => {
+      configurarCollection({ datos: [productoDe({ id: 'p1', nombre: 'Elegible' })] });
+      mocks.useOnlineStatus.mockReturnValue(false);
+      mocks.batchCommit.mockResolvedValue(undefined);
+      renderizar();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Margen para los filtrados (1)' }));
+      fireEvent.change(screen.getByLabelText('Nuevo margen objetivo (%)'), { target: { value: '40' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Fijar objetivo' }));
+
+      expect(
+        await screen.findByText('Guardado sin conexión. Se sincronizará al reconectar.'),
+      ).toBeTruthy();
+    });
+
+    // `commitEnLotes` (helper de chunking que usan `fijarMargenObjetivoMasivo`
+    // y `fijarYAplicarMargenMasivo`) se testea DIRECTO acá, sin pasar por un
+    // render de `Precios` con 400+ filas reales en `DataTable`: ese camino es
+    // correcto pero deja el test lento e inestable bajo carga (CI corriendo
+    // en paralelo) para probar exactamente lo mismo. Cubre "no dejes el
+    // límite de 500 latente" (WA-H) sin ese costo.
+    it('commitEnLotes divide en tandas de TAMANIO_LOTE_MASIVO, cada una su propio writeBatch/commit', async () => {
+      mocks.batchCommit.mockResolvedValue(undefined);
+      const items = Array.from({ length: TAMANIO_LOTE_MASIVO + 1 }, (_, i) => i);
+      const aplicar = vi.fn();
+
+      await commitEnLotes(items, aplicar);
+
+      expect(mocks.writeBatch).toHaveBeenCalledTimes(2);
+      expect(mocks.batchCommit).toHaveBeenCalledTimes(2);
+      expect(aplicar).toHaveBeenCalledTimes(items.length);
+    });
+
+    it('commitEnLotes con items <= TAMANIO_LOTE_MASIVO hace un único batch', async () => {
+      mocks.batchCommit.mockResolvedValue(undefined);
+      const items = Array.from({ length: TAMANIO_LOTE_MASIVO }, (_, i) => i);
+      const aplicar = vi.fn();
+
+      await commitEnLotes(items, aplicar);
+
+      expect(mocks.writeBatch).toHaveBeenCalledTimes(1);
+      expect(mocks.batchCommit).toHaveBeenCalledTimes(1);
+      expect(aplicar).toHaveBeenCalledTimes(items.length);
     });
   });
 

@@ -98,11 +98,50 @@ export function precioSugeridoDe(
   producto: Producto,
   multiploCents: number = MULTIPLO_REDONDEO_CENTS_DEFAULT,
 ): Money | null {
-  if (producto.margenObjetivoBps === undefined || producto.costoPromedioCents <= 0) return null;
+  if (producto.margenObjetivoBps === undefined) return null;
+  return precioSugeridoConMargen(producto, producto.margenObjetivoBps, multiploCents);
+}
+
+/**
+ * Igual que `precioSugeridoDe`, pero con un margen objetivo dado en vez del
+ * `margenObjetivoBps` ya cargado en el producto (WA-H, doc 03: "Margen
+ * masivo sobre los filtrados") — la acción masiva calcula el precio sugerido
+ * de un margen que el dueño está por FIJAR, todavía no persistido.
+ * `null` en los mismos casos que `precioSugeridoDe` (sin costo, margen no
+ * comparable, o `margenSobreVentaBps` fuera de rango).
+ */
+export function precioSugeridoConMargen(
+  producto: Producto,
+  margenSobreVentaBps: number,
+  multiploCents: number = MULTIPLO_REDONDEO_CENTS_DEFAULT,
+): Money | null {
+  if (producto.costoPromedioCents <= 0) return null;
   if (!margenComparable(producto)) return null;
   try {
-    return precioSugerido(producto.costoPromedioCents, producto.margenObjetivoBps, multiploCents);
+    return precioSugerido(producto.costoPromedioCents, margenSobreVentaBps, multiploCents);
   } catch {
     return null;
   }
+}
+
+/** Motivo por el que un producto queda afuera de "Margen para los
+ * filtrados" (WA-H, doc 03): sin costo cargado, o costo/precio en unidades
+ * distintas (`!margenComparable`, hallazgo M2). `null` si es elegible.
+ * Categorías disjuntas — un producto sin costo cuenta como `'sin_costo'`
+ * aunque además fuera no comparable, para que el modal reporte un total
+ * consistente con la suma de exclusiones. */
+export type RazonExclusionMasivo = 'sin_costo' | 'margen_no_comparable';
+
+export function razonExclusionMasivo(producto: Producto): RazonExclusionMasivo | null {
+  if (producto.costoPromedioCents <= 0) return 'sin_costo';
+  if (!margenComparable(producto)) return 'margen_no_comparable';
+  return null;
+}
+
+/** `true` si el producto puede recibir un margen objetivo masivo (WA-H): con
+ * costo cargado y margen comparable — mismos gates que impiden calcular un
+ * precio sugerido para él (ver `razonExclusionMasivo`). No requiere que el
+ * producto YA tenga `margenObjetivoBps`: la acción masiva lo está fijando. */
+export function elegibleParaMargenMasivo(producto: Producto): boolean {
+  return razonExclusionMasivo(producto) === null;
 }
