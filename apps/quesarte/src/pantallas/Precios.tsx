@@ -8,6 +8,7 @@ import {
   updateDoc,
   writeBatch,
   type UpdateData,
+  type WriteBatch,
 } from 'firebase/firestore';
 import {
   Button,
@@ -25,9 +26,19 @@ import { formatearMoney, type Money, type Producto } from '@gestion/core';
 import { db } from '../firebase';
 import { BadgeStock } from '../componentes/stock/BadgeStock';
 import { categoriasVisibles } from '../componentes/stock/agrupacion';
-import { estaBajoObjetivo, margenActualBps, precioSugeridoDe, unidadCosto } from '../componentes/stock/margenes';
+import {
+  elegibleParaMargenMasivo,
+  estaBajoObjetivo,
+  margenActualBps,
+  precioSugeridoConMargen,
+  precioSugeridoDe,
+  razonExclusionMasivo,
+  unidadCosto,
+} from '../componentes/stock/margenes';
+import { formatearBps } from '../componentes/stock/CampoPorcentaje';
 import { useHeader } from '../componentes/header/ContextoHeader';
 import { ModalPrecio, type DatosPrecioFormulario } from './ModalPrecio';
+import { ModalMargenMasivo } from './ModalMargenMasivo';
 
 const coleccionProductos = collection(db, 'productos').withConverter(productoConverter);
 const coleccionCategorias = collection(db, 'categorias').withConverter(categoriaConverter);
@@ -42,18 +53,6 @@ function textoPrecio(producto: Producto): string {
 function textoCosto(producto: Producto): string {
   if (producto.costoPromedioCents <= 0) return '—';
   return `${formatearMoney(producto.costoPromedioCents)}${unidadCosto(producto) === 'kg' ? ' /kg' : ' /u'}`;
-}
-
-/** bps → `"40,00 %"`. Ídem `formatearBps` de `ModalPrecio.tsx`: conversión de
- * display, deliberadamente fuera de `core` (doc 03). Duplicada en vez de
- * compartida por un módulo nuevo en `packages/ui` — alcance estricto de la
- * tarea (no tocar `packages/`); reportado al tech lead para unificar. */
-function formatearBps(bps: number): string {
-  const signo = bps < 0 ? '-' : '';
-  const abs = Math.abs(bps);
-  const entero = Math.trunc(abs / 100);
-  const centesimas = (abs % 100).toString().padStart(2, '0');
-  return `${signo}${entero},${centesimas} %`;
 }
 
 function textoMargenActual(producto: Producto): string {
@@ -103,6 +102,62 @@ async function aplicarPreciosSugeridos(candidatos: CandidatoMasivo[]): Promise<v
   await batch.commit();
 }
 
+/** Un `writeBatch` de Firestore admite hasta 500 escrituras (límite duro del
+ * SDK) — 400 deja margen sin acercarse al techo. Hoy "Margen para los
+ * filtrados" opera sobre ~7 productos (catálogo real de la quesería), pero
+ * el límite queda resuelto de una vez en vez de latente (WA-H). Cada lote es
+ * su PROPIO batch atómico: con más de 400 elegibles, la operación completa
+ * ya no es un único átomo (un lote puede fallar sin deshacer los anteriores)
+ * — aceptable acá porque cada escritura es independiente por producto (no
+ * hay invariante cruzado entre productos distintos, a diferencia de una
+ * venta o una compra). */
+export const TAMANIO_LOTE_MASIVO = 400;
+
+/** Exportada (solo esta y `TAMANIO_LOTE_MASIVO`) para poder testear el
+ * chunking en aislamiento: renderizar 400+ filas reales en `DataTable` para
+ * probar este invariante hace al test lento e inestable bajo carga (CI con
+ * corridas en paralelo) sin aportar nada que un test directo de esta función
+ * no cubra igual. Ver Precios.test.tsx. */
+export async function commitEnLotes<T>(items: T[], aplicar: (batch: WriteBatch, item: T) => void): Promise<void> {
+  for (let inicio = 0; inicio < items.length; inicio += TAMANIO_LOTE_MASIVO) {
+    const lote = items.slice(inicio, inicio + TAMANIO_LOTE_MASIVO);
+    const batch = writeBatch(db);
+    for (const item of lote) aplicar(batch, item);
+    await batch.commit();
+  }
+}
+
+/** "Fijar objetivo" de "Margen para los filtrados" (WA-H, doc 03): escribe
+ * el mismo `margenObjetivoBps` en todos los productos elegibles filtrados.
+ * No toca `precioVentaCents` — los sugeridos se recalculan solos (mismo
+ * `margenActualBps`/`precioSugeridoDe` que ya usa la tabla) y el dueño los
+ * revisa 1 a 1 o con "Aplicar sugeridos". */
+async function fijarMargenObjetivoMasivo(productos: Producto[], margenBps: number): Promise<void> {
+  const ahora = new Date();
+  await commitEnLotes(productos, (batch, producto) => {
+    const ref = doc(db, 'productos', producto.id).withConverter(productoConverter);
+    const cambios: UpdateData<Producto> = { margenObjetivoBps: margenBps, actualizadoEn: ahora };
+    batch.update(ref, cambios);
+  });
+}
+
+/** "Fijar y aplicar precios" de "Margen para los filtrados" (WA-H, doc 03):
+ * mismo batch que `fijarMargenObjetivoMasivo`, pero además escribe
+ * `precioVentaCents` con el precio sugerido para ESE margen nuevo (ya
+ * calculado por el llamador con `precioSugeridoConMargen`). */
+async function fijarYAplicarMargenMasivo(candidatos: CandidatoMasivo[], margenBps: number): Promise<void> {
+  const ahora = new Date();
+  await commitEnLotes(candidatos, (batch, { producto, sugeridoCents }) => {
+    const ref = doc(db, 'productos', producto.id).withConverter(productoConverter);
+    const cambios: UpdateData<Producto> = {
+      margenObjetivoBps: margenBps,
+      precioVentaCents: sugeridoCents,
+      actualizadoEn: ahora,
+    };
+    batch.update(ref, cambios);
+  });
+}
+
 /**
  * Pantalla "Precios y márgenes" (docs/03-compras-costos-precios.md), sección
  * Stock, solo admin (`RutaSoloAdmin`, doc 06 §2). Tabla de productos con
@@ -126,6 +181,17 @@ export function Precios() {
   const [guardando, setGuardando] = useState(false);
   const [confirmandoMasivo, setConfirmandoMasivo] = useState(false);
   const [aplicandoMasivo, setAplicandoMasivo] = useState(false);
+  // "Margen para los filtrados" (WA-H): modal de porcentaje + confirmación
+  // separada para "Fijar y aplicar precios" (mismo criterio que
+  // confirmandoMasivo/aplicandoMasivo de "Aplicar sugeridos" — dos pasos
+  // porque esa acción cambia precios en masa).
+  const [modalMargenMasivoAbierto, setModalMargenMasivoAbierto] = useState(false);
+  const [guardandoMargenMasivo, setGuardandoMargenMasivo] = useState(false);
+  const [confirmandoAplicarMargenMasivo, setConfirmandoAplicarMargenMasivo] = useState<{
+    margenBps: number;
+    candidatos: CandidatoMasivo[];
+  } | null>(null);
+  const [aplicandoMargenMasivo, setAplicandoMargenMasivo] = useState(false);
   // Se incrementa en "Reintentar": cambia la identidad de la query y fuerza
   // a `useCollection` a resuscribirse (mismo patrón que Productos.tsx).
   const [intentoId, setIntentoId] = useState(0);
@@ -177,6 +243,23 @@ export function Precios() {
         const sugeridoCents = precioSugeridoDe(producto);
         return sugeridoCents === null ? [] : [{ producto, sugeridoCents }];
       }),
+    [productosFiltrados],
+  );
+
+  // "Margen para los filtrados" (WA-H) opera sobre los MISMOS productos
+  // VISIBLES que "Aplicar sugeridos" (búsqueda + categoría + "solo bajo
+  // objetivo"), elegibles = con costo y margen comparable (no requiere que
+  // ya tengan `margenObjetivoBps`: esta acción lo está fijando).
+  const elegiblesMargenMasivo = useMemo(
+    () => productosFiltrados.filter(elegibleParaMargenMasivo),
+    [productosFiltrados],
+  );
+  const excluidosSinCostoMargenMasivo = useMemo(
+    () => productosFiltrados.filter((p) => razonExclusionMasivo(p) === 'sin_costo').length,
+    [productosFiltrados],
+  );
+  const excluidosNoComparableMargenMasivo = useMemo(
+    () => productosFiltrados.filter((p) => razonExclusionMasivo(p) === 'margen_no_comparable').length,
     [productosFiltrados],
   );
 
@@ -243,6 +326,85 @@ export function Precios() {
       mostrarToast('No se pudieron aplicar los precios sugeridos. Intentá de nuevo.', 'error');
     } finally {
       setAplicandoMasivo(false);
+    }
+  }
+
+  /** "Fijar objetivo" de "Margen para los filtrados" (WA-H): no toca precios
+   * (mismo riesgo que editar el margen objetivo a mano desde `ModalPrecio`),
+   * se ejecuta al toque con el mismo patrón offline-first híbrido del resto
+   * de la pantalla. */
+  async function handleFijarObjetivoMasivo(margenBps: number) {
+    const productos = elegiblesMargenMasivo;
+    if (productos.length === 0) return;
+    const cantidad = productos.length;
+    const escritura = fijarMargenObjetivoMasivo(productos, margenBps);
+
+    if (!enLinea) {
+      setModalMargenMasivoAbierto(false);
+      mostrarToast('Guardado sin conexión. Se sincronizará al reconectar.', 'info');
+      escritura.catch(() => mostrarToast('No se pudo sincronizar el margen objetivo.', 'error'));
+      return;
+    }
+
+    setGuardandoMargenMasivo(true);
+    try {
+      await escritura;
+      mostrarToast(
+        cantidad === 1
+          ? 'Se fijó el margen objetivo de 1 producto.'
+          : `Se fijó el margen objetivo de ${cantidad} productos.`,
+        'exito',
+      );
+      setModalMargenMasivoAbierto(false);
+    } catch {
+      mostrarToast('No se pudo fijar el margen objetivo. Intentá de nuevo.', 'error');
+    } finally {
+      setGuardandoMargenMasivo(false);
+    }
+  }
+
+  /** "Fijar y aplicar precios" de "Margen para los filtrados" (WA-H): cambia
+   * precios en masa, así que NO escribe nada todavía — calcula los
+   * candidatos con el precio sugerido para el margen tipeado, cierra el
+   * modal de porcentaje y abre la confirmación explícita (mismo patrón que
+   * "Aplicar sugeridos": lista actual → sugerido antes de tocar un precio). */
+  function handleIniciarFijarYAplicarMargenMasivo(margenBps: number) {
+    const candidatos: CandidatoMasivo[] = elegiblesMargenMasivo.flatMap((producto) => {
+      const sugeridoCents = precioSugeridoConMargen(producto, margenBps);
+      return sugeridoCents === null ? [] : [{ producto, sugeridoCents }];
+    });
+    if (candidatos.length === 0) return;
+    setModalMargenMasivoAbierto(false);
+    setConfirmandoAplicarMargenMasivo({ margenBps, candidatos });
+  }
+
+  async function handleConfirmarAplicarMargenMasivo() {
+    if (confirmandoAplicarMargenMasivo === null) return;
+    const { margenBps, candidatos } = confirmandoAplicarMargenMasivo;
+    const cantidad = candidatos.length;
+    const escritura = fijarYAplicarMargenMasivo(candidatos, margenBps);
+
+    if (!enLinea) {
+      setConfirmandoAplicarMargenMasivo(null);
+      mostrarToast('Guardado sin conexión. Se sincronizará al reconectar.', 'info');
+      escritura.catch(() => mostrarToast('No se pudieron sincronizar el margen y los precios.', 'error'));
+      return;
+    }
+
+    setAplicandoMargenMasivo(true);
+    try {
+      await escritura;
+      mostrarToast(
+        cantidad === 1
+          ? 'Se actualizó el margen y el precio de 1 producto.'
+          : `Se actualizaron el margen y el precio de ${cantidad} productos.`,
+        'exito',
+      );
+      setConfirmandoAplicarMargenMasivo(null);
+    } catch {
+      mostrarToast('No se pudieron aplicar el margen y los precios. Intentá de nuevo.', 'error');
+    } finally {
+      setAplicandoMargenMasivo(false);
     }
   }
 
@@ -321,13 +483,22 @@ export function Precios() {
         <Chip activo={soloBajoObjetivo} onClick={() => setSoloBajoObjetivo((v) => !v)}>
           Solo bajo objetivo
         </Chip>
-        <Button
-          variante="secundaria"
-          disabled={candidatosMasivo.length === 0}
-          onClick={() => setConfirmandoMasivo(true)}
-        >
-          Aplicar sugeridos ({candidatosMasivo.length})
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variante="secundaria"
+            disabled={elegiblesMargenMasivo.length === 0}
+            onClick={() => setModalMargenMasivoAbierto(true)}
+          >
+            Margen para los filtrados ({elegiblesMargenMasivo.length})
+          </Button>
+          <Button
+            variante="secundaria"
+            disabled={candidatosMasivo.length === 0}
+            onClick={() => setConfirmandoMasivo(true)}
+          >
+            Aplicar sugeridos ({candidatosMasivo.length})
+          </Button>
+        </div>
       </div>
 
       {opcionesCategoria.length > 1 && (
@@ -400,6 +571,59 @@ export function Precios() {
           </p>
           <ul className="flex flex-col gap-1 text-sm text-texto">
             {candidatosMasivo.map(({ producto, sugeridoCents }) => (
+              <li key={producto.id} className="flex items-center justify-between gap-2">
+                <span>{producto.nombre}</span>
+                <span className="tabular-nums text-texto-secundario">
+                  {formatearMoney(producto.precioVentaCents)} → {formatearMoney(sugeridoCents)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </Modal>
+
+      <ModalMargenMasivo
+        abierto={modalMargenMasivoAbierto}
+        cantidadElegibles={elegiblesMargenMasivo.length}
+        cantidadSinCosto={excluidosSinCostoMargenMasivo}
+        cantidadNoComparable={excluidosNoComparableMargenMasivo}
+        guardando={guardandoMargenMasivo}
+        onCerrar={() => setModalMargenMasivoAbierto(false)}
+        onFijarObjetivo={(bps) => void handleFijarObjetivoMasivo(bps)}
+        onFijarYAplicar={handleIniciarFijarYAplicarMargenMasivo}
+      />
+
+      <Modal
+        abierto={confirmandoAplicarMargenMasivo !== null}
+        onCerrar={() => setConfirmandoAplicarMargenMasivo(null)}
+        titulo="Fijar y aplicar margen a los filtrados"
+        acciones={
+          <>
+            <Button
+              variante="secundaria"
+              onClick={() => setConfirmandoAplicarMargenMasivo(null)}
+              disabled={aplicandoMargenMasivo}
+            >
+              Cancelar
+            </Button>
+            <Button onClick={() => void handleConfirmarAplicarMargenMasivo()} disabled={aplicandoMargenMasivo}>
+              {aplicandoMargenMasivo
+                ? 'Aplicando…'
+                : `Aplicar a ${confirmandoAplicarMargenMasivo?.candidatos.length ?? 0} producto(s)`}
+            </Button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-3">
+          <p className="text-sm text-texto-secundario">
+            Se va a fijar el margen objetivo en{' '}
+            <span className="font-medium text-texto">
+              {confirmandoAplicarMargenMasivo !== null ? formatearBps(confirmandoAplicarMargenMasivo.margenBps) : ''}
+            </span>{' '}
+            y actualizar el precio de venta de estos productos. Esta acción no se puede deshacer.
+          </p>
+          <ul className="flex flex-col gap-1 text-sm text-texto">
+            {confirmandoAplicarMargenMasivo?.candidatos.map(({ producto, sugeridoCents }) => (
               <li key={producto.id} className="flex items-center justify-between gap-2">
                 <span>{producto.nombre}</span>
                 <span className="tabular-nums text-texto-secundario">

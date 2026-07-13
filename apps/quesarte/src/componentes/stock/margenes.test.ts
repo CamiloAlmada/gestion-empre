@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { money, type Producto } from '@gestion/core';
 import {
+  elegibleParaMargenMasivo,
   estaBajoObjetivo,
   margenActualBps,
   margenComparable,
   MULTIPLO_REDONDEO_CENTS_DEFAULT,
+  precioSugeridoConMargen,
   precioSugeridoDe,
+  razonExclusionMasivo,
   unidadCosto,
 } from './margenes';
 
@@ -216,5 +219,74 @@ describe('precioSugeridoDe', () => {
       margenObjetivoBps: 4000,
     });
     expect(precioSugeridoDe(p)).toBeNull();
+  });
+});
+
+describe('precioSugeridoConMargen (WA-H, margen objetivo masivo)', () => {
+  it('mismo resultado que precioSugeridoDe con el bps del producto pasado explícito', () => {
+    const p = producto({ id: 'p1', costoPromedioCents: money(30000) });
+    expect(precioSugeridoConMargen(p, 4000)).toBe(money(50000));
+  });
+
+  it('no depende de margenObjetivoBps del producto: funciona aunque el producto no lo tenga cargado', () => {
+    const p = producto({ id: 'p1', costoPromedioCents: money(30000) });
+    expect(p.margenObjetivoBps).toBeUndefined();
+    expect(precioSugeridoConMargen(p, 4000)).toBe(money(50000));
+  });
+
+  it('null sin costo cargado', () => {
+    const p = producto({ id: 'p1', costoPromedioCents: money(0) });
+    expect(precioSugeridoConMargen(p, 4000)).toBeNull();
+  });
+
+  it('null si margen no comparable (M2)', () => {
+    const p = producto({
+      id: 'p1',
+      modoStock: 'pieza_entera',
+      modoPrecio: 'por_unidad',
+      costoPromedioCents: money(30000),
+    });
+    expect(precioSugeridoConMargen(p, 4000)).toBeNull();
+  });
+
+  it('null si el margen pasado es >= 100 %', () => {
+    const p = producto({ id: 'p1', costoPromedioCents: money(30000) });
+    expect(precioSugeridoConMargen(p, 10000)).toBeNull();
+  });
+});
+
+describe('razonExclusionMasivo / elegibleParaMargenMasivo (WA-H, margen objetivo masivo)', () => {
+  it('sin costo cargado: "sin_costo", no elegible', () => {
+    const p = producto({ id: 'p1', costoPromedioCents: money(0) });
+    expect(razonExclusionMasivo(p)).toBe('sin_costo');
+    expect(elegibleParaMargenMasivo(p)).toBe(false);
+  });
+
+  it('con costo pero margen no comparable (M2): "margen_no_comparable", no elegible', () => {
+    const p = producto({
+      id: 'p1',
+      modoStock: 'pieza_entera',
+      modoPrecio: 'por_unidad',
+      costoPromedioCents: money(30000),
+    });
+    expect(razonExclusionMasivo(p)).toBe('margen_no_comparable');
+    expect(elegibleParaMargenMasivo(p)).toBe(false);
+  });
+
+  it('sin costo Y no comparable a la vez: cuenta como "sin_costo" (categorías disjuntas, precedencia documentada)', () => {
+    const p = producto({
+      id: 'p1',
+      modoStock: 'pieza_entera',
+      modoPrecio: 'por_unidad',
+      costoPromedioCents: money(0),
+    });
+    expect(razonExclusionMasivo(p)).toBe('sin_costo');
+  });
+
+  it('con costo y margen comparable: null, elegible — no requiere margenObjetivoBps ya cargado', () => {
+    const p = producto({ id: 'p1', costoPromedioCents: money(30000) });
+    expect(p.margenObjetivoBps).toBeUndefined();
+    expect(razonExclusionMasivo(p)).toBeNull();
+    expect(elegibleParaMargenMasivo(p)).toBe(true);
   });
 });
