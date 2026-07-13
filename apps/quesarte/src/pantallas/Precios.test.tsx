@@ -249,7 +249,7 @@ describe('Precios', () => {
       expect(within(fila).queryByText('Bajo objetivo')).toBeNull();
     });
 
-    it('chip "Bajo objetivo" filtra la tabla a los que están bajo objetivo', () => {
+    it('chip "Bajo objetivo" (dentro del panel de filtros, WA-H3) filtra la tabla', () => {
       configurarCollection({
         datos: [
           productoDe({
@@ -273,6 +273,8 @@ describe('Precios', () => {
       expect(tabla().getByText('Bajo objetivo SA')).toBeTruthy();
       expect(tabla().getByText('En objetivo SA')).toBeTruthy();
 
+      // WA-H3: el chip ya no está en el carril, vive en el panel plegable.
+      fireEvent.click(screen.getByRole('button', { name: 'Filtros' }));
       fireEvent.click(screen.getByRole('button', { name: 'Bajo objetivo' }));
 
       expect(tabla().getByText('Bajo objetivo SA')).toBeTruthy();
@@ -454,27 +456,117 @@ describe('Precios', () => {
     expect(ajustarMargen.parentElement).toBe(aplicarSugeridos.parentElement);
   });
 
-  it('WA-H2: el chip "Bajo objetivo" convive en el mismo carril que los chips de categoría', () => {
-    configurarCollection({
-      datos: [
-        productoDe({ id: 'p1', nombre: 'Queso Añejo', categoria: 'Quesos' }),
-        productoDe({ id: 'p2', nombre: 'Miel 500g', categoria: 'Miel' }),
-      ],
-    });
-    configurarCategorias({
-      datos: [
-        { id: 'c1', nombre: 'Quesos', orden: 0 },
-        { id: 'c2', nombre: 'Miel', orden: 1 },
-      ],
-    });
-    renderizar();
+  describe('WA-H3: botón de filtros extra y panel desplegable', () => {
+    it('el botón de filtros es accesible por su aria-label y arranca con el panel plegado', () => {
+      configurarCollection({ datos: [] });
+      renderizar();
 
-    const chipCategoria = screen.getByRole('button', { name: 'Quesos' });
-    const chipBajoObjetivo = screen.getByRole('button', { name: 'Bajo objetivo' });
-    // Mismo carril = mismo ancestro scrolleable (el `role="group"` de
-    // `ChipsFiltro` es un hijo de ESE carril, no el carril en sí — de ahí
-    // subir un nivel más desde el chip de categoría).
-    expect(chipCategoria.closest('[role="group"]')?.parentElement).toBe(chipBajoObjetivo.parentElement);
+      const boton = screen.getByRole('button', { name: 'Filtros' });
+      expect(boton.getAttribute('aria-expanded')).toBe('false');
+      // Plegado: el chip "Bajo objetivo" del panel no está en el documento.
+      expect(screen.queryByRole('button', { name: 'Bajo objetivo' })).toBeNull();
+    });
+
+    it('tocar el botón despliega el panel (aria-expanded) y muestra el chip "Bajo objetivo"', () => {
+      configurarCollection({ datos: [] });
+      renderizar();
+
+      const boton = screen.getByRole('button', { name: 'Filtros' });
+      fireEvent.click(boton);
+
+      expect(boton.getAttribute('aria-expanded')).toBe('true');
+      expect(screen.getByRole('button', { name: 'Bajo objetivo' })).toBeTruthy();
+
+      fireEvent.click(boton);
+
+      expect(boton.getAttribute('aria-expanded')).toBe('false');
+      expect(screen.queryByRole('button', { name: 'Bajo objetivo' })).toBeNull();
+    });
+
+    it('el chip de categoría queda FUERA del panel: convive en el carril scrolleable, no en el panel plegable', () => {
+      configurarCollection({
+        datos: [
+          productoDe({ id: 'p1', nombre: 'Queso Añejo', categoria: 'Quesos' }),
+          productoDe({ id: 'p2', nombre: 'Miel 500g', categoria: 'Miel' }),
+        ],
+      });
+      configurarCategorias({
+        datos: [
+          { id: 'c1', nombre: 'Quesos', orden: 0 },
+          { id: 'c2', nombre: 'Miel', orden: 1 },
+        ],
+      });
+      renderizar();
+
+      // Con el panel plegado, el chip de categoría ya es visible (no depende
+      // del panel) — a diferencia de "Bajo objetivo".
+      expect(screen.getByRole('button', { name: 'Quesos' })).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'Bajo objetivo' })).toBeNull();
+    });
+
+    it('el filtro sigue aplicando aunque el panel se pliegue', () => {
+      configurarCollection({
+        datos: [
+          productoDe({
+            id: 'p1',
+            nombre: 'Bajo objetivo SA',
+            costoPromedioCents: money(30000),
+            precioVentaCents: money(50000),
+            margenObjetivoBps: 5000,
+          }),
+          productoDe({
+            id: 'p2',
+            nombre: 'En objetivo SA',
+            costoPromedioCents: money(30000),
+            precioVentaCents: money(50000),
+            margenObjetivoBps: 3000,
+          }),
+        ],
+      });
+      renderizar();
+
+      const boton = screen.getByRole('button', { name: 'Filtros' });
+      fireEvent.click(boton);
+      fireEvent.click(screen.getByRole('button', { name: 'Bajo objetivo' }));
+      // Plegar el panel de nuevo.
+      fireEvent.click(boton);
+
+      expect(screen.queryByRole('button', { name: 'Bajo objetivo' })).toBeNull();
+      expect(tabla().getByText('Bajo objetivo SA')).toBeTruthy();
+      expect(tabla().queryByText('En objetivo SA')).toBeNull();
+    });
+
+    it('indicador de filtro activo: sin filtros activos, el ícono no muestra el punto', () => {
+      configurarCollection({ datos: [] });
+      renderizar();
+
+      const boton = screen.getByRole('button', { name: 'Filtros' });
+      expect(boton.querySelector('[aria-hidden="true"].bg-primary-600')).toBeNull();
+    });
+
+    it('indicador de filtro activo: con el panel plegado y "Bajo objetivo" activo, el ícono muestra el punto', () => {
+      configurarCollection({ datos: [] });
+      renderizar();
+
+      const boton = screen.getByRole('button', { name: 'Filtros' });
+      fireEvent.click(boton);
+      fireEvent.click(screen.getByRole('button', { name: 'Bajo objetivo' }));
+      fireEvent.click(boton); // plegar
+
+      expect(boton.querySelector('[aria-hidden="true"].bg-primary-600')).toBeTruthy();
+    });
+
+    it('indicador de filtro activo: con el panel DESPLEGADO, no se duplica el punto (el chip ya muestra el estado)', () => {
+      configurarCollection({ datos: [] });
+      renderizar();
+
+      const boton = screen.getByRole('button', { name: 'Filtros' });
+      fireEvent.click(boton);
+      fireEvent.click(screen.getByRole('button', { name: 'Bajo objetivo' }));
+
+      expect(boton.getAttribute('aria-expanded')).toBe('true');
+      expect(boton.querySelector('[aria-hidden="true"].bg-primary-600')).toBeNull();
+    });
   });
 
   describe('margen objetivo masivo (WA-H/WA-H2): "Ajustar margen"', () => {
