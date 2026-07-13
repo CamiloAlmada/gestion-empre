@@ -45,6 +45,40 @@ describe('construirDatosDemo', () => {
     expect(new Set(ventas.map((v) => v.id)).size).toBe(ventas.length);
   });
 
+  // Hallazgo del review de WA-D (WA-F3): `numero` NO puede ser `fecha.getTime()`
+  // (mostraría "Venta #1752332400000" en el historial frente al dueño durante la
+  // demo). Debe ser un correlativo chico, GLOBAL a los 6 clientes, 1..N, creciendo
+  // con la fecha — ver el comentario grande sobre `numero` en `generador.mjs`.
+  describe('numero de venta: correlativo chico, global y cronológico (WA-F3)', () => {
+    it('es 1..N sin huecos ni repetidos, N = cantidad total de ventas', () => {
+      const numeros = ventas.map((v) => v.numero).sort((a, b) => a - b);
+      expect(numeros).toEqual(Array.from({ length: ventas.length }, (_, i) => i + 1));
+    });
+
+    it('el array `ventas` devuelto ya viene ordenado cronológicamente por fecha', () => {
+      for (let i = 1; i < ventas.length; i++) {
+        expect(ventas[i].fecha.getTime()).toBeGreaterThanOrEqual(ventas[i - 1].fecha.getTime());
+      }
+    });
+
+    it('numero crece estrictamente junto con la posición cronológica (numero == índice + 1)', () => {
+      ventas.forEach((venta, indice) => {
+        expect(venta.numero).toBe(indice + 1);
+      });
+    });
+
+    it('la venta más vieja de TODOS los clientes es numero 1 y la más nueva es numero N (rango global, no por cliente)', () => {
+      const masVieja = ventas.reduce((a, b) => (a.fecha.getTime() <= b.fecha.getTime() ? a : b));
+      const masNueva = ventas.reduce((a, b) => (a.fecha.getTime() >= b.fecha.getTime() ? a : b));
+      expect(masVieja.numero).toBe(1);
+      expect(masNueva.numero).toBe(ventas.length);
+      // La más vieja (cliente 3, ~70 días) y la más nueva (cliente 5, ~2 días) son
+      // de DISTINTOS clientes: si `numero` se reiniciara por cliente, ninguna de
+      // las dos aserciones de arriba se cumpliría a la vez.
+      expect(masVieja.clienteId).not.toBe(masNueva.clienteId);
+    });
+  });
+
   it.each(clientes.map((cliente, indice) => [indice, cliente]))(
     'cliente %i: stats coherentes con sus propias ventas (cantidad, total, primera/última compra)',
     (_indice, cliente) => {
