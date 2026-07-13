@@ -301,7 +301,16 @@ Criterios de aceptación:
       (como lista "bajo objetivo" en Precios, enlazada desde la compra
       confirmada — pull, no notificación push).
 
-## Tanda WA — Demo clientes + WhatsApp (doc 08) — EN CURSO
+## Tanda WA — Demo clientes + WhatsApp (doc 08) — IMPLEMENTADA COMPLETA
+
+Estado (2026-07-12): las 6 tareas (WA-A/B/B2/C1/C2/D) mergeadas. Review senior
+integral: APROBAR CON OBSERVACIONES, con el criterio duro del doc 08 FIRMADO
+("no existe código de envío automático/masivo": CUMPLE — único `window.open`
+del diff invocado solo desde onClick sobre un cliente). Los 3 hallazgos
+(MEDIO: codigoPaisDefault no llegaba a alta/edición de clientes; MENORES:
+converter local redundante en SeccionNegocio, numeración epoch del seed)
+corregidos por sus autores (WA-F1/F2/F3). PENDIENTE: deploy + seed en dev +
+demo con Adrián (doc 10 §5).
 
 Repriorización (2026-07-11, decidida por Camilo): objetivo concreto, una DEMO
 funcionando de clientes + WhatsApp para la sesión de elicitación con Adrián
