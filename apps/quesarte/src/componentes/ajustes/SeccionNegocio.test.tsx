@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { FirestoreError } from 'firebase/firestore';
+import type { Configuracion } from '@gestion/core';
 import { ProveedorToasts } from '@gestion/ui';
 import { SeccionNegocio } from './SeccionNegocio';
 
@@ -36,13 +37,17 @@ vi.mock('firebase/firestore', () => ({
   doc: (_db: unknown, coleccion: string, id: string) => crearRef(`${coleccion}/${id}`),
 }));
 
-interface DatosConfiguracionFalsa {
-  nombreNegocio?: string;
-  codigoPaisDefault?: string;
-}
-
+// `useDoc` está mockeado (no corre el `configuracionConverter` real): estas
+// suite ejercitan el CONSUMO del dato ya reconstruido, no el converter en sí
+// (eso lo cubre `packages/firebase-kit/src/converters/configuracion.test.ts`,
+// WA-B2). Se tipa con `Configuracion` real (todos los campos opcionales,
+// WA-B2) para que los "datos falsos" de abajo no puedan divergir del shape
+// real — en particular, ningún caso de acá incluye `umbralPiezaAgotadaGramos`/
+// `metodoProrrateo` (Fase 2 en curso), que es justo el escenario que motivó
+// migrar de un converter local a `configuracionConverter` del kit (WA-F2):
+// antes de WA-B2 ese converter explotaba con esos campos ausentes.
 interface EstadoDocFalso {
-  datos: DatosConfiguracionFalsa | null;
+  datos: Configuracion | null;
   cargando: boolean;
   error: FirestoreError | null;
 }
