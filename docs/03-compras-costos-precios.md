@@ -98,7 +98,9 @@ margen actual, margen objetivo (si está definido). Interacciones:
   **redondeo comercial** configurable (`configuracion.multiploRedondeoCents`,
   default **$5** — decidido con el dueño 2026-07-09).
 - **Margen masivo sobre los filtrados** (WA-H 2026-07-13, pedido del dueño):
-  acción "Margen para los filtrados (N)" que abre un modal con el porcentaje
+  acción "Ajustar margen" (WA-H2: etiqueta corta para que conviva con
+  "Aplicar sugeridos (N)" en UNA fila; el conteo de alcanzados vive en el
+  modal, no en el botón) que abre un modal con el porcentaje
   (mismo formato bps que el editor individual) y dos salidas: **"Fijar
   objetivo"** (escribe `margenObjetivoBps` en los N productos filtrados por
   búsqueda/categoría/"solo bajo objetivo", en batch; los sugeridos se
