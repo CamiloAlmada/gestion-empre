@@ -35,12 +35,13 @@ tech lead; no se ignora en silencio.
   Venta queda activo mientras se está en él o en el detalle de una venta). Dos
   entradas: el icono de historial (reloj con flecha antihoraria "rebobinando")
   arriba a la derecha del header de Venta — el flujo natural de "acabo de
-  cobrar, quiero ver/anular la última venta" — y la acción "Historial" del
-  listado de Clientes (consulta cruzada frecuente). El icono de Venta es la
-  ÚNICA acción que se renderiza en el header también en pantalla angosta
-  (excepción documentada: la zona inferior de Venta pertenece al carrito, no
-  puede recibir flotantes; un icono en el header no compite con la zona del
-  pulgar porque es consulta ocasional, no operación de venta).
+  cobrar, quiero ver/anular la última venta" — y el MISMO icono en el header
+  de Clientes (consulta cruzada frecuente; tanda WA-G 2026-07-13, decidido
+  por el dueño: reemplaza a la píldora flotante "Historial", que saturaba el
+  cluster). Regla general (generaliza la excepción que era solo de Venta):
+  las acciones-ICONO de CONSULTA ocasional pueden renderizarse en el header
+  también en pantalla angosta — no compiten con la zona del pulgar porque no
+  son operaciones; las operaciones siguen yendo al cluster flotante.
 - **Compras** (Fase 2) se accede desde Stock. **Gestión de usuarios**, desde Ajustes.
 - Labels **siempre visibles** bajo cada ícono (nunca ícono solo). Tab activo:
   color primario + realce tipo pill; inactivo: texto secundario.
@@ -163,9 +164,18 @@ tech lead; no se ignora en silencio.
 - **Chips de filtro** (2026-07-10): píldoras sueltas bajo la búsqueda,
   scrolleables en horizontal; activo con relleno primario y texto en par
   aprobado (§7), inactivo tenue. Se usan SOLO para filtrar lo visible
-  (categorías en Venta/Catálogo/Stock, "mostrar inactivos" en
-  Clientes/Proveedores) — nunca para navegar (eso es el selector de sección,
-  §2, con otra presentación a propósito).
+  (categorías en Venta/Catálogo/Stock, "mostrar inactivos" en Proveedores) —
+  nunca para navegar (eso es el selector de sección, §2, con otra
+  presentación a propósito).
+  - **Clientes** (tanda WA-G 2026-07-13, decidido por el dueño): terna
+    EXCLUYENTE `Todos | Activos | Inactivos` (uno siempre activo, default
+    Todos) por inactividad COMERCIAL del doc 08 — "Inactivos" = hace mucho
+    que no compran según ritmo propio/umbral, NO dados de baja. Con el chip
+    Inactivos, las filas se enriquecen (días sin venir, orden por valor
+    histórico desc, botón "Te extrañamos") y reemplazan a la pantalla
+    dedicada `/clientes/inactivos`, que se elimina. Los clientes DADOS DE
+    BAJA (desactivados) aparecen solo bajo "Todos", atenuados y con su badge
+    — para reactivar, se los busca ahí.
 - Sombras suaves y bordes sutiles (`--color-borde`); elevación con moderación.
 - **Movimiento**: transiciones 150-200ms ease-out; nada que bloquee al usuario;
   `prefers-reduced-motion: reduce` desactiva animaciones no esenciales.

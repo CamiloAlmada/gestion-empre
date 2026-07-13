@@ -58,8 +58,10 @@ URL-encoding correcto de emojis, saltos de línea `%0A` y caracteres especiales)
 1. **Detalle de venta**: si la venta tiene cliente con teléfono normalizable,
    botón "WhatsApp" → selector de plantilla de contexto venta → abre wa.me.
 2. **Ficha de cliente**: botón WhatsApp con las plantillas de contexto cliente.
-3. **Lista de inactivos** (ver abajo): botón por fila con "Te extrañamos"
-   precargada.
+3. **Filtro de inactivos** (ver abajo; tanda WA-G 2026-07-13, decidido por el
+   dueño — antes era una pantalla dedicada): chip "Inactivos" en el listado de
+   Clientes; con él activo, cada fila muestra días sin venir + botón con
+   "Te extrañamos" precargada, ordenada por valor histórico.
 4. Los botones cumplen doc 06: target ≥44px, `aria-label`, y NO entran en el
    flujo de cobro del POS (el presupuesto de ≤3 toques no se toca).
 
