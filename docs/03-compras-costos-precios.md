@@ -97,6 +97,17 @@ margen actual, margen objetivo (si está definido). Interacciones:
 - Editar margen objetivo → sugiere precio: `precio = costo / (1 − margen)`, con
   **redondeo comercial** configurable (`configuracion.multiploRedondeoCents`,
   default **$5** — decidido con el dueño 2026-07-09).
+- **Margen masivo sobre los filtrados** (WA-H 2026-07-13, pedido del dueño):
+  acción "Margen para los filtrados (N)" que abre un modal con el porcentaje
+  (mismo formato bps que el editor individual) y dos salidas: **"Fijar
+  objetivo"** (escribe `margenObjetivoBps` en los N productos filtrados por
+  búsqueda/categoría/"solo bajo objetivo", en batch; los sugeridos se
+  recalculan y el dueño puede revisarlos 1 a 1 o usar "Aplicar sugeridos") y
+  **"Fijar y aplicar precios"** (además aplica en el mismo batch el precio
+  sugerido resultante, con el redondeo comercial de siempre). Excluye
+  productos sin costo (sin margen calculable) y los de margen no comparable
+  (pieza + precio por unidad, ver M2): el modal dice cuántos quedan afuera y
+  por qué. No reemplaza nada: la edición individual sigue igual.
 - Al confirmarse una compra que cambia el costo promedio, generar una **alerta de
   margen**: lista de productos cuyo margen quedó por debajo del objetivo, con el
   precio sugerido para restaurarlo, y acción "aplicar" individual o masiva.
