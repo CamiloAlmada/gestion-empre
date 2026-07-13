@@ -36,6 +36,7 @@ import {
   unidadCosto,
 } from '../componentes/stock/margenes';
 import { formatearBps } from '../componentes/stock/CampoPorcentaje';
+import { IconoFiltros } from '../componentes/iconos';
 import { useHeader } from '../componentes/header/ContextoHeader';
 import { ModalPrecio, type DatosPrecioFormulario } from './ModalPrecio';
 import { ModalMargenMasivo } from './ModalMargenMasivo';
@@ -177,6 +178,11 @@ export function Precios() {
   const [busqueda, setBusqueda] = useState('');
   const [categoriaFiltro, setCategoriaFiltro] = useState<string | null>(null);
   const [soloBajoObjetivo, setSoloBajoObjetivo] = useState(false);
+  // Panel de "filtros extra" (WA-H3, docs/06-ui-ux.md §3): plegado por
+  // defecto, estado puramente local (no persiste entre visitas ni afecta
+  // qué filtros están aplicados — eso lo sigue gobernando `soloBajoObjetivo`
+  // arriba, que sobrevive plegado o desplegado el panel).
+  const [panelFiltrosAbierto, setPanelFiltrosAbierto] = useState(false);
   const [productoEnEdicion, setProductoEnEdicion] = useState<Producto | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [confirmandoMasivo, setConfirmandoMasivo] = useState(false);
@@ -232,6 +238,11 @@ export function Precios() {
     if (!soloBajoObjetivo) return productosPorCategoria;
     return productosPorCategoria.filter(estaBajoObjetivo);
   }, [productosPorCategoria, soloBajoObjetivo]);
+
+  // Único filtro "extra" (panel del botón de filtros, WA-H3) hoy — cuando se
+  // sume otro ahí, esto pasa a ser un `||` de todos. Gatea el indicador de
+  // filtro activo sobre el ícono cuando el panel está plegado (ver JSX).
+  const hayFiltroExtraActivo = soloBajoObjetivo;
 
   // "Aplicar sugeridos" opera sobre los productos VISIBLES (post búsqueda +
   // categoría + el propio toggle "Bajo objetivo") que además tengan un
@@ -501,34 +512,65 @@ export function Precios() {
         </Button>
       </div>
 
-      {/* Carril único de filtros (WA-H2, docs/06-ui-ux.md §3: "Un solo carril
-          de filtros por pantalla"): el chip booleano "Bajo objetivo" (antes en
-          su fila propia, con el prefijo "Solo" que ya no hace falta dentro de
-          un carril) va al final de la MISMA fila scrolleable que los chips de
-          categoría. `ChipsFiltro` es de selección única (docs/06 §3) y no
-          admite un chip booleano ajeno colgado — en vez de tocar
-          `packages/ui` para ese caso puntual, se compone acá: un contenedor
-          scrolleable propio envuelve a `ChipsFiltro` (que solo se monta con
-          2+ categorías) y al `Chip` booleano como hermano. El div interno de
-          `ChipsFiltro` conserva su propio `overflow-x-auto`, pero como no se
-          lo restringe en ancho, nunca llega a necesitar scroll por sí solo:
-          el que scrollea es este contenedor externo, llevándose ambos chips
-          como una sola unidad. El booleano mantiene su semántica de toggle
-          (`aria-pressed` vía `Chip`), independiente de la categoría elegida —
-          no se fusiona con el `role="group"` de selección única. */}
-      <div className="flex items-center gap-2 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      {/* Carril de filtros con botón de filtros extra (WA-H3, docs/06-ui-ux.md
+          §3 — reemplaza el chip trailing de WA-H2, que se cortaba contra el
+          borde en el carril scrolleable). La fila scrolleable vuelve a llevar
+          SOLO los chips de categoría (`ChipsFiltro`, selección única); a su
+          derecha, FUERA del scroll y siempre visible, el botón-icono de
+          filtros. `min-w-0` en el contenedor scrolleable es necesario para
+          que de verdad pueda encogerse por debajo del ancho de su contenido
+          (si no, el flex item no se achica y empuja el botón fuera de
+          pantalla) — el botón, a su vez, no lleva `flex-shrink` así que
+          nunca se recorta. */}
+      <div className="flex items-center gap-2">
         {opcionesCategoria.length > 1 && (
-          <ChipsFiltro
-            ariaLabel="Filtrar por categoría"
-            opciones={opcionesCategoria.map((c) => c.nombre)}
-            valor={categoriaFiltro}
-            onCambiar={setCategoriaFiltro}
-          />
+          <div className="min-w-0 flex-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <ChipsFiltro
+              ariaLabel="Filtrar por categoría"
+              opciones={opcionesCategoria.map((c) => c.nombre)}
+              valor={categoriaFiltro}
+              onCambiar={setCategoriaFiltro}
+            />
+          </div>
         )}
-        <Chip activo={soloBajoObjetivo} onClick={() => setSoloBajoObjetivo((v) => !v)}>
-          Bajo objetivo
-        </Chip>
+        <button
+          type="button"
+          aria-label="Filtros"
+          aria-expanded={panelFiltrosAbierto}
+          onClick={() => setPanelFiltrosAbierto((v) => !v)}
+          className={`relative inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-1 focus-visible:ring-offset-superficie ${
+            panelFiltrosAbierto
+              ? 'bg-primary-600 text-white'
+              : 'border border-borde bg-superficie text-texto-secundario hover:text-texto'
+          }`}
+        >
+          <IconoFiltros className="h-5 w-5" />
+          {/* Indicador de filtro activo (docs/06 §3: "un filtro aplicado
+              jamás queda invisible") — SOLO con el panel plegado: con el
+              panel abierto, el propio chip activo (`aria-pressed`, ver más
+              abajo) ya comunica el estado, mostrar el punto ahí sería
+              redundante. Decorativo (`aria-hidden`): el par `primary-600` +
+              anillo `superficie` reusa la combinación de contraste YA
+              aprobada en docs/06 §7 para el ring de foco (no se inventa un
+              par nuevo), aplicada acá como relleno + borde en vez de outline
+              para que el punto se recorte del fondo del botón en cualquiera
+              de sus dos estados. */}
+          {hayFiltroExtraActivo && !panelFiltrosAbierto && (
+            <span
+              aria-hidden="true"
+              className="absolute right-0.5 top-0.5 h-2.5 w-2.5 rounded-full bg-primary-600 ring-2 ring-superficie"
+            />
+          )}
+        </button>
       </div>
+
+      {panelFiltrosAbierto && (
+        <div className="flex items-center gap-2 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <Chip activo={soloBajoObjetivo} onClick={() => setSoloBajoObjetivo((v) => !v)}>
+            Bajo objetivo
+          </Chip>
+        </div>
+      )}
 
       {cargando ? (
         <div className="flex min-h-[40vh] items-center justify-center">
