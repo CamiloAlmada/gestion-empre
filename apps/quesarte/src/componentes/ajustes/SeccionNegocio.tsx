@@ -1,14 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import {
-  doc,
-  type DocumentData,
-  type FirestoreDataConverter,
-  type QueryDocumentSnapshot,
-  type SnapshotOptions,
-} from 'firebase/firestore';
+import { doc } from 'firebase/firestore';
 import { Button, Input, useToasts } from '@gestion/ui';
 import {
   ConfiguracionInvalidaError,
+  configuracionConverter,
   guardarConfiguracionGeneral,
   useDoc,
   useOnlineStatus,
@@ -21,39 +16,6 @@ import { db } from '../../firebase';
  * propio, así que si el admin lo deja así y guarda, este es el valor que se
  * persiste. */
 const CODIGO_PAIS_SUGERIDO = '598';
-
-/**
- * Subconjunto de `configuracion/general` que esta sección necesita leer.
- *
- * Deliberadamente NO usa `configuracionConverter` (el converter del kit para
- * este mismo doc): ese converter reconstruye `umbralPiezaAgotadaGramos` con
- * `peso()`, que **explota** (`RangeError`) si el campo no es un entero — y
- * hoy nada en el código escribe todavía `umbralPiezaAgotadaGramos`/
- * `metodoProrrateo` (Fase 2 / compras sigue en curso). `firestore.rules`
- * declara las 4 claves de `configuracion/general` como opcionales a
- * propósito (merge parcial), así que un negocio que recién usa ESTA sección
- * para fijar `nombreNegocio`/`codigoPaisDefault` deja el doc SIN esos dos
- * campos de Fase 2 — el escenario exacto que `configuracionConverter`
- * rompe. Se reporta al tech lead (ver informe de la tarea); mientras tanto,
- * esta sección lee con un converter local, tolerante, que no toca `peso()`.
- */
-interface ConfiguracionGeneralParcial {
-  nombreNegocio?: string;
-  codigoPaisDefault?: string;
-}
-
-const configuracionGeneralParcialConverter: FirestoreDataConverter<ConfiguracionGeneralParcial> = {
-  toFirestore(datos): DocumentData {
-    return datos as DocumentData;
-  },
-  fromFirestore(snapshot: QueryDocumentSnapshot, options?: SnapshotOptions): ConfiguracionGeneralParcial {
-    const datos = snapshot.data(options) as Record<string, unknown>;
-    return {
-      nombreNegocio: typeof datos.nombreNegocio === 'string' ? datos.nombreNegocio : undefined,
-      codigoPaisDefault: typeof datos.codigoPaisDefault === 'string' ? datos.codigoPaisDefault : undefined,
-    };
-  },
-};
 
 interface Errores {
   nombreNegocio?: string;
@@ -75,13 +37,22 @@ interface Errores {
  * por su propio toast. No hay lectura previa que pueda pisarse (es un merge
  * de 2 claves conocidas), así que no hace falta bloquear la escritura offline
  * como si hace `Categorias.tsx`.
+ *
+ * Lee con `configuracionConverter` del kit (WA-F2: antes de WA-B2 esta
+ * sección usaba un converter local porque ese converter explotaba si
+ * `umbralPiezaAgotadaGramos`/`metodoProrrateo` estaban ausentes — el caso
+ * exacto de guardar solo `nombreNegocio`/`codigoPaisDefault` antes de que
+ * Fase 2/compras escriba esos otros dos campos. WA-B2 lo endureció para
+ * tolerar cualquier subconjunto de `configuracion/general`, así que el
+ * workaround local quedó redundante y se eliminó — una sola fuente de verdad
+ * para el shape de este doc).
  */
 export function SeccionNegocio() {
   const enLinea = useOnlineStatus();
   const { mostrarToast } = useToasts();
 
   const configuracionRef = useMemo(
-    () => doc(db, 'configuracion', 'general').withConverter(configuracionGeneralParcialConverter),
+    () => doc(db, 'configuracion', 'general').withConverter(configuracionConverter),
     [],
   );
   const { datos: configuracion, cargando } = useDoc(configuracionRef);
