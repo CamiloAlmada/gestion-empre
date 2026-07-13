@@ -30,6 +30,23 @@ tech lead; no se ignora en silencio.
 - **Venta es el tab central y prominente**: botón circular elevado con el color
   primario (patrón FAB central). Es el home de la app: al abrir, cae en Venta.
 - **Productos** se gestiona como sección interna del tab Stock (no tiene tab).
+  **Fusión Stock + Catálogo** (tanda UI-5, 2026-07-13, decidido por el dueño:
+  para el vendedor eran ~90% la misma pantalla — la partición era por
+  completitud de datos, no por tarea): la sección **Productos** es la ÚNICA
+  lista de productos del tab. Conserva la presentación diaria de la ex Stock
+  (lista agrupada por categoría, fila `nombre + precio + existencias`, franja
+  de alertas) y hereda de la ex Catálogo la búsqueda full-width (§3) y el
+  alta ("+" del cluster, solo-admin). Los productos INACTIVOS no aparecen por
+  defecto: se incluyen al activar el chip "Inactivos" del botón de filtros
+  extra (§3, patrón WA-H3; chip solo-admin), atenuados y con badge — espejo
+  del criterio de dados de baja en Clientes. Las alertas se calculan SOLO
+  sobre activos. El detalle del producto es el hub único: existencias, piezas
+  y movimientos + ficha de configuración (categoría, modo, umbral, estado)
+  con edición solo-admin en el lugar. **El precio se fija en el alta y se
+  cambia SOLO en la sección Precios** (donde costo y margen están a la
+  vista): la edición de la ficha NO incluye precio — cierra el doble camino
+  de escritura que había entre el modal de catálogo y el de precios. La ruta
+  vieja `/stock/productos` redirige a `/stock`.
 - **Historial** (2026-07-10, ajustado tras uso real del dueño) es el historial
   DE VENTAS: cuelga del tab **Venta** (su `‹ volver` lleva a Venta; el tab
   Venta queda activo mientras se está en él o en el detalle de una venta). Dos
@@ -42,7 +59,8 @@ tech lead; no se ignora en silencio.
   las acciones-ICONO de CONSULTA ocasional pueden renderizarse en el header
   también en pantalla angosta — no compiten con la zona del pulgar porque no
   son operaciones; las operaciones siguen yendo al cluster flotante.
-- **Compras** (Fase 2) se accede desde Stock. **Gestión de usuarios**, desde Ajustes.
+- **Compras** (Fase 2) se accede desde Stock. **Gestión de usuarios** y
+  **Categorías** (UI-5, 2026-07-13 — era sección de Stock), desde Ajustes.
 - Labels **siempre visibles** bajo cada ícono (nunca ícono solo). Tab activo:
   color primario + realce tipo pill; inactivo: texto secundario.
 - Altura ~64px + `env(safe-area-inset-bottom)`. Targets de tab ≥48×48px.
@@ -64,10 +82,17 @@ tech lead; no se ignora en silencio.
   "secondary tabs" de Material 3; los chips NO se usan para navegar, solo para
   filtrar): dentro del tab **Stock**, las pantallas raíz de sección muestran
   bajo el header una fila horizontal scrolleable
-  `Stock | Catálogo | Compras | Proveedores | Precios | Categorías` (filtrada
-  por rol: el vendedor ve `Stock | Catálogo`). **Categorías** (tanda UI-4,
-  2026-07-10, pedido del dueño) dejó de ser modal de Catálogo: es una sección
-  más, listado común solo-admin, al final por baja frecuencia de uso.
+  `Productos | Compras | Proveedores | Precios` (UI-5, 2026-07-13: con la
+  fusión Stock+Catálogo y la mudanza de Categorías a Ajustes, el selector
+  admin entra sin scroll en un teléfono común — motivo explícito de la
+  tanda). Filtrado por rol: el vendedor solo tiene **Productos** → con UNA
+  sola sección visible el selector NO se renderiza y el swipe entre
+  secciones queda deshabilitado (no hay vecinas); su tab Stock es una
+  pantalla simple. **Categorías** (UI-4 la sacó del modal de Catálogo como
+  listado común; UI-5 la mudó): vive en **Ajustes** como listado común
+  solo-admin — es vocabulario/configuración de baja frecuencia, misma
+  naturaleza que Usuarios. La ruta vieja `/stock/categorias` redirige a la
+  nueva (`/ajustes/categorias`).
   Semántica de pestañas sobre **rutas reales** (back del sistema funciona,
   cada sección linkeable, ítem activo resaltado y anunciado como
   seleccionado), presentación de fila contenida en superficie redondeada —
@@ -164,7 +189,7 @@ tech lead; no se ignora en silencio.
 - **Chips de filtro** (2026-07-10): píldoras sueltas bajo la búsqueda,
   scrolleables en horizontal; activo con relleno primario y texto en par
   aprobado (§7), inactivo tenue. Se usan SOLO para filtrar lo visible
-  (categorías en Venta/Catálogo/Stock, "mostrar inactivos" en Proveedores) —
+  (categorías en Venta/Productos/Precios, "mostrar inactivos" en Proveedores) —
   nunca para navegar (eso es el selector de sección, §2, con otra
   presentación a propósito).
   - **Carril de filtros con botón de filtros extra** (WA-H3 2026-07-13,
@@ -172,8 +197,9 @@ tech lead; no se ignora en silencio.
     contra el borde): la fila scrolleable lleva SOLO los chips de categoría;
     a su derecha, FIJO (fuera del scroll, siempre visible), un botón-icono de
     filtro (embudo `filter-list`, aria-label "Filtros", `aria-expanded`) que
-    pliega/despliega una fila debajo con los chips de filtros extra (p. ej.
-    "Bajo objetivo"; los futuros se suman ahí). Cuando algún filtro extra
+    pliega/despliega una fila debajo con los chips de filtros extra (en
+    Precios "Bajo objetivo"; en Productos "Inactivos", solo-admin, UI-5; los
+    futuros se suman ahí). Cuando algún filtro extra
     está ACTIVO y el panel está plegado, el icono muestra un indicador (punto
     en color primario) — un filtro aplicado jamás queda invisible.
   - **Clientes** (tanda WA-G 2026-07-13, decidido por el dueño): terna
