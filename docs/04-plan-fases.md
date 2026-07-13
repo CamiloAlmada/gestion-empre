@@ -259,6 +259,11 @@ layout persistente de Stock — y pasa a auto-resetear su error por cambio de
 ruta, con test de integración de identidad del selector a través del Shell).
 
 Notas para Fase 3 (arrastradas de los reviews de esta fase):
+- (WA-F3, hallazgo del autor del seed) `Venta.numero` promete "correlativo
+  legible por humanos" pero `registrarVenta` escribe `Date.now()` (epoch) —
+  deuda PREEXISTENTE en producción, no del seed. Un correlativo real
+  offline-safe no es trivial (dos ventas offline concurrentes colisionarían
+  con un contador ingenuo); decidir diseño con calma (territorio senior).
 - Promover `calcularCostoRealUnidadCents` a core (hoy Compras reusa
   `calcularTicketPromedio`, numéricamente idéntico, semánticamente prestado).
 - No existe pantalla de configuración: `metodoProrrateo` (default por_valor) y
