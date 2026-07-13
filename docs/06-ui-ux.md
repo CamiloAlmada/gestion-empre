@@ -167,12 +167,15 @@ tech lead; no se ignora en silencio.
   (categorías en Venta/Catálogo/Stock, "mostrar inactivos" en Proveedores) —
   nunca para navegar (eso es el selector de sección, §2, con otra
   presentación a propósito).
-  - **Un solo carril de filtros por pantalla** (WA-H2 2026-07-13, feedback
-    del dueño en Precios): los chips booleanos de filtro (p. ej. "Bajo
-    objetivo") van AL FINAL de la misma fila scrolleable de los chips de
-    categoría — no en una fila propia; filtros futuros se suman ahí. La fila
-    de categorías y los booleanos comparten carril pero se distinguen solo
-    por posición (mismo componente Chip).
+  - **Carril de filtros con botón de filtros extra** (WA-H3 2026-07-13,
+    iterado con el dueño; reemplaza al chip trailing de WA-H2, que se cortaba
+    contra el borde): la fila scrolleable lleva SOLO los chips de categoría;
+    a su derecha, FIJO (fuera del scroll, siempre visible), un botón-icono de
+    filtro (embudo `filter-list`, aria-label "Filtros", `aria-expanded`) que
+    pliega/despliega una fila debajo con los chips de filtros extra (p. ej.
+    "Bajo objetivo"; los futuros se suman ahí). Cuando algún filtro extra
+    está ACTIVO y el panel está plegado, el icono muestra un indicador (punto
+    en color primario) — un filtro aplicado jamás queda invisible.
   - **Clientes** (tanda WA-G 2026-07-13, decidido por el dueño): terna
     EXCLUYENTE `Todos | Activos | Inactivos` (uno siempre activo, default
     Todos) por inactividad COMERCIAL del doc 08 — "Inactivos" = hace mucho
