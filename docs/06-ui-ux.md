@@ -47,6 +47,16 @@ tech lead; no se ignora en silencio.
   vista): la edición de la ficha NO incluye precio — cierra el doble camino
   de escritura que había entre el modal de catálogo y el de precios. La ruta
   vieja `/stock/productos` redirige a `/stock`.
+  - **Picker de categoría con creación inline** (condición del dueño al
+    aprobar la mudanza de Categorías a Ajustes, 2026-07-13): en el
+    alta/edición de producto, el picker de categoría permite CREAR una
+    categoría en el momento (escribir un nombre nuevo → acción "Crear";
+    reusa `crearCategoria` de firebase-kit, con su chequeo de duplicados y
+    su `orden = max + 1`) y lleva un link "Gestionar categorías" que navega
+    a Ajustes → Categorías. Regla: el momento de necesidad real (estoy
+    dando de alta un producto y la categoría no existe) NUNCA obliga a
+    salir del flujo para crearla; la gestión completa (renombrar,
+    reordenar) sí vive en Ajustes.
 - **Historial** (2026-07-10, ajustado tras uso real del dueño) es el historial
   DE VENTAS: cuelga del tab **Venta** (su `‹ volver` lleva a Venta; el tab
   Venta queda activo mientras se está en él o en el detalle de una venta). Dos
