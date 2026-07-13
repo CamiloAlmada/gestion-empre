@@ -292,7 +292,7 @@ describe('Venta - estados', () => {
     configurarCollections({ productos: estadoOk([]), piezas: estadoOk([]) });
     renderizar();
     expect(screen.getByText('Sin productos — creá el catálogo primero.')).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Ir a Productos' }).getAttribute('href')).toBe('/stock/productos');
+    expect(screen.getByRole('link', { name: 'Ir a Productos' }).getAttribute('href')).toBe('/stock');
   });
 
 });
