@@ -1,12 +1,14 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { collection, orderBy, query } from 'firebase/firestore';
+import { collection, doc, orderBy, query } from 'firebase/firestore';
 import { Button, CampoBusqueda, Chip, useToasts } from '@gestion/ui';
 import {
   clienteConverter,
+  configuracionConverter,
   crearCliente,
   useAuth,
   useCollection,
+  useDoc,
   useOnlineStatus,
 } from '@gestion/firebase-kit';
 import type { DatosCliente } from '@gestion/firebase-kit';
@@ -52,6 +54,20 @@ export function Clientes() {
   // Se incrementa en "Reintentar": cambia la identidad de la query y fuerza a
   // `useCollection` a resuscribirse (mismo patrón que Stock.tsx/Productos.tsx).
   const [intentoId, setIntentoId] = useState(0);
+
+  // `configuracion/general` (WA-F1, hallazgo de integración de la tanda WA):
+  // `crearCliente` deriva `telefonoE164` con el `codigoPais` que se le pase
+  // (default '598' si no se pasa nada) — sin esto, un negocio con
+  // `codigoPaisDefault` distinto (p. ej. Argentina '54') persistía el
+  // teléfono con el prefijo uruguayo. `useDoc` es cache-first (persistencia
+  // offline ya habilitada, ver docs/06-ui-ux.md §8): no agrega una espera al
+  // alta, solo lee lo que ya esté en caché (o `undefined` mientras no hay
+  // nada, y el kit aplica su default).
+  const configuracionRef = useMemo(
+    () => doc(db, 'configuracion', 'general').withConverter(configuracionConverter),
+    [],
+  );
+  const configuracion = useDoc(configuracionRef);
 
   useHeader({
     titulo: 'Clientes',
@@ -119,7 +135,7 @@ export function Clientes() {
     // `crearCliente` genera el id client-side y devuelve `confirmacion` (el ack
     // del setDoc). Esta pantalla no necesita el id (navega al listado), solo
     // observa `confirmacion` para el aviso online/offline.
-    const { confirmacion } = crearCliente(db, datos);
+    const { confirmacion } = crearCliente(db, datos, configuracion.datos?.codigoPaisDefault);
 
     if (!enLinea) {
       setAltaAbierta(false);

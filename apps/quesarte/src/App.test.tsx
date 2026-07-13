@@ -8,21 +8,26 @@ const mocks = vi.hoisted(() => ({
   useAuth: vi.fn(),
   useOnlineStatus: vi.fn(() => true),
   useCollection: vi.fn(() => ({ datos: [], cargando: false, error: null })),
+  useDoc: vi.fn(() => ({ datos: null, cargando: false, error: null })),
 }));
 
 // Venta (ruteada en "/", home de la app) trae productos/piezas con
 // useCollection: se mockea vacío (sin cargando/error) para no depender de un
 // `db` real. Este suite solo prueba ruteo (no el contenido de Venta, que
 // tiene su propio Venta.test.tsx), mismo criterio que Productos/AvisoPwa
-// abajo.
+// abajo. `useDoc` (WA-F1: Venta ahora lee `configuracion/general` para el
+// `codigoPaisDefault` del alta rápida de cliente) se mockea igual, sin
+// datos: alcanza para que el componente monte sin crashear.
 vi.mock('@gestion/firebase-kit', () => ({
   useAuth: mocks.useAuth,
   useOnlineStatus: mocks.useOnlineStatus,
   useCollection: mocks.useCollection,
+  useDoc: mocks.useDoc,
   productoConverter: {},
   piezaConverter: {},
   clienteConverter: {},
   categoriaConverter: {},
+  configuracionConverter: {},
 }));
 
 // Mismo motivo que el mock de '@gestion/firebase-kit' de arriba: Venta arma
@@ -42,6 +47,7 @@ function crearRefFalsa(path: string): RefFalsa {
 
 vi.mock('firebase/firestore', () => ({
   collection: (_db: unknown, path: string) => crearRefFalsa(path),
+  doc: (_db: unknown, coleccion: string, id: string) => crearRefFalsa(`${coleccion}/${id}`),
   query: (ref: RefFalsa, ...clausulas: unknown[]) => ({ ...ref, __clausulas: clausulas }),
   where: (...args: unknown[]) => ({ __tipo: 'where', args }),
   orderBy: (...args: unknown[]) => ({ __tipo: 'orderBy', args }),

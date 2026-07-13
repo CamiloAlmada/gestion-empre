@@ -1,8 +1,8 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useParams } from 'react-router';
 import type { FirestoreError } from 'firebase/firestore';
-import { money, type Cliente } from '@gestion/core';
+import { money, type Cliente, type Configuracion } from '@gestion/core';
 import { ProveedorToasts } from '@gestion/ui';
 import { Clientes } from './Clientes';
 import { ProveedorHeader, useHeaderActual } from '../componentes/header/ContextoHeader';
@@ -10,6 +10,7 @@ import { ProveedorHeader, useHeaderActual } from '../componentes/header/Contexto
 const mocks = vi.hoisted(() => ({
   useOnlineStatus: vi.fn(() => true),
   useCollection: vi.fn(),
+  useDoc: vi.fn(),
   crearCliente: vi.fn(),
   // Default admin: `Clientes.tsx` ahora llama a `useAuth()` (gate de la
   // acción "Inactivos", WA-C2) y el `useAuth` real explota sin
@@ -28,15 +29,16 @@ const mocks = vi.hoisted(() => ({
   })),
 }));
 
-// Mismo criterio que `Productos.test.tsx`: `clienteConverter` se deja pasar
-// tal cual (no se ejercita, `withConverter` es identidad); `crearCliente` es
-// la única operación con I/O real y se mockea entera.
+// Mismo criterio que `Productos.test.tsx`: `clienteConverter`/`configuracionConverter`
+// se dejan pasar tal cual (no se ejercitan, `withConverter` es identidad);
+// `crearCliente` es la única operación con I/O real y se mockea entera.
 vi.mock('@gestion/firebase-kit', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@gestion/firebase-kit')>();
   return {
     ...actual,
     useOnlineStatus: mocks.useOnlineStatus,
     useCollection: mocks.useCollection,
+    useDoc: mocks.useDoc,
     crearCliente: mocks.crearCliente,
     useAuth: mocks.useAuth,
   };
@@ -56,6 +58,7 @@ function crearRef(path: string): RefFalsa {
 
 vi.mock('firebase/firestore', () => ({
   collection: (_db: unknown, path: string) => crearRef(path),
+  doc: (_db: unknown, coleccion: string, id: string) => crearRef(`${coleccion}/${id}`),
   query: (ref: RefFalsa, ...clausulas: unknown[]) => ({ ...ref, __clausulas: clausulas }),
   orderBy: (...args: unknown[]) => ({ __tipo: 'orderBy', args }),
 }));
@@ -68,6 +71,14 @@ interface EstadoFalso<T> {
 
 function estadoOk<T>(datos: T[]): EstadoFalso<T> {
   return { datos, cargando: false, error: null };
+}
+
+/** `useDoc` de `configuracion/general` (WA-F1): default sin datos (el kit
+ * aplica su propio `'598'`). Se re-establece en cada `beforeEach` — igual
+ * criterio que `ListaClientesInactivos.test.tsx`: `vi.clearAllMocks()` limpia
+ * calls/results pero NO la implementación fijada con `mockReturnValue`. */
+function configurarConfiguracion(datos: Configuracion | null) {
+  mocks.useDoc.mockReturnValue({ datos, cargando: false, error: null });
 }
 
 function cliente(over: Partial<Cliente> & Pick<Cliente, 'id' | 'nombre'>): Cliente {
@@ -130,6 +141,10 @@ function renderizar() {
     </MemoryRouter>,
   );
 }
+
+beforeEach(() => {
+  configurarConfiguracion(null);
+});
 
 afterEach(() => {
   cleanup();
@@ -336,6 +351,43 @@ describe('Clientes - alta', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
 
     expect(await screen.findByText('No se pudo crear el cliente. Intentá de nuevo.')).toBeTruthy();
+  });
+});
+
+describe('Clientes - codigoPais al crear (WA-F1, hallazgo de integración de la tanda WA)', () => {
+  it('con configuracion/general.codigoPaisDefault configurado, lo pasa como 3er argumento a crearCliente', async () => {
+    configurarClientes(estadoOk([]));
+    configurarConfiguracion({
+      nombreNegocio: 'Quesarte',
+      umbralPiezaAgotadaGramos: 0 as never,
+      metodoProrrateo: 'por_peso',
+      codigoPaisDefault: '54',
+    });
+    mocks.crearCliente.mockReturnValue({ clienteId: 'nuevo', confirmacion: Promise.resolve() });
+    renderizar();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Agregar cliente' })[0]!);
+    fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Nueva Clienta' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+    await waitFor(() => expect(mocks.crearCliente).toHaveBeenCalledTimes(1));
+    const [, , codigoPais] = mocks.crearCliente.mock.calls[0] as [unknown, unknown, string | undefined];
+    expect(codigoPais).toBe('54');
+  });
+
+  it('sin configuracion/general (doc ausente o sin cargar): pasa undefined, el kit aplica su default', async () => {
+    configurarClientes(estadoOk([]));
+    configurarConfiguracion(null);
+    mocks.crearCliente.mockReturnValue({ clienteId: 'nuevo', confirmacion: Promise.resolve() });
+    renderizar();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Agregar cliente' })[0]!);
+    fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Nueva Clienta' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+    await waitFor(() => expect(mocks.crearCliente).toHaveBeenCalledTimes(1));
+    const [, , codigoPais] = mocks.crearCliente.mock.calls[0] as [unknown, unknown, string | undefined];
+    expect(codigoPais).toBeUndefined();
   });
 });
 
