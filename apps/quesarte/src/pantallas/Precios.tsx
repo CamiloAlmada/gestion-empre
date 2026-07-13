@@ -103,8 +103,8 @@ async function aplicarPreciosSugeridos(candidatos: CandidatoMasivo[]): Promise<v
 }
 
 /** Un `writeBatch` de Firestore admite hasta 500 escrituras (límite duro del
- * SDK) — 400 deja margen sin acercarse al techo. Hoy "Margen para los
- * filtrados" opera sobre ~7 productos (catálogo real de la quesería), pero
+ * SDK) — 400 deja margen sin acercarse al techo. Hoy "Ajustar margen" opera
+ * sobre ~7 productos (catálogo real de la quesería), pero
  * el límite queda resuelto de una vez en vez de latente (WA-H). Cada lote es
  * su PROPIO batch atómico: con más de 400 elegibles, la operación completa
  * ya no es un único átomo (un lote puede fallar sin deshacer los anteriores)
@@ -127,7 +127,7 @@ export async function commitEnLotes<T>(items: T[], aplicar: (batch: WriteBatch, 
   }
 }
 
-/** "Fijar objetivo" de "Margen para los filtrados" (WA-H, doc 03): escribe
+/** "Fijar objetivo" de "Ajustar margen" (WA-H/WA-H2, doc 03): escribe
  * el mismo `margenObjetivoBps` en todos los productos elegibles filtrados.
  * No toca `precioVentaCents` — los sugeridos se recalculan solos (mismo
  * `margenActualBps`/`precioSugeridoDe` que ya usa la tabla) y el dueño los
@@ -141,7 +141,7 @@ async function fijarMargenObjetivoMasivo(productos: Producto[], margenBps: numbe
   });
 }
 
-/** "Fijar y aplicar precios" de "Margen para los filtrados" (WA-H, doc 03):
+/** "Fijar y aplicar precios" de "Ajustar margen" (WA-H/WA-H2, doc 03):
  * mismo batch que `fijarMargenObjetivoMasivo`, pero además escribe
  * `precioVentaCents` con el precio sugerido para ESE margen nuevo (ya
  * calculado por el llamador con `precioSugeridoConMargen`). */
@@ -181,7 +181,7 @@ export function Precios() {
   const [guardando, setGuardando] = useState(false);
   const [confirmandoMasivo, setConfirmandoMasivo] = useState(false);
   const [aplicandoMasivo, setAplicandoMasivo] = useState(false);
-  // "Margen para los filtrados" (WA-H): modal de porcentaje + confirmación
+  // "Ajustar margen" (WA-H/WA-H2): modal de porcentaje + confirmación
   // separada para "Fijar y aplicar precios" (mismo criterio que
   // confirmandoMasivo/aplicandoMasivo de "Aplicar sugeridos" — dos pasos
   // porque esa acción cambia precios en masa).
@@ -234,7 +234,7 @@ export function Precios() {
   }, [productosPorCategoria, soloBajoObjetivo]);
 
   // "Aplicar sugeridos" opera sobre los productos VISIBLES (post búsqueda +
-  // categoría + el propio toggle "Solo bajo objetivo") que además tengan un
+  // categoría + el propio toggle "Bajo objetivo") que además tengan un
   // precio sugerido calculable (costo y margen objetivo cargados, doc 03).
   const candidatosMasivo: CandidatoMasivo[] = useMemo(
     () =>
@@ -246,10 +246,10 @@ export function Precios() {
     [productosFiltrados],
   );
 
-  // "Margen para los filtrados" (WA-H) opera sobre los MISMOS productos
-  // VISIBLES que "Aplicar sugeridos" (búsqueda + categoría + "solo bajo
-  // objetivo"), elegibles = con costo y margen comparable (no requiere que
-  // ya tengan `margenObjetivoBps`: esta acción lo está fijando).
+  // "Ajustar margen" (WA-H/WA-H2) opera sobre los MISMOS productos VISIBLES
+  // que "Aplicar sugeridos" (búsqueda + categoría + "bajo objetivo"),
+  // elegibles = con costo y margen comparable (no requiere que ya tengan
+  // `margenObjetivoBps`: esta acción lo está fijando).
   const elegiblesMargenMasivo = useMemo(
     () => productosFiltrados.filter(elegibleParaMargenMasivo),
     [productosFiltrados],
@@ -329,7 +329,7 @@ export function Precios() {
     }
   }
 
-  /** "Fijar objetivo" de "Margen para los filtrados" (WA-H): no toca precios
+  /** "Fijar objetivo" de "Ajustar margen" (WA-H/WA-H2): no toca precios
    * (mismo riesgo que editar el margen objetivo a mano desde `ModalPrecio`),
    * se ejecuta al toque con el mismo patrón offline-first híbrido del resto
    * de la pantalla. */
@@ -363,7 +363,7 @@ export function Precios() {
     }
   }
 
-  /** "Fijar y aplicar precios" de "Margen para los filtrados" (WA-H): cambia
+  /** "Fijar y aplicar precios" de "Ajustar margen" (WA-H/WA-H2): cambia
    * precios en masa, así que NO escribe nada todavía — calcula los
    * candidatos con el precio sugerido para el margen tipeado, cierra el
    * modal de porcentaje y abre la confirmación explícita (mismo patrón que
@@ -479,36 +479,56 @@ export function Precios() {
         ariaLabel="Buscar producto"
         placeholder="Nombre o categoría"
       />
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Chip activo={soloBajoObjetivo} onClick={() => setSoloBajoObjetivo((v) => !v)}>
-          Solo bajo objetivo
-        </Chip>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variante="secundaria"
-            disabled={elegiblesMargenMasivo.length === 0}
-            onClick={() => setModalMargenMasivoAbierto(true)}
-          >
-            Margen para los filtrados ({elegiblesMargenMasivo.length})
-          </Button>
-          <Button
-            variante="secundaria"
-            disabled={candidatosMasivo.length === 0}
-            onClick={() => setConfirmandoMasivo(true)}
-          >
-            Aplicar sugeridos ({candidatosMasivo.length})
-          </Button>
-        </div>
+
+      {/* Fila de acciones masivas (WA-H2, doc 03): "Ajustar margen" perdió el
+          conteo de la etiqueta (vive en el modal, ver ModalMargenMasivo) para
+          que las dos entren cómodas en una sola fila en un teléfono común.
+          `flex-wrap` es solo la red de seguridad si algún día no entran. */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          variante="secundaria"
+          disabled={elegiblesMargenMasivo.length === 0}
+          onClick={() => setModalMargenMasivoAbierto(true)}
+        >
+          Ajustar margen
+        </Button>
+        <Button
+          variante="secundaria"
+          disabled={candidatosMasivo.length === 0}
+          onClick={() => setConfirmandoMasivo(true)}
+        >
+          Aplicar sugeridos ({candidatosMasivo.length})
+        </Button>
       </div>
 
-      {opcionesCategoria.length > 1 && (
-        <ChipsFiltro
-          ariaLabel="Filtrar por categoría"
-          opciones={opcionesCategoria.map((c) => c.nombre)}
-          valor={categoriaFiltro}
-          onCambiar={setCategoriaFiltro}
-        />
-      )}
+      {/* Carril único de filtros (WA-H2, docs/06-ui-ux.md §3: "Un solo carril
+          de filtros por pantalla"): el chip booleano "Bajo objetivo" (antes en
+          su fila propia, con el prefijo "Solo" que ya no hace falta dentro de
+          un carril) va al final de la MISMA fila scrolleable que los chips de
+          categoría. `ChipsFiltro` es de selección única (docs/06 §3) y no
+          admite un chip booleano ajeno colgado — en vez de tocar
+          `packages/ui` para ese caso puntual, se compone acá: un contenedor
+          scrolleable propio envuelve a `ChipsFiltro` (que solo se monta con
+          2+ categorías) y al `Chip` booleano como hermano. El div interno de
+          `ChipsFiltro` conserva su propio `overflow-x-auto`, pero como no se
+          lo restringe en ancho, nunca llega a necesitar scroll por sí solo:
+          el que scrollea es este contenedor externo, llevándose ambos chips
+          como una sola unidad. El booleano mantiene su semántica de toggle
+          (`aria-pressed` vía `Chip`), independiente de la categoría elegida —
+          no se fusiona con el `role="group"` de selección única. */}
+      <div className="flex items-center gap-2 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {opcionesCategoria.length > 1 && (
+          <ChipsFiltro
+            ariaLabel="Filtrar por categoría"
+            opciones={opcionesCategoria.map((c) => c.nombre)}
+            valor={categoriaFiltro}
+            onCambiar={setCategoriaFiltro}
+          />
+        )}
+        <Chip activo={soloBajoObjetivo} onClick={() => setSoloBajoObjetivo((v) => !v)}>
+          Bajo objetivo
+        </Chip>
+      </div>
 
       {cargando ? (
         <div className="flex min-h-[40vh] items-center justify-center">

@@ -24,7 +24,7 @@ const mocks = vi.hoisted(() => {
     useAuth: vi.fn(),
     // Envuelto en `vi.fn()` (no una función plana como antes) para poder
     // contar cuántos `writeBatch` distintos se abrieron — necesario para el
-    // test de chunking de "Margen para los filtrados" (WA-H): con más de
+    // test de chunking de "Ajustar margen" (WA-H): con más de
     // 400 elegibles, `commitEnLotes` (Precios.tsx) abre más de un batch.
     writeBatch: vi.fn(),
   };
@@ -249,7 +249,7 @@ describe('Precios', () => {
       expect(within(fila).queryByText('Bajo objetivo')).toBeNull();
     });
 
-    it('chip "Solo bajo objetivo" filtra la tabla a los que están bajo objetivo', () => {
+    it('chip "Bajo objetivo" filtra la tabla a los que están bajo objetivo', () => {
       configurarCollection({
         datos: [
           productoDe({
@@ -273,7 +273,7 @@ describe('Precios', () => {
       expect(tabla().getByText('Bajo objetivo SA')).toBeTruthy();
       expect(tabla().getByText('En objetivo SA')).toBeTruthy();
 
-      fireEvent.click(screen.getByRole('button', { name: 'Solo bajo objetivo' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Bajo objetivo' }));
 
       expect(tabla().getByText('Bajo objetivo SA')).toBeTruthy();
       expect(tabla().queryByText('En objetivo SA')).toBeNull();
@@ -445,18 +445,50 @@ describe('Precios', () => {
     });
   });
 
-  describe('margen objetivo masivo (WA-H): "Margen para los filtrados"', () => {
-    it('sin ningún producto elegible, el botón arranca deshabilitado en 0', () => {
+  it('WA-H2: "Ajustar margen" y "Aplicar sugeridos" comparten la misma fila de acciones', () => {
+    configurarCollection({ datos: [] });
+    renderizar();
+
+    const ajustarMargen = screen.getByRole('button', { name: 'Ajustar margen' });
+    const aplicarSugeridos = screen.getByRole('button', { name: 'Aplicar sugeridos (0)' });
+    expect(ajustarMargen.parentElement).toBe(aplicarSugeridos.parentElement);
+  });
+
+  it('WA-H2: el chip "Bajo objetivo" convive en el mismo carril que los chips de categoría', () => {
+    configurarCollection({
+      datos: [
+        productoDe({ id: 'p1', nombre: 'Queso Añejo', categoria: 'Quesos' }),
+        productoDe({ id: 'p2', nombre: 'Miel 500g', categoria: 'Miel' }),
+      ],
+    });
+    configurarCategorias({
+      datos: [
+        { id: 'c1', nombre: 'Quesos', orden: 0 },
+        { id: 'c2', nombre: 'Miel', orden: 1 },
+      ],
+    });
+    renderizar();
+
+    const chipCategoria = screen.getByRole('button', { name: 'Quesos' });
+    const chipBajoObjetivo = screen.getByRole('button', { name: 'Bajo objetivo' });
+    // Mismo carril = mismo ancestro scrolleable (el `role="group"` de
+    // `ChipsFiltro` es un hijo de ESE carril, no el carril en sí — de ahí
+    // subir un nivel más desde el chip de categoría).
+    expect(chipCategoria.closest('[role="group"]')?.parentElement).toBe(chipBajoObjetivo.parentElement);
+  });
+
+  describe('margen objetivo masivo (WA-H/WA-H2): "Ajustar margen"', () => {
+    it('sin ningún producto elegible, el botón arranca deshabilitado', () => {
       configurarCollection({
         datos: [productoDe({ id: 'p1', nombre: 'Sin costo', costoPromedioCents: money(0) })],
       });
       renderizar();
 
-      const boton = screen.getByRole('button', { name: 'Margen para los filtrados (0)' }) as HTMLButtonElement;
+      const boton = screen.getByRole('button', { name: 'Ajustar margen' }) as HTMLButtonElement;
       expect(boton.disabled).toBe(true);
     });
 
-    it('cuenta los elegibles excluyendo sin costo y margen no comparable', () => {
+    it('cuenta los elegibles excluyendo sin costo y margen no comparable, y lo muestra en el modal', () => {
       configurarCollection({
         datos: [
           productoDe({ id: 'p1', nombre: 'Elegible 1' }),
@@ -472,11 +504,16 @@ describe('Precios', () => {
       });
       renderizar();
 
-      const boton = screen.getByRole('button', { name: 'Margen para los filtrados (2)' }) as HTMLButtonElement;
+      const boton = screen.getByRole('button', { name: 'Ajustar margen' }) as HTMLButtonElement;
       expect(boton.disabled).toBe(false);
+
+      // WA-H2: el botón ya no lleva el conteo en la etiqueta — el modal es la
+      // única fuente de verdad de a cuántos productos se les va a aplicar.
+      fireEvent.click(boton);
+      expect(screen.getByText(/Se aplicará a 2 producto\(s\) filtrado\(s\)/)).toBeTruthy();
     });
 
-    it('los elegibles respetan la búsqueda, categoría y "solo bajo objetivo" (mismos filtros que la tabla)', () => {
+    it('los elegibles respetan la búsqueda, categoría y "bajo objetivo" (mismos filtros que la tabla)', () => {
       configurarCollection({
         datos: [
           productoDe({ id: 'p1', nombre: 'Queso Añejo', categoria: 'Quesos' }),
@@ -486,8 +523,9 @@ describe('Precios', () => {
       renderizar();
 
       fireEvent.change(screen.getByLabelText('Buscar producto'), { target: { value: 'miel' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Ajustar margen' }));
 
-      expect(screen.getByRole('button', { name: 'Margen para los filtrados (1)' })).toBeTruthy();
+      expect(screen.getByText(/Se aplicará a 1 producto\(s\) filtrado\(s\)/)).toBeTruthy();
     });
 
     it('el modal muestra cuántos quedan excluidos y por qué', () => {
@@ -505,7 +543,7 @@ describe('Precios', () => {
       });
       renderizar();
 
-      fireEvent.click(screen.getByRole('button', { name: 'Margen para los filtrados (1)' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Ajustar margen' }));
 
       expect(
         screen.getByText(
@@ -518,7 +556,7 @@ describe('Precios', () => {
       configurarCollection({ datos: [productoDe({ id: 'p1', nombre: 'Elegible 1' })] });
       renderizar();
 
-      fireEvent.click(screen.getByRole('button', { name: 'Margen para los filtrados (1)' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Ajustar margen' }));
 
       expect(screen.queryByText(/Quedan afuera/)).toBeNull();
     });
@@ -527,7 +565,7 @@ describe('Precios', () => {
       configurarCollection({ datos: [productoDe({ id: 'p1', nombre: 'Elegible' })] });
       renderizar();
 
-      fireEvent.click(screen.getByRole('button', { name: 'Margen para los filtrados (1)' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Ajustar margen' }));
       fireEvent.change(screen.getByLabelText('Nuevo margen objetivo (%)'), { target: { value: 'abc' } });
       fireEvent.click(screen.getByRole('button', { name: 'Fijar objetivo' }));
 
@@ -539,7 +577,7 @@ describe('Precios', () => {
       configurarCollection({ datos: [productoDe({ id: 'p1', nombre: 'Elegible' })] });
       renderizar();
 
-      fireEvent.click(screen.getByRole('button', { name: 'Margen para los filtrados (1)' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Ajustar margen' }));
       fireEvent.change(screen.getByLabelText('Nuevo margen objetivo (%)'), { target: { value: '100' } });
       fireEvent.click(screen.getByRole('button', { name: 'Fijar y aplicar precios' }));
 
@@ -558,7 +596,8 @@ describe('Precios', () => {
       mocks.batchCommit.mockResolvedValue(undefined);
       renderizar();
 
-      fireEvent.click(screen.getByRole('button', { name: 'Margen para los filtrados (2)' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Ajustar margen' }));
+      expect(screen.getByText(/Se aplicará a 2 producto\(s\) filtrado\(s\)/)).toBeTruthy();
       fireEvent.change(screen.getByLabelText('Nuevo margen objetivo (%)'), { target: { value: '45' } });
       fireEvent.click(screen.getByRole('button', { name: 'Fijar objetivo' }));
 
@@ -587,7 +626,7 @@ describe('Precios', () => {
       mocks.batchCommit.mockResolvedValue(undefined);
       renderizar();
 
-      fireEvent.click(screen.getByRole('button', { name: 'Margen para los filtrados (1)' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Ajustar margen' }));
       fireEvent.change(screen.getByLabelText('Nuevo margen objetivo (%)'), { target: { value: '40' } });
       fireEvent.click(screen.getByRole('button', { name: 'Fijar y aplicar precios' }));
 
@@ -611,7 +650,7 @@ describe('Precios', () => {
       });
       renderizar();
 
-      fireEvent.click(screen.getByRole('button', { name: 'Margen para los filtrados (1)' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Ajustar margen' }));
       fireEvent.change(screen.getByLabelText('Nuevo margen objetivo (%)'), { target: { value: '40' } });
       fireEvent.click(screen.getByRole('button', { name: 'Fijar y aplicar precios' }));
       fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
@@ -625,7 +664,7 @@ describe('Precios', () => {
       mocks.batchCommit.mockResolvedValue(undefined);
       renderizar();
 
-      fireEvent.click(screen.getByRole('button', { name: 'Margen para los filtrados (1)' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Ajustar margen' }));
       fireEvent.change(screen.getByLabelText('Nuevo margen objetivo (%)'), { target: { value: '40' } });
       fireEvent.click(screen.getByRole('button', { name: 'Fijar objetivo' }));
 
