@@ -596,7 +596,7 @@ export function Precios() {
           filaCompacta={filaCompactaPrecio}
           vacio={
             productos.length === 0
-              ? 'No hay productos todavía. Cargalos desde Catálogo.'
+              ? 'No hay productos todavía. Cargalos desde Productos.'
               : soloBajoObjetivo
                 ? 'Ningún producto visible está bajo su margen objetivo.'
                 : `No se encontraron productos para "${busqueda.trim()}".`

@@ -10,31 +10,32 @@ export interface ItemSelectorSeccion {
 /**
  * Lista declarativa de secciones del tab Stock (docs/06-ui-ux.md §2,
  * 2026-07-10): agregar una sección nueva es sumar un objeto acá, sin tocar
- * `SelectorSeccion`. "Proveedores"/"Categorías" (esta última, tanda UI-4)
- * solo para admin (docs/07-clientes-proveedores.md: el vendedor no ve datos
- * bancarios ni costos de proveedor; el vocabulario de categorías es gestión,
- * no consulta de catálogo) — mismo gate que ya usaban las acciones de header
- * de `Stock.tsx` antes de esta tarea y que la tab bar general (`Shell.tsx`);
- * las rutas además quedan protegidas server-side por `RutaSoloAdmin` en
- * App.tsx.
+ * `SelectorSeccion`.
+ *
+ * Orden contractual tras la fusión Stock+Catálogo (UI-5, 2026-07-13,
+ * decidido por el dueño): "Productos | Compras | Proveedores | Precios". Los
+ * ítems `catalogo` (ex `/stock/productos`, ahora la MISMA pantalla que
+ * `stock`) y `categorias` desaparecen de acá — Categorías se mudó a Ajustes
+ * (listado común solo-admin, misma naturaleza que Usuarios; la ruta vieja
+ * `/stock/categorias` sigue existiendo un tiempo y redirige a la nueva,
+ * fuera de esta tarea). Con la fusión, el selector admin entra sin scroll en
+ * un teléfono común — motivo explícito de la tanda.
+ *
+ * "Compras"/"Proveedores"/"Precios" solo para admin
+ * (docs/07-clientes-proveedores.md: el vendedor no ve datos bancarios ni
+ * costos de proveedor, ni costos/edición de precios) — mismo gate que ya
+ * usaban las acciones de header de `Stock.tsx` antes de UI-4 y que la tab bar
+ * general (`Shell.tsx`); las rutas además quedan protegidas server-side por
+ * `RutaSoloAdmin` en App.tsx.
  */
 export function itemsSelectorStock(esAdmin: boolean): ItemSelectorSeccion[] {
   return [
-    { id: 'stock', etiqueta: 'Stock', a: '/stock' },
-    { id: 'catalogo', etiqueta: 'Catálogo', a: '/stock/productos' },
-    // Secciones solo-admin, orden contractual (docs/06-ui-ux.md §2): "Stock |
-    // Catálogo | Compras | Proveedores | Precios | Categorías" — el vendedor
-    // no ve compras, datos de proveedor, costos/edición de precios ni el
-    // vocabulario de categorías (docs/07 y docs/06 §2); las rutas además
-    // quedan protegidas server-side por `RutaSoloAdmin` en App.tsx.
-    // "Categorías" (UI-4, 2026-07-10) va AL FINAL: baja frecuencia de uso,
-    // dejó de ser el modal de Catálogo para ser una sección más.
+    { id: 'productos', etiqueta: 'Productos', a: '/stock' },
     ...(esAdmin
       ? [
           { id: 'compras', etiqueta: 'Compras', a: '/stock/compras' },
           { id: 'proveedores', etiqueta: 'Proveedores', a: '/stock/proveedores' },
           { id: 'precios', etiqueta: 'Precios', a: '/stock/precios' },
-          { id: 'categorias', etiqueta: 'Categorías', a: '/stock/categorias' },
         ]
       : []),
   ];
@@ -96,8 +97,9 @@ function prefiereMovimientoReducido(): boolean {
  *
  * `scroll-px-[5px]` (UI-4f, validación del dueño): sin esto, el auto-scroll
  * al ítem activo (`scrollIntoView({ inline: 'nearest' })`, más abajo) alinea
- * el borde del `<a>` con el borde del scrollport — en los extremos (Stock
- * primero, Categorías último) eso deja el respiro del contenedor interior
+ * el borde del `<a>` con el borde del scrollport — en los extremos
+ * (Productos primero, Precios último para admin) eso deja el respiro del
+ * contenedor interior
  * (el `div` de abajo: `border` 1px + `p-1` 4px = 5px) fuera de vista, con el
  * selector visualmente "cortado". `scroll-padding-inline` en el scrollport
  * le dice al navegador que trate ese margen como zona seguro-visible al

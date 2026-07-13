@@ -27,7 +27,6 @@ import { MetaThemeColor } from './componentes/MetaThemeColor';
  * default exports solo para esto, cada import se adapta con
  * `.then((m) => ({ default: m.X }))`.
  */
-const Stock = lazy(() => import('./pantallas/Stock').then((m) => ({ default: m.Stock })));
 const Productos = lazy(() =>
   import('./pantallas/Productos').then((m) => ({ default: m.Productos })),
 );
@@ -100,8 +99,7 @@ export function App() {
               (producto/compra/proveedor) quedan FUERA, como hasta ahora: sin
               selector ni swipe. */}
           <Route element={<StockLayout />}>
-            <Route path="stock" element={<Stock />} />
-            <Route path="stock/productos" element={<Productos />} />
+            <Route path="stock" element={<Productos />} />
             <Route
               path="stock/compras"
               element={
@@ -139,6 +137,11 @@ export function App() {
               }
             />
           </Route>
+          {/* Ruta vieja del Catálogo (UI-5, fusión Stock+Catálogo,
+              docs/06-ui-ux.md §2): la sección "Productos" fusionada vive en
+              `/stock`, pero hay bookmarks/history con `/stock/productos`
+              instalados — redirige en vez de dejarlos en un 404. */}
+          <Route path="stock/productos" element={<Navigate to="/stock" replace />} />
           <Route path="stock/producto/:id" element={<DetalleProductoPantalla />} />
           <Route
             path="stock/compra/:id"

@@ -19,16 +19,17 @@ function configurarAuth(rol: 'admin' | 'vendedor') {
   });
 }
 
-/** Árbol mínimo: dos rutas hermanas de Stock bajo el layout, más una ficha de
- * detalle AFUERA de él (mismo esquema real de App.tsx) para confirmar que el
- * layout no se cuela ahí. */
+/** Árbol mínimo: dos rutas hermanas de Stock bajo el layout (Productos y
+ * Compras, las dos primeras del selector real tras la fusión Stock+Catálogo,
+ * UI-5), más una ficha de detalle AFUERA de él (mismo esquema real de
+ * App.tsx) para confirmar que el layout no se cuela ahí. */
 function renderizar(pathname = '/stock') {
   return render(
     <MemoryRouter initialEntries={[pathname]}>
       <Routes>
         <Route element={<StockLayout />}>
-          <Route path="/stock" element={<div>Pantalla Stock</div>} />
-          <Route path="/stock/productos" element={<div>Pantalla Catálogo</div>} />
+          <Route path="/stock" element={<div>Pantalla Productos</div>} />
+          <Route path="/stock/compras" element={<div>Pantalla Compras</div>} />
         </Route>
         <Route path="/stock/producto/:id" element={<div>Ficha de producto</div>} />
       </Routes>
@@ -47,16 +48,41 @@ describe('StockLayout', () => {
     renderizar('/stock');
 
     expect(screen.getByRole('navigation', { name: 'Secciones de Stock' })).toBeTruthy();
-    expect(screen.getByText('Pantalla Stock')).toBeTruthy();
+    expect(screen.getByText('Pantalla Productos')).toBeTruthy();
   });
 
-  it('vendedor: el selector no muestra las secciones solo-admin (Compras/Categorías)', () => {
+  it('vendedor: el selector no muestra las secciones solo-admin (Compras/Proveedores/Precios)', () => {
     configurarAuth('vendedor');
     renderizar('/stock');
 
     expect(screen.queryByRole('link', { name: 'Compras' })).toBeNull();
-    expect(screen.queryByRole('link', { name: 'Categorías' })).toBeNull();
-    expect(screen.getByRole('link', { name: 'Catálogo' })).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'Proveedores' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Precios' })).toBeNull();
+  });
+
+  // UI-5 (fusión Stock+Catálogo, docs/06-ui-ux.md §2): el vendedor solo tiene
+  // UNA sección ("Productos") — sin vecinas, el `SelectorSeccion` no tiene
+  // nada que listar y NO se renderiza (antes mostraba "Stock | Catálogo").
+  it('vendedor: con una sola sección visible, el SelectorSeccion no se renderiza', () => {
+    configurarAuth('vendedor');
+    renderizar('/stock');
+
+    expect(screen.queryByRole('navigation', { name: 'Secciones de Stock' })).toBeNull();
+    expect(screen.getByText('Pantalla Productos')).toBeTruthy();
+  });
+
+  // Complemento del anterior: sin selector, tampoco tiene sentido escuchar el
+  // gesto de swipe (no hay destino posible) — un swipe válido sobre el
+  // contenedor no debe navegar ni romper nada.
+  it('vendedor: un gesto de swipe sobre el contenedor no navega (sin vecinas, los handlers no se attachean)', () => {
+    configurarAuth('vendedor');
+    renderizar('/stock');
+
+    const layout = screen.getByTestId('layout-stock');
+    fireEvent.touchStart(layout, { touches: [{ clientX: 300, clientY: 100 }] });
+    fireEvent.touchEnd(layout, { changedTouches: [{ clientX: 100, clientY: 100 }] });
+
+    expect(screen.getByText('Pantalla Productos')).toBeTruthy();
   });
 
   it('el selector NO se remonta al navegar entre secciones hermanas: mismo nodo antes y después', () => {
@@ -65,10 +91,10 @@ describe('StockLayout', () => {
 
     const navAntes = screen.getByRole('navigation', { name: 'Secciones de Stock' });
 
-    fireEvent.click(screen.getByRole('link', { name: 'Catálogo' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Compras' }));
 
-    expect(screen.getByText('Pantalla Catálogo')).toBeTruthy();
-    expect(screen.queryByText('Pantalla Stock')).toBeNull();
+    expect(screen.getByText('Pantalla Compras')).toBeTruthy();
+    expect(screen.queryByText('Pantalla Productos')).toBeNull();
     // Identidad de nodo (no solo contenido): si el layout se remontara al
     // navegar, `getByRole` seguiría encontrando un <nav> con el mismo rol,
     // pero sería un elemento DEL DOM distinto — `toBe` (no `toEqual`) es lo
@@ -100,11 +126,11 @@ describe('StockLayout', () => {
     const NuncaResuelve = lazy(() => new Promise<{ default: () => null }>(() => {}));
 
     render(
-      <MemoryRouter initialEntries={['/stock/productos']}>
+      <MemoryRouter initialEntries={['/stock/compras']}>
         <Routes>
           <Route element={<StockLayout />}>
-            <Route path="/stock" element={<div>Pantalla Stock</div>} />
-            <Route path="/stock/productos" element={<NuncaResuelve />} />
+            <Route path="/stock" element={<div>Pantalla Productos</div>} />
+            <Route path="/stock/compras" element={<NuncaResuelve />} />
           </Route>
         </Routes>
       </MemoryRouter>,
@@ -132,14 +158,14 @@ describe('StockLayout', () => {
 
     const navAntes = screen.getByRole('navigation', { name: 'Secciones de Stock' });
 
-    fireEvent.click(screen.getByRole('link', { name: 'Catálogo' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Compras' }));
     // React Router navega con `startTransition` (chunk-KS7C4IRE.mjs): mientras
-    // la promesa no resuelve puede seguir mostrando "Pantalla Stock" sin
+    // la promesa no resuelve puede seguir mostrando "Pantalla Productos" sin
     // parpadeo — no se afirma nada sobre ese estado intermedio, solo sobre
     // el desenlace.
-    resolver({ default: () => <div>Pantalla Catálogo lenta</div> });
+    resolver({ default: () => <div>Pantalla Compras lenta</div> });
 
-    expect(await screen.findByText('Pantalla Catálogo lenta')).toBeTruthy();
+    expect(await screen.findByText('Pantalla Compras lenta')).toBeTruthy();
     // Identidad de nodo (no solo contenido): si el `Suspense` siguiera
     // envolviendo al selector (bug anterior), la transición habría
     // reemplazado TODO el subárbol de una vez —incluido un `SelectorSeccion`
@@ -155,8 +181,8 @@ function renderConSeccionLenta(SeccionLenta: LazyExoticComponent<() => JSX.Eleme
     <MemoryRouter initialEntries={['/stock']}>
       <Routes>
         <Route element={<StockLayout />}>
-          <Route path="/stock" element={<div>Pantalla Stock</div>} />
-          <Route path="/stock/productos" element={<SeccionLenta />} />
+          <Route path="/stock" element={<div>Pantalla Productos</div>} />
+          <Route path="/stock/compras" element={<SeccionLenta />} />
         </Route>
       </Routes>
     </MemoryRouter>,

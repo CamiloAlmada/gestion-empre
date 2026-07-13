@@ -61,20 +61,22 @@ vi.mock('./componentes/AvisoPwa', () => ({
   AvisoPwa: () => null,
 }));
 
-// Productos (pantalla de /stock/productos) arma su query de Firestore al
-// importarse (`collection(db, 'productos')`, ver Productos.tsx), lo que
-// exige un `db` real: el mock de @gestion/firebase-kit de este archivo no
-// implementa `initFirebase`. Este suite solo prueba ruteo (no el contenido
-// de Productos, que tiene su propio Productos.test.tsx), así que se mockea
-// el componente entero — mismo criterio que AvisoPwa arriba.
+// Productos (pantalla fusionada de /stock, UI-5 — la vieja /stock/productos
+// redirige acá) arma su query de Firestore al importarse
+// (`collection(db, 'productos')`, ver Productos.tsx), lo que exige un `db`
+// real: el mock de @gestion/firebase-kit de este archivo no implementa
+// `initFirebase`. Este suite solo prueba ruteo (no el contenido de
+// Productos, que tiene su propio Productos.test.tsx), así que se mockea el
+// componente entero — mismo criterio que AvisoPwa arriba.
 vi.mock('./pantallas/Productos', () => ({
   Productos: () => null,
 }));
 
-// La pantalla Stock (ruteada acá) importa `db` de './firebase', que a su vez
-// llama a `initFirebase` de Firebase real al cargar el módulo. Se mockea para
-// no inicializar Firebase de verdad en este test de rutas — el valor no
-// importa porque Stock.test.tsx mockea todas las escrituras/lecturas.
+// La pantalla Productos (ruteada en /stock) importa `db` de './firebase',
+// que a su vez llama a `initFirebase` de Firebase real al cargar el módulo.
+// Se mockea para no inicializar Firebase de verdad en este test de rutas —
+// el valor no importa porque Productos.test.tsx mockea todas las
+// escrituras/lecturas.
 vi.mock('./firebase', () => ({ auth: {}, db: {} }));
 
 // Usuarios (pantalla de /ajustes/usuarios) arma su query de Firestore al
@@ -258,6 +260,19 @@ describe('App - rutas', () => {
     expect(await screen.findByText('Contenido de DetalleProductoPantalla')).toBeTruthy();
   });
 
+  it('la ruta vieja /stock/productos redirige a /stock (fusión Stock+Catálogo, UI-5)', async () => {
+    configurarAuth('admin');
+
+    renderizarEn('/stock/productos');
+
+    // `Productos` está mockeada a `() => null` (ver arriba): no hay
+    // contenido propio que aserir. La prueba de que el redirect efectivamente
+    // llegó a `/stock` (y no se quedó en una ruta que ya no existe) es que el
+    // layout de Stock — que solo envuelve las rutas reales de sus secciones,
+    // ya no `/stock/productos` — se monta igual.
+    expect(await screen.findByTestId('layout-stock')).toBeTruthy();
+  });
+
   // Objetivo de UI-4e, verificado a través del árbol real App/Shell (el
   // `StockLayout.test.tsx` lo comprueba en aislamiento, SIN el
   // `ErrorBoundaryRuta` del Shell — que era justo quien lo remontaba). El
@@ -274,8 +289,11 @@ describe('App - rutas', () => {
     // primer render, sin esperar al chunk de la sección.
     const navAntes = await screen.findByRole('navigation', { name: 'Secciones de Stock' });
 
-    // Navegación REAL entre secciones hermanas (click en un link del selector).
-    fireEvent.click(screen.getByRole('link', { name: 'Catálogo' }));
+    // Navegación REAL entre secciones hermanas (click en un link del
+    // selector). "Proveedores" (no "Compras"/"Precios") porque es la única
+    // sección admin-only mockeada entera en este archivo — evita depender de
+    // Compras/Precios reales, que arman su propia query de Firestore.
+    fireEvent.click(screen.getByRole('link', { name: 'Proveedores' }));
 
     // Identidad de nodo (`toBe`, no `toEqual`): con el viejo
     // `key={location.pathname}` en el `ErrorBoundaryRuta` de Shell, cambiar de

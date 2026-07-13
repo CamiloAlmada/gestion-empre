@@ -64,6 +64,8 @@ function swipe(
   fireEvent.touchEnd(contenedor, { changedTouches: [{ clientX: destino.x, clientY: destino.y }] });
 }
 
+// Ítems reales de admin tras la fusión Stock+Catálogo (UI-5, docs/06-ui-ux.md
+// §2): "Productos" (/stock) | "Compras" | "Proveedores" | "Precios".
 describe('useSwipeSeccion', () => {
   it('swipe hacia la izquierda navega a la sección siguiente', () => {
     const items = itemsSelectorStock(true);
@@ -72,17 +74,17 @@ describe('useSwipeSeccion', () => {
     const layout = screen.getByTestId('layout');
     swipe(layout, { x: 300, y: 100 }, { x: 200, y: 100 }); // dx = -100
 
-    expect(screen.getByText('Pantalla Catálogo')).toBeTruthy();
+    expect(screen.getByText('Pantalla Compras')).toBeTruthy();
   });
 
   it('swipe hacia la derecha navega a la sección anterior', () => {
     const items = itemsSelectorStock(true);
-    renderizar('/stock/productos', items);
+    renderizar('/stock/compras', items);
 
     const layout = screen.getByTestId('layout');
     swipe(layout, { x: 100, y: 100 }, { x: 220, y: 100 }); // dx = +120
 
-    expect(screen.getByText('Pantalla Stock')).toBeTruthy();
+    expect(screen.getByText('Pantalla Productos')).toBeTruthy();
   });
 
   it('un gesto vertical dominante no navega', () => {
@@ -92,7 +94,7 @@ describe('useSwipeSeccion', () => {
     const layout = screen.getByTestId('layout');
     swipe(layout, { x: 200, y: 100 }, { x: 260, y: 260 }); // dx = 60, dy = 160
 
-    expect(screen.getByText('Pantalla Stock')).toBeTruthy();
+    expect(screen.getByText('Pantalla Productos')).toBeTruthy();
   });
 
   it('un desplazamiento corto (bajo el umbral) no navega', () => {
@@ -102,7 +104,7 @@ describe('useSwipeSeccion', () => {
     const layout = screen.getByTestId('layout');
     swipe(layout, { x: 200, y: 100 }, { x: 220, y: 100 }); // dx = 20 < umbral
 
-    expect(screen.getByText('Pantalla Stock')).toBeTruthy();
+    expect(screen.getByText('Pantalla Productos')).toBeTruthy();
   });
 
   it('un tap (sin desplazamiento) no navega', () => {
@@ -112,17 +114,17 @@ describe('useSwipeSeccion', () => {
     const layout = screen.getByTestId('layout');
     swipe(layout, { x: 200, y: 100 }, { x: 200, y: 100 });
 
-    expect(screen.getByText('Pantalla Stock')).toBeTruthy();
+    expect(screen.getByText('Pantalla Productos')).toBeTruthy();
   });
 
   it('en el último ítem, swipe hacia la izquierda no hace nada (sin wrap-around)', () => {
     const items = itemsSelectorStock(true);
-    renderizar('/stock/categorias', items);
+    renderizar('/stock/precios', items);
 
     const layout = screen.getByTestId('layout');
     swipe(layout, { x: 300, y: 100 }, { x: 200, y: 100 });
 
-    expect(screen.getByText('Pantalla Categorías')).toBeTruthy();
+    expect(screen.getByText('Pantalla Precios')).toBeTruthy();
   });
 
   it('en el primer ítem, swipe hacia la derecha no hace nada (sin wrap-around)', () => {
@@ -132,7 +134,7 @@ describe('useSwipeSeccion', () => {
     const layout = screen.getByTestId('layout');
     swipe(layout, { x: 100, y: 100 }, { x: 220, y: 100 });
 
-    expect(screen.getByText('Pantalla Stock')).toBeTruthy();
+    expect(screen.getByText('Pantalla Productos')).toBeTruthy();
   });
 
   it('un gesto que nace en un contenedor con scroll horizontal propio no navega', () => {
@@ -145,17 +147,21 @@ describe('useSwipeSeccion', () => {
     const layout = screen.getByTestId('layout');
     swipe(layout, { x: 300, y: 100 }, { x: 200, y: 100 }, scrolleable);
 
-    expect(screen.getByText('Pantalla Stock')).toBeTruthy();
+    expect(screen.getByText('Pantalla Productos')).toBeTruthy();
   });
 
-  it('vendedor: el orden de vecinos respeta el rol (solo Stock↔Catálogo)', () => {
+  // UI-5: el vendedor solo tiene UNA sección ("Productos"), sin vecinas — el
+  // hook en sí (usado en aislamiento acá, sin el gate de `StockLayout`) no
+  // tiene destino posible: `indiceDestino` cae fuera del array y el gesto no
+  // hace nada, mismo criterio que "sin wrap-around" en los extremos arriba.
+  it('vendedor: con una sola sección no hay vecina, el swipe no navega', () => {
     const items = itemsSelectorStock(false);
     renderizar('/stock', items);
 
     const layout = screen.getByTestId('layout');
     swipe(layout, { x: 300, y: 100 }, { x: 200, y: 100 });
 
-    expect(screen.getByText('Pantalla Catálogo')).toBeTruthy();
+    expect(screen.getByText('Pantalla Productos')).toBeTruthy();
   });
 
   it('multitouch (2+ dedos) descarta el gesto completo: un touchEnd posterior con dx grande no navega', () => {
@@ -171,7 +177,7 @@ describe('useSwipeSeccion', () => {
     });
     fireEvent.touchEnd(layout, { changedTouches: [{ clientX: 200, clientY: 100 }] }); // dx = -100
 
-    expect(screen.getByText('Pantalla Stock')).toBeTruthy();
+    expect(screen.getByText('Pantalla Productos')).toBeTruthy();
   });
 
   it('onTouchCancel resetea el gesto: un touchEnd posterior no navega', () => {
@@ -183,7 +189,7 @@ describe('useSwipeSeccion', () => {
     fireEvent.touchCancel(layout);
     fireEvent.touchEnd(layout, { changedTouches: [{ clientX: 200, clientY: 100 }] }); // dx = -100
 
-    expect(screen.getByText('Pantalla Stock')).toBeTruthy();
+    expect(screen.getByText('Pantalla Productos')).toBeTruthy();
   });
 
   it('pathname sin match en items (p. ej. montado en una ficha de detalle fuera del layout): un swipe válido no navega', () => {

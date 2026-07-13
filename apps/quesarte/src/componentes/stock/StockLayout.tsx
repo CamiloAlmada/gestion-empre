@@ -22,15 +22,16 @@ import { useSwipeSeccion } from './useSwipeSeccion';
  * Shell.tsx que NO expone ninguna variable (para no tocarlo, fuera de
  * alcance de esta tarea): su padding superior fijo (`p-4` = 1rem) más el
  * colchón inferior (+2rem, siempre) y, en mobile CON acciones de header
- * (Catálogo/Compras/Proveedores tienen "+"), el cluster flotante (+3.5rem
+ * (Productos/Compras/Proveedores tienen "+"), el cluster flotante (+3.5rem
  * extra, `pb-[...+2rem+3.5rem]` en Shell.tsx). Esta pantalla NO sabe si la
  * sección activa declaró acciones (esa lógica vive en el `Shell`, no llega
  * hasta acá) — se resta SIEMPRE el peor caso (con cluster) para no pasarse
  * nunca por arriba del alto real disponible: pasarse introduciría scroll
  * vertical nuevo en pantallas donde el contenido ya llena la pantalla,
  * exactamente lo que este fix no debe hacer. El costo es quedar corto por
- * 3.5rem en las secciones SIN acciones (Stock, Precios, Categorías) en
- * mobile — mejor un margen residual chico que un scroll espurio.
+ * 3.5rem en las secciones SIN acciones (Precios; Categorías, mientras siga
+ * colgando de acá) en mobile — mejor un margen residual chico que un scroll
+ * espurio.
  * En `md:` el cluster flotante no existe (las acciones viven en el header),
  * así que ahí el resto siempre es exacto (+1rem +2rem = 3rem).
  */
@@ -48,9 +49,17 @@ const CLASE_ALTURA_MINIMA =
  * criterio que ya tenían.
  *
  * `esAdmin` sale de `useAuth` (mismo criterio que tenía `Stock.tsx` antes de
- * esta tarea): las pantallas admin-only (Compras/Proveedores/Precios/
- * Categorías) igual quedan protegidas server-side por `RutaSoloAdmin` en
- * App.tsx — acá solo se decide qué ítems mostrar en el selector.
+ * esta tarea): las pantallas admin-only (Compras/Proveedores/Precios) igual
+ * quedan protegidas server-side por `RutaSoloAdmin` en App.tsx — acá solo se
+ * decide qué ítems mostrar en el selector.
+ *
+ * **Una sola sección visible (UI-5, fusión Stock+Catálogo, docs/06-ui-ux.md
+ * §2): con `items.length < 2` (el caso del `vendedor`, que solo tiene
+ * "Productos") NO hay vecinas — el `SelectorSeccion` no se renderiza y los
+ * handlers de swipe no se attachean al contenedor (no tiene sentido
+ * escuchar un gesto que nunca puede tener destino). `useSwipeSeccion` sigue
+ * llamándose siempre (reglas de hooks: no puede ser condicional), solo se
+ * decide si sus manejadores se conectan al DOM.**
  *
  * El swipe (UI-4c, docs/06-ui-ux.md §2) escucha sobre ESTE contenedor (no el
  * selector ni el `Outlet`): `useSwipeSeccion` recibe el mismo array `items`
@@ -76,18 +85,21 @@ export function StockLayout() {
   const { perfil } = useAuth();
   const esAdmin = perfil?.rol === 'admin';
   const items = itemsSelectorStock(esAdmin);
+  // Sin vecinas (vendedor: solo "Productos"), no hay selector que mostrar ni
+  // swipe que tenga destino posible (UI-5, docs/06-ui-ux.md §2).
+  const hayVecinas = items.length >= 2;
   const { ref, onTouchStart, onTouchEnd, onTouchCancel } = useSwipeSeccion(items);
 
   return (
     <div
       data-testid="layout-stock"
-      ref={ref}
-      onTouchStart={onTouchStart}
-      onTouchEnd={onTouchEnd}
-      onTouchCancel={onTouchCancel}
+      ref={hayVecinas ? ref : undefined}
+      onTouchStart={hayVecinas ? onTouchStart : undefined}
+      onTouchEnd={hayVecinas ? onTouchEnd : undefined}
+      onTouchCancel={hayVecinas ? onTouchCancel : undefined}
       className={`flex flex-col gap-4 ${CLASE_ALTURA_MINIMA}`}
     >
-      <SelectorSeccion items={items} />
+      {hayVecinas && <SelectorSeccion items={items} />}
       <Suspense fallback={<FallbackPantalla />}>
         <Outlet />
       </Suspense>

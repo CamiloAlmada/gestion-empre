@@ -159,7 +159,7 @@ describe('Precios', () => {
   it('estado vacío', () => {
     configurarCollection({ datos: [] });
     renderizar();
-    expect(screen.getByText('No hay productos todavía. Cargalos desde Catálogo.')).toBeTruthy();
+    expect(screen.getByText('No hay productos todavía. Cargalos desde Productos.')).toBeTruthy();
   });
 
   describe('tabla: costo, precio y margen', () => {

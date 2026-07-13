@@ -158,12 +158,21 @@ describe('Categorias', () => {
     expect(screen.getByTestId('volver-header').textContent).toBe('');
   });
 
-  it('muestra el SelectorSeccion con "Categorías" activo, al final del bloque admin', () => {
+  // UI-5 (fusión Stock+Catálogo, docs/06-ui-ux.md §2): el ítem "Categorías"
+  // salió del `SelectorSeccion` de Stock (se muda a Ajustes, tarea aparte —
+  // esta pantalla y su ruta `/stock/categorias` no se tocan acá). El
+  // `StockLayout` que la envuelve sigue montando el selector (el bloque
+  // admin conserva Productos/Compras/Proveedores/Precios, ≥2 secciones), pero
+  // ya ningún ítem coincide con esta ruta.
+  it('el SelectorSeccion se sigue mostrando (bloque admin), pero ningún ítem queda activo: "Categorías" ya no forma parte de Stock', () => {
     configurarCategorias();
     renderizar();
 
     expect(screen.getByRole('navigation', { name: 'Secciones de Stock' })).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Categorías' }).getAttribute('aria-current')).toBe('page');
+    expect(screen.queryByRole('link', { name: 'Categorías' })).toBeNull();
+    for (const link of screen.getAllByRole('link')) {
+      expect(link.getAttribute('aria-current')).toBeNull();
+    }
   });
 
   it('lista las categorías en el orden recibido (ya ordenadas por `orden`)', () => {

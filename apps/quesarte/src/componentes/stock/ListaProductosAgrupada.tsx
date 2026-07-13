@@ -3,14 +3,17 @@ import type { GrupoProductos } from './agrupacion';
 import { ListaProductos } from './ListaProductos';
 
 export interface ListaProductosAgrupadaProps {
-  /** Ya calculados por `agruparPorCategoria` — ver `Stock.tsx`. */
+  /** Ya calculados por `agruparPorCategoria` — ver `Productos.tsx`. */
   grupos: GrupoProductos[];
   piezasAgrupadas: Map<string, Pieza[]>;
   onSeleccionar: (producto: Producto) => void;
+  /** Pasado tal cual a `ListaProductos` — ver su JSDoc (UI-5, fusión
+   * Stock+Catálogo). Por defecto `false`. */
+  atenuarInactivos?: boolean;
 }
 
 /**
- * Lista maestra de Stock agrupada por categoría. Cuando no hay categorías
+ * Lista maestra de Productos agrupada por categoría. Cuando no hay categorías
  * definidas, `agruparPorCategoria` devuelve un único grupo `{ nombre: null }`:
  * en ese caso se renderiza como lista plana (sin encabezados de sección),
  * igual que antes de existir el vocabulario de categorías.
@@ -19,12 +22,22 @@ export interface ListaProductosAgrupadaProps {
  * `text-texto-secundario`) sticky bajo el header de la pantalla, para
  * ubicarse durante el scroll sin competir visualmente con las filas.
  */
-export function ListaProductosAgrupada({ grupos, piezasAgrupadas, onSeleccionar }: ListaProductosAgrupadaProps) {
+export function ListaProductosAgrupada({
+  grupos,
+  piezasAgrupadas,
+  onSeleccionar,
+  atenuarInactivos = false,
+}: ListaProductosAgrupadaProps) {
   const [unico] = grupos;
 
   if (grupos.length === 1 && unico !== undefined && unico.nombre === null) {
     return (
-      <ListaProductos productos={unico.productos} piezasAgrupadas={piezasAgrupadas} onSeleccionar={onSeleccionar} />
+      <ListaProductos
+        productos={unico.productos}
+        piezasAgrupadas={piezasAgrupadas}
+        onSeleccionar={onSeleccionar}
+        atenuarInactivos={atenuarInactivos}
+      />
     );
   }
 
@@ -55,6 +68,7 @@ export function ListaProductosAgrupada({ grupos, piezasAgrupadas, onSeleccionar 
               piezasAgrupadas={piezasAgrupadas}
               onSeleccionar={onSeleccionar}
               ocultarCategoria
+              atenuarInactivos={atenuarInactivos}
             />
           </section>
         );

@@ -6,21 +6,14 @@ import { itemsSelectorStock, SelectorSeccion } from './SelectorSeccion';
 afterEach(cleanup);
 
 describe('itemsSelectorStock', () => {
-  it('vendedor: solo Stock y Catálogo', () => {
+  it('vendedor: solo Productos (fusión Stock+Catálogo, UI-5)', () => {
     const items = itemsSelectorStock(false);
-    expect(items.map((i) => i.etiqueta)).toEqual(['Stock', 'Catálogo']);
+    expect(items.map((i) => i.etiqueta)).toEqual(['Productos']);
   });
 
-  it('admin: suma Compras, Proveedores, Precios y Categorías, en ese orden (docs/06 §2)', () => {
+  it('admin: suma Compras, Proveedores y Precios, en ese orden (docs/06 §2, UI-5 — Categorías se mudó a Ajustes)', () => {
     const items = itemsSelectorStock(true);
-    expect(items.map((i) => i.etiqueta)).toEqual([
-      'Stock',
-      'Catálogo',
-      'Compras',
-      'Proveedores',
-      'Precios',
-      'Categorías',
-    ]);
+    expect(items.map((i) => i.etiqueta)).toEqual(['Productos', 'Compras', 'Proveedores', 'Precios']);
   });
 });
 
@@ -54,40 +47,37 @@ describe('SelectorSeccion', () => {
   it('renderiza cada ítem como link real a su ruta', () => {
     renderizar('/stock');
 
-    expect(screen.getByRole('link', { name: 'Stock' }).getAttribute('href')).toBe('/stock');
-    expect(screen.getByRole('link', { name: 'Catálogo' }).getAttribute('href')).toBe('/stock/productos');
+    expect(screen.getByRole('link', { name: 'Productos' }).getAttribute('href')).toBe('/stock');
     expect(screen.getByRole('link', { name: 'Compras' }).getAttribute('href')).toBe('/stock/compras');
     expect(screen.getByRole('link', { name: 'Proveedores' }).getAttribute('href')).toBe('/stock/proveedores');
     expect(screen.getByRole('link', { name: 'Precios' }).getAttribute('href')).toBe('/stock/precios');
-    expect(screen.getByRole('link', { name: 'Categorías' }).getAttribute('href')).toBe('/stock/categorias');
   });
 
   it('marca aria-current="page" SOLO en el ítem cuya ruta coincide EXACTO con el pathname actual', () => {
-    renderizar('/stock/productos');
+    renderizar('/stock/compras');
 
     const nav = within(screen.getByRole('navigation', { name: 'Secciones de Stock' }));
-    expect(nav.getByRole('link', { name: 'Catálogo' }).getAttribute('aria-current')).toBe('page');
-    // /stock es prefijo de /stock/productos: NO debe quedar marcado activo
-    // (por eso el componente compara pathname exacto, no usa NavLink).
-    expect(nav.getByRole('link', { name: 'Stock' }).getAttribute('aria-current')).toBeNull();
+    expect(nav.getByRole('link', { name: 'Compras' }).getAttribute('aria-current')).toBe('page');
+    // /stock es prefijo de /stock/compras: NO debe quedar marcado activo (por
+    // eso el componente compara pathname exacto, no usa NavLink).
+    expect(nav.getByRole('link', { name: 'Productos' }).getAttribute('aria-current')).toBeNull();
     expect(nav.getByRole('link', { name: 'Proveedores' }).getAttribute('aria-current')).toBeNull();
   });
 
-  it('en la raíz /stock, el ítem activo es "Stock" y no "Catálogo"', () => {
+  it('en la raíz /stock, el ítem activo es "Productos"', () => {
     renderizar('/stock');
 
     const nav = within(screen.getByRole('navigation', { name: 'Secciones de Stock' }));
-    expect(nav.getByRole('link', { name: 'Stock' }).getAttribute('aria-current')).toBe('page');
-    expect(nav.getByRole('link', { name: 'Catálogo' }).getAttribute('aria-current')).toBeNull();
+    expect(nav.getByRole('link', { name: 'Productos' }).getAttribute('aria-current')).toBe('page');
+    expect(nav.getByRole('link', { name: 'Compras' }).getAttribute('aria-current')).toBeNull();
   });
 
-  it('vendedor: no ve los ítems "Compras", "Proveedores", "Precios" ni "Categorías"', () => {
+  it('vendedor: no ve los ítems "Compras", "Proveedores" ni "Precios"', () => {
     renderizar('/stock', false);
 
     expect(screen.queryByRole('link', { name: 'Compras' })).toBeNull();
     expect(screen.queryByRole('link', { name: 'Proveedores' })).toBeNull();
     expect(screen.queryByRole('link', { name: 'Precios' })).toBeNull();
-    expect(screen.queryByRole('link', { name: 'Categorías' })).toBeNull();
   });
 
   it('tocar un ítem navega a su ruta real (rutas hermanas, no estado interno)', () => {
@@ -103,16 +93,16 @@ describe('SelectorSeccion', () => {
             element={
               <>
                 <SelectorSeccion items={itemsSelectorStock(true)} />
-                <Placeholder nombre="Stock" />
+                <Placeholder nombre="Productos" />
               </>
             }
           />
           <Route
-            path="/stock/productos"
+            path="/stock/compras"
             element={
               <>
                 <SelectorSeccion items={itemsSelectorStock(true)} />
-                <Placeholder nombre="Catálogo" />
+                <Placeholder nombre="Compras" />
               </>
             }
           />
@@ -120,20 +110,20 @@ describe('SelectorSeccion', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByText('Pantalla Stock')).toBeTruthy();
-    fireEvent.click(screen.getByRole('link', { name: 'Catálogo' }));
+    expect(screen.getByText('Pantalla Productos')).toBeTruthy();
+    fireEvent.click(screen.getByRole('link', { name: 'Compras' }));
 
-    expect(screen.getByText('Pantalla Catálogo')).toBeTruthy();
-    expect(screen.queryByText('Pantalla Stock')).toBeNull();
-    expect(screen.getByRole('link', { name: 'Catálogo' }).getAttribute('aria-current')).toBe('page');
+    expect(screen.getByText('Pantalla Compras')).toBeTruthy();
+    expect(screen.queryByText('Pantalla Productos')).toBeNull();
+    expect(screen.getByRole('link', { name: 'Compras' }).getAttribute('aria-current')).toBe('page');
   });
 
   it('el ítem activo (y solo él) lleva view-transition-name para el morph de la píldora (docs/06 §2/§3, UI-4c)', () => {
-    renderizar('/stock/productos');
+    renderizar('/stock/compras');
 
     const nav = within(screen.getByRole('navigation', { name: 'Secciones de Stock' }));
-    const activo = nav.getByRole('link', { name: 'Catálogo' });
-    const inactivo = nav.getByRole('link', { name: 'Stock' });
+    const activo = nav.getByRole('link', { name: 'Compras' });
+    const inactivo = nav.getByRole('link', { name: 'Productos' });
 
     // La View Transitions API exige nombre único por documento: si dos
     // ítems lo llevaran a la vez, `document.startViewTransition` tira
@@ -164,9 +154,9 @@ describe('SelectorSeccion — auto-scroll del ítem activo (docs/06-ui-ux.md §2
       .spyOn(HTMLAnchorElement.prototype, 'scrollIntoView')
       .mockImplementation(() => {});
 
-    // Última sección: la más probable de quedar fuera de vista con el
-    // selector recién montado (scroll horizontal arrancando en 0).
-    renderizar('/stock/categorias');
+    // Última sección (admin, tras UI-5): la más probable de quedar fuera de
+    // vista con el selector recién montado (scroll horizontal arrancando en 0).
+    renderizar('/stock/precios');
 
     expect(scrollIntoViewSpy).toHaveBeenCalledWith(
       expect.objectContaining({ inline: 'nearest', block: 'nearest', behavior: 'smooth' }),
@@ -181,7 +171,7 @@ describe('SelectorSeccion — auto-scroll del ítem activo (docs/06-ui-ux.md §2
     renderizar('/stock');
     scrollIntoViewSpy.mockClear(); // descarta la llamada del propio montaje
 
-    fireEvent.click(screen.getByRole('link', { name: 'Categorías' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Compras' }));
 
     expect(scrollIntoViewSpy).toHaveBeenCalledWith(
       expect.objectContaining({ inline: 'nearest', block: 'nearest' }),
