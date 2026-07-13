@@ -111,7 +111,7 @@ export function ModalMargenMasivo({
     <Modal
       abierto={abierto}
       onCerrar={onCerrar}
-      titulo="Margen para los filtrados"
+      titulo="Ajustar margen"
       acciones={
         <>
           <Button variante="secundaria" onClick={onCerrar} disabled={guardando}>
