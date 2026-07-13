@@ -127,8 +127,13 @@ function haceDias(ahora, dias) {
 /**
  * Arma UNA venta completa (shape de `Venta`, ver converter de `@gestion/firebase-kit`)
  * ya asociada a un cliente: `clienteId`/`clienteNombre` denormalizados, `estado`
- * `'completada'`, `numero` derivado de la fecha (coherente con `registrarVenta`,
- * que usa el instante de creación).
+ * `'completada'`.
+ *
+ * `numero` queda en `0` acá a propósito: es un placeholder. `construirDatosDemo`
+ * lo reasigna en una segunda pasada, GLOBAL a las 6 clientes (no por cliente) y en
+ * orden cronológico por `fecha` — ver el comentario grande sobre `numero` en esa
+ * función para el porqué (spoiler: NO es lo mismo que hace `registrarVenta` hoy, a
+ * propósito).
  *
  * NO registra efectos de stock ni `movimientos/`: el seed de demo solo necesita el
  * historial de ventas y sus stats de cliente (doc 08), no tocar inventario real.
@@ -138,7 +143,7 @@ function crearVenta({ id, clienteId, clienteNombre, fecha, cestaIndice, medioPag
   const totalCents = sumarMoney(...items.map((item) => item.subtotalCents));
   return {
     id,
-    numero: fecha.getTime(),
+    numero: 0, // placeholder — ver comentario arriba, `construirDatosDemo` lo reasigna.
     fecha,
     usuarioId: USUARIO_ID_SEED,
     items,
@@ -235,6 +240,30 @@ function crearClienteConVentas({ slug, nombre, alias, telefonoDisplay, diasAtras
  * 6. Teléfono no normalizable: 1 compra reciente, `telefono: 'consultar en
  *    mostrador'` (no deriva `telefonoE164`).
  *
+ * ## `numero` de venta (hallazgo del review de WA-D, corregido en WA-F3)
+ *
+ * `Venta.numero` está documentado en `packages/core/src/tipos.ts` como "Número
+ * correlativo de comprobante, legible por humanos". La implementación real,
+ * `registrarVenta` (`packages/firebase-kit/src/ventas.ts`), NO honra eso: usa
+ * `ahora.getTime()` (epoch en milisegundos, 13 dígitos) y no existe ningún doc
+ * "contador" en Firestore que lleve una secuencia — se verificó que no hay tal
+ * patrón en `firebase-kit` ni en `firestore.rules`. Es decir, HOY, una venta real
+ * en producción también muestra "Venta #1752332400000" en el historial: es una
+ * divergencia preexistente entre el modelo documentado y la implementación, y
+ * queda FUERA de alcance acá (esta tarea no toca `registrarVenta`) — anotado como
+ * nota para el tech lead, no corregido en este módulo.
+ *
+ * Lo que SÍ hace este generador, a propósito, es NO copiar ese patrón para la
+ * demo: mostrarle al dueño "Venta #1752332400000" en vivo sería un artefacto feo
+ * y injustificable (no hay ninguna razón de negocio para que la demo lo tenga,
+ * aun si la app real hoy lo tiene). En cambio, numera las ventas 1..N con un
+ * correlativo chico y GLOBAL a los 6 clientes (no reiniciado por cliente), en
+ * orden CRONOLÓGICO por `fecha` — así los números crecen junto con las fechas,
+ * como se espera de un comprobante real. Al no haber contador real que la app
+ * incremente, no hay ningún estado compartido con el que este rango 1..N (chico,
+ * de un solo dígito o dos) pueda colisionar: la próxima venta real en dev seguirá
+ * usando un timestamp de 13 dígitos hasta que se resuelva el hallazgo de arriba.
+ *
  * @param {Date} ahora instante de referencia (lo decide el caller; este módulo
  *   nunca lee el reloj).
  */
@@ -279,12 +308,20 @@ export function construirDatosDemo(ahora) {
   ];
 
   const clientes = [];
-  const ventas = [];
+  const ventasSinNumerar = [];
   for (const def of definiciones) {
     const { cliente, ventas: ventasCliente } = crearClienteConVentas({ ...def, ahora });
     clientes.push(cliente);
-    ventas.push(...ventasCliente);
+    ventasSinNumerar.push(...ventasCliente);
   }
+
+  // Numeración GLOBAL y cronológica (ver el comentario grande de esta función):
+  // se ordena por `fecha` ascendente y se asigna 1..N, reemplazando el `numero: 0`
+  // placeholder de `crearVenta`. El array devuelto queda en ESE orden (cronológico
+  // global), no en el orden en que se armó por cliente.
+  const ventas = [...ventasSinNumerar]
+    .sort((a, b) => a.fecha.getTime() - b.fecha.getTime())
+    .map((venta, indice) => ({ ...venta, numero: indice + 1 }));
 
   return { clientes, ventas };
 }
