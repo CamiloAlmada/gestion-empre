@@ -27,9 +27,12 @@ const CONFIG_INACTIVIDAD_DEFAULT = { factorInactividad: 2, umbralGlobalDias: 30 
  * Pura salvo por `ahora`, que entra como parámetro (mismo criterio que
  * `clasificarInactividad`: nada de `Date.now()` adentro) para que la
  * clasificación sea determinista y testeable. No habla con Firestore: el
- * caller (`ClientesInactivos.tsx`) le pasa la MISMA lista que ya trae
- * `Clientes.tsx` con su `useCollection` — no hay query compuesta nueva
- * (política del proyecto, doc 04).
+ * caller (`Clientes.tsx`, chip "Inactivos" de la terna de filtro, WA-G) le
+ * pasa el subconjunto que ya recortó `filtrarClientes` (búsqueda + ritmo
+ * comercial) sobre la MISMA `useCollection` del listado — no hay query
+ * compuesta nueva (política del proyecto, doc 04). Antes (WA-C2) vivía en la
+ * pantalla dedicada `/clientes/inactivos`, eliminada en WA-G: la terna de
+ * chips la reemplaza.
  */
 export function calcularClientesInactivos(clientes: Cliente[], ahora: Date): ClienteInactivo[] {
   return clientes

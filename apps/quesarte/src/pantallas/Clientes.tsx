@@ -1,12 +1,11 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { collection, doc, orderBy, query } from 'firebase/firestore';
-import { Button, CampoBusqueda, Chip, useToasts } from '@gestion/ui';
+import { Button, CampoBusqueda, ChipsFiltro, useToasts } from '@gestion/ui';
 import {
   clienteConverter,
   configuracionConverter,
   crearCliente,
-  useAuth,
   useCollection,
   useDoc,
   useOnlineStatus,
@@ -14,8 +13,11 @@ import {
 import type { DatosCliente } from '@gestion/firebase-kit';
 import { db } from '../firebase';
 import { useHeader } from '../componentes/header/ContextoHeader';
+import { IconoHistorial } from '../componentes/iconos';
 import { ListaClientes } from '../componentes/clientes/ListaClientes';
-import { filtrarClientes } from '../componentes/clientes/filtro';
+import { ListaClientesInactivos } from '../componentes/clientes/ListaClientesInactivos';
+import { calcularClientesInactivos } from '../componentes/clientes/inactividad';
+import { filtrarClientes, type FiltroClientes } from '../componentes/clientes/filtro';
 import { ModalCliente } from './ModalCliente';
 
 const coleccionClientes = collection(db, 'clientes').withConverter(clienteConverter);
@@ -25,15 +27,53 @@ const coleccionClientes = collection(db, 'clientes').withConverter(clienteConver
 const CLASE_ACCION_PRIMARIA =
   'inline-flex min-h-[48px] min-w-[48px] items-center justify-center gap-1.5 rounded-control bg-primary-600 px-3 font-medium text-white hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2 focus-visible:ring-offset-superficie';
 
+/** Etiquetas de los chips de la terna (`ChipsFiltro` de `@gestion/ui`, que ya
+ * antepone "Todas"/`null` sola): acá se pisa a "Todos" con `etiquetaTodas`. */
+const OPCIONES_CHIP = ['Activos', 'Inactivos'] as const;
+type OpcionChip = (typeof OPCIONES_CHIP)[number];
+
+/** Adapta el valor de `ChipsFiltro` (`OpcionChip | null`) al tipo de dominio
+ * `FiltroClientes` que consume `filtrarClientes`/`calcularClientesInactivos`. */
+function filtroDesdeChip(valor: string | null): FiltroClientes {
+  if (valor === 'Activos') return 'activos';
+  if (valor === 'Inactivos') return 'inactivos';
+  return 'todos';
+}
+
+/** Mensaje de estado vacío cuando el filtro elegido no tiene resultados y NO
+ * hay búsqueda activa (con búsqueda, siempre se usa el mensaje genérico "No
+ * se encontraron clientes para…", ver `contenido` más abajo). */
+function mensajeVacioSinBusqueda(filtro: FiltroClientes): string {
+  if (filtro === 'inactivos') return 'Ningún cliente inactivo por ahora.';
+  if (filtro === 'activos') return 'No hay clientes activos por ahora.';
+  return 'No hay clientes para mostrar.';
+}
+
 /**
  * Listado de Clientes: RAÍZ del tab (docs/06-ui-ux.md §2, 2026-07-10 —
  * decisión del dueño: con el módulo de clientes recién lanzado, es la
  * entrada de uso diario). Sin `volverA`: es tab raíz, igual que
  * `Stock.tsx`/`Venta.tsx`. Trae TODA la colección `clientes` con UNA
  * `useCollection` memoizada (ordenada por nombre; colección chica, sin
- * queries por prefijo) y filtra client-side por búsqueda (nombre/alias/
- * teléfono) y por `activo` — el toggle "Mostrar inactivos" no cambia la
- * query, solo el filtro (ver `filtrarClientes`).
+ * queries por prefijo) y filtra client-side por búsqueda y por la terna de
+ * chips `Todos | Activos | Inactivos` (WA-G, docs/06-ui-ux.md §3) — ningún
+ * cambio de filtro toca la query, solo `filtrarClientes`/
+ * `calcularClientesInactivos`.
+ *
+ * La terna reemplaza al toggle "Mostrar inactivos" (dados de baja) Y a la ex
+ * pantalla dedicada `/clientes/inactivos` (inactividad COMERCIAL, doc 08):
+ * - **Todos**: vigentes + dados de baja (`activo: false`, atenuados con
+ *   badge en `ListaClientes` — mismo tratamiento que ya existía).
+ * - **Activos**: solo vigentes que NO están inactivos por ritmo comercial.
+ * - **Inactivos**: solo vigentes inactivos por ritmo comercial, con fila
+ *   enriquecida (`ListaClientesInactivos`: días sin venir, total histórico,
+ *   botón WhatsApp "Te extrañamos"), ordenados por valor histórico
+ *   descendente (`calcularClientesInactivos`, ya no vive en una pantalla
+ *   propia). Visible para cualquier rol: lo que era admin-only era la
+ *   PANTALLA dedicada (privacidad de navegar a datos de fidelización); como
+ *   chip del listado común que ya ve todo el mundo, deja de restringirse
+ *   (docs/06-ui-ux.md §3 no lo pide, y el botón de WhatsApp ya es visible
+ *   para `vendedor` en el resto de la app sin exponer el número).
  *
  * El alta la puede disparar tanto `vendedor` como `admin` (doc 07: alta
  * rápida de mostrador con las reglas ya lo permiten); la edición y la
@@ -44,16 +84,20 @@ export function Clientes() {
   const navigate = useNavigate();
   const enLinea = useOnlineStatus();
   const { mostrarToast } = useToasts();
-  const { perfil } = useAuth();
-  const esAdmin = perfil?.rol === 'admin';
 
   const [busqueda, setBusqueda] = useState('');
-  const [mostrarInactivos, setMostrarInactivos] = useState(false);
+  const [chip, setChip] = useState<OpcionChip | null>(null);
+  const filtro = filtroDesdeChip(chip);
   const [altaAbierta, setAltaAbierta] = useState(false);
   const [guardando, setGuardando] = useState(false);
   // Se incrementa en "Reintentar": cambia la identidad de la query y fuerza a
   // `useCollection` a resuscribirse (mismo patrón que Stock.tsx/Productos.tsx).
   const [intentoId, setIntentoId] = useState(0);
+
+  // `ahora` fijo por el ciclo de vida del componente (no `Date.now()` en cada
+  // render, mismo criterio que la ex `ClientesInactivos.tsx`): la
+  // clasificación de inactividad comercial es por días.
+  const [ahora] = useState(() => new Date());
 
   // `configuracion/general` (WA-F1, hallazgo de integración de la tanda WA):
   // `crearCliente` deriva `telefonoE164` con el `codigoPais` que se le pase
@@ -71,45 +115,32 @@ export function Clientes() {
 
   useHeader({
     titulo: 'Clientes',
+    // Historial (consulta cruzada, WA-G 2026-07-13, decidido por el dueño
+    // tras ensayar la demo: reemplaza a la píldora flotante "Historial", que
+    // saturaba el cluster). Regla general de docs/06-ui-ux.md §2 (generaliza
+    // la excepción que antes era solo de Venta): las acciones-ÍCONO de
+    // consulta ocasional van al header SIEMPRE (`accionHeader`, sin dual-
+    // render), no compiten con la zona del pulgar porque no son operaciones.
+    // Mismo ícono/patrón que `Venta.tsx`.
+    accionHeader: (
+      <Link
+        to="/historial"
+        aria-label="Ver historial de ventas"
+        className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-control text-texto-secundario hover:bg-fondo hover:text-texto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
+      >
+        <IconoHistorial className="h-6 w-6" />
+      </Link>
+    ),
     acciones: (
-      <>
-        {/* Historial general (consulta cruzada, docs/06-ui-ux.md §2): acción
-            de navegación interna, con etiqueta de texto, a la izquierda del
-            "+" (2026-07-10: el orden y la forma de las acciones son un
-            contrato — el AGREGAR va SIEMPRE al extremo derecho). */}
-        <Link
-          to="/historial"
-          className="inline-flex min-h-[48px] items-center justify-center rounded-control border border-borde bg-superficie px-3 text-sm font-medium text-texto hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
-        >
-          Historial
-        </Link>
-        {/* Inactivos (doc 08, "Fidelización", WA-C2): herramienta de
-            reconquista del dueño — mismo criterio de privacidad que
-            Compras/Proveedores/Precios de Stock, solo `admin`. La ruta
-            (`/clientes/inactivos`) también está protegida con
-            `RutaSoloAdmin` (App.tsx): esto solo evita mostrarle a un
-            vendedor un link a algo a lo que igual sería redirigido
-            (docs/06-ui-ux.md §2 — "los tabs se filtran por rol, nunca se
-            muestran deshabilitados"). A la izquierda del "+", que ocupa
-            SIEMPRE el extremo derecho. */}
-        {esAdmin && (
-          <Link
-            to="/clientes/inactivos"
-            className="inline-flex min-h-[48px] items-center justify-center rounded-control border border-borde bg-superficie px-3 text-sm font-medium text-texto hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
-          >
-            Inactivos
-          </Link>
-        )}
-        <button
-          type="button"
-          onClick={() => setAltaAbierta(true)}
-          aria-label="Agregar cliente"
-          className={CLASE_ACCION_PRIMARIA}
-        >
-          <span aria-hidden="true">＋</span>
-          <span className="hidden md:inline">Agregar</span>
-        </button>
-      </>
+      <button
+        type="button"
+        onClick={() => setAltaAbierta(true)}
+        aria-label="Agregar cliente"
+        className={CLASE_ACCION_PRIMARIA}
+      >
+        <span aria-hidden="true">＋</span>
+        <span className="hidden md:inline">Agregar</span>
+      </button>
     ),
   });
 
@@ -117,8 +148,15 @@ export function Clientes() {
   const { datos: clientes, cargando, error } = useCollection(consultaClientes);
 
   const clientesFiltrados = useMemo(
-    () => filtrarClientes(clientes, busqueda, mostrarInactivos),
-    [clientes, busqueda, mostrarInactivos],
+    () => filtrarClientes(clientes, busqueda, filtro, ahora),
+    [clientes, busqueda, filtro, ahora],
+  );
+  // Solo se calcula (y solo se usa) bajo el chip "Inactivos": enriquece el
+  // subconjunto que `filtrarClientes` ya recortó (búsqueda + ritmo
+  // comercial) con días sin venir y lo reordena por valor histórico desc.
+  const inactivosEnriquecidos = useMemo(
+    () => (filtro === 'inactivos' ? calcularClientesInactivos(clientesFiltrados, ahora) : []),
+    [filtro, clientesFiltrados, ahora],
   );
 
   function reintentar() {
@@ -160,6 +198,8 @@ export function Clientes() {
       });
   }
 
+  const vacio = filtro === 'inactivos' ? inactivosEnriquecidos.length === 0 : clientesFiltrados.length === 0;
+
   let contenido;
   if (cargando) {
     contenido = <p className="py-8 text-center text-texto-secundario">Cargando clientes…</p>;
@@ -179,12 +219,16 @@ export function Clientes() {
         <Button onClick={() => setAltaAbierta(true)}>Agregar cliente</Button>
       </div>
     );
-  } else if (clientesFiltrados.length === 0) {
+  } else if (vacio) {
     contenido = (
       <div className="rounded-card border border-borde bg-superficie p-8 text-center text-texto-secundario">
-        No se encontraron clientes para &quot;{busqueda.trim()}&quot;.
+        {busqueda.trim() === ''
+          ? mensajeVacioSinBusqueda(filtro)
+          : `No se encontraron clientes para "${busqueda.trim()}".`}
       </div>
     );
+  } else if (filtro === 'inactivos') {
+    contenido = <ListaClientesInactivos clientes={inactivosEnriquecidos} db={db} />;
   } else {
     contenido = (
       <ListaClientes
@@ -202,11 +246,13 @@ export function Clientes() {
         ariaLabel="Buscar cliente"
         placeholder="Nombre, alias o teléfono"
       />
-      <div className="flex flex-wrap gap-3">
-        <Chip activo={mostrarInactivos} onClick={() => setMostrarInactivos((v) => !v)}>
-          Mostrar inactivos
-        </Chip>
-      </div>
+      <ChipsFiltro
+        opciones={[...OPCIONES_CHIP]}
+        valor={chip}
+        onCambiar={(valor) => setChip(valor as OpcionChip | null)}
+        ariaLabel="Filtrar clientes"
+        etiquetaTodas="Todos"
+      />
 
       {contenido}
 
