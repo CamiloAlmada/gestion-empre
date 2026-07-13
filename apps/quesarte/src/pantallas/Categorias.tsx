@@ -76,10 +76,9 @@ export function Categorias() {
   // las pantallas de Stock).
   const [intentoId, setIntentoId] = useState(0);
 
-  // Sección raíz del selector (docs/06-ui-ux.md §2): sin `volverA`, la
-  // navegación entre hermanas de Stock la resuelve el `SelectorSeccion` del
-  // layout compartido (`StockLayout`, UI-4).
-  useHeader({ titulo: 'Categorías' });
+  // Subvista de Ajustes (UI-5c): ahora sí tiene `volverA` para regresar al tab
+  // de Ajustes (flecha ‹ en el header, docs/06-ui-ux.md §2).
+  useHeader({ titulo: 'Categorías', volverA: { etiqueta: 'Ajustes', a: '/ajustes' } });
 
   const consultaCategorias = useMemo(
     () => query(coleccionCategorias, orderBy('orden')),

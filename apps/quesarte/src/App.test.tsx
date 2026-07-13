@@ -77,6 +77,15 @@ vi.mock('./pantallas/Productos', () => ({
 // importa porque Stock.test.tsx mockea todas las escrituras/lecturas.
 vi.mock('./firebase', () => ({ auth: {}, db: {} }));
 
+// Categorias (pantalla de /ajustes/categorias) arma sus queries de Firestore
+// al importarse (`collection(db, 'categorias')` y `collection(db, 'productos')`,
+// ver Categorias.tsx), igual que Productos/Usuarios arriba: se mockea el
+// componente entero, este suite solo prueba ruteo (Categorias.test.tsx cubre
+// su contenido).
+vi.mock('./pantallas/Categorias', () => ({
+  Categorias: () => <div>Contenido de Categorias</div>,
+}));
+
 // Usuarios (pantalla de /ajustes/usuarios) arma su query de Firestore al
 // importarse (`collection(db, 'usuarios')`, ver Usuarios.tsx), igual que
 // Productos arriba: se mockea el componente entero, este suite solo prueba
@@ -222,6 +231,26 @@ describe('App - rutas', () => {
     expect(await screen.findByRole('heading', { name: 'Reportes', level: 2 })).toBeTruthy();
   });
 
+  it('vendedor que navega a /ajustes/categorias es redirigido a Venta (UI-5c, solo admin)', () => {
+    configurarAuth('vendedor');
+
+    renderizarEn('/ajustes/categorias');
+
+    expect(screen.getByRole('heading', { name: 'Venta', level: 1 })).toBeTruthy();
+    expect(screen.queryByText('Contenido de Categorias')).toBeNull();
+  });
+
+  it('admin que navega a /ajustes/categorias ve la pantalla de Categorias (UI-5c)', async () => {
+    configurarAuth('admin');
+
+    renderizarEn('/ajustes/categorias');
+
+    // Categorias está mockeada, pero se resuelve igual vía `React.lazy`
+    // (import() dinámico, aunque el módulo detrás sea el mock): el primer
+    // render cae en el fallback de Suspense hasta que la promesa resuelve.
+    expect(await screen.findByText('Contenido de Categorias')).toBeTruthy();
+  });
+
   it('vendedor que navega a /ajustes/usuarios es redirigido a Venta', () => {
     configurarAuth('vendedor');
 
@@ -364,21 +393,33 @@ describe('App - rutas', () => {
     expect(await screen.findByText('Contenido de Historial')).toBeTruthy();
   });
 
-  describe('redirects de rutas viejas de Clientes (vivían bajo /historial, PWAs con deep links instalados)', () => {
-    it('/historial/clientes redirige a /clientes', async () => {
-      configurarAuth('admin');
+  describe('redirects de rutas viejas', () => {
+    describe('Clientes (vivían bajo /historial, PWAs con deep links instalados)', () => {
+      it('/historial/clientes redirige a /clientes', async () => {
+        configurarAuth('admin');
 
-      renderizarEn('/historial/clientes');
+        renderizarEn('/historial/clientes');
 
-      expect(await screen.findByText('Contenido de Clientes')).toBeTruthy();
+        expect(await screen.findByText('Contenido de Clientes')).toBeTruthy();
+      });
+
+      it('/historial/cliente/:id redirige a /clientes/cliente/:id preservando el id', async () => {
+        configurarAuth('admin');
+
+        renderizarEn('/historial/cliente/abc123');
+
+        expect(await screen.findByText('Contenido de DetalleClientePantalla')).toBeTruthy();
+      });
     });
 
-    it('/historial/cliente/:id redirige a /clientes/cliente/:id preservando el id', async () => {
-      configurarAuth('admin');
+    describe('Categorías (vivían bajo /stock antes de mudarse a /ajustes, PWAs con deep links instalados, UI-5c)', () => {
+      it('/stock/categorias redirige a /ajustes/categorias', async () => {
+        configurarAuth('admin');
 
-      renderizarEn('/historial/cliente/abc123');
+        renderizarEn('/stock/categorias');
 
-      expect(await screen.findByText('Contenido de DetalleClientePantalla')).toBeTruthy();
+        expect(await screen.findByText('Contenido de Categorias')).toBeTruthy();
+      });
     });
   });
 });

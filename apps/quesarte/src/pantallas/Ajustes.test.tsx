@@ -164,6 +164,23 @@ describe('Ajustes', () => {
     expect(auth.salir).toHaveBeenCalledTimes(1);
   });
 
+  it('vendedor no ve la sección Categorías (UI-5c)', () => {
+    configurarAuth();
+
+    renderizar();
+
+    expect(screen.queryByText('Categorías')).toBeNull();
+  });
+
+  it('admin ve la sección Categorías con un link a /ajustes/categorias (UI-5c)', () => {
+    configurarAuth({ perfil: { ...authPorDefecto().perfil, rol: 'admin' } });
+
+    renderizar();
+
+    const link = screen.getByRole('link', { name: /Gestión de categorías/ });
+    expect(link.getAttribute('href')).toBe('/ajustes/categorias');
+  });
+
   it('vendedor no ve la sección Usuarios', () => {
     configurarAuth();
 
