@@ -151,6 +151,20 @@ export function Ajustes() {
       </Seccion>
 
       {perfil?.rol === 'admin' && (
+        <Seccion titulo="Categorías">
+          <Link
+            to="/ajustes/categorias"
+            className="flex min-h-[44px] w-full items-center justify-between rounded-control border border-borde px-4 py-3 text-left text-texto hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
+          >
+            <span>Gestión de categorías</span>
+            <span aria-hidden="true" className="text-texto-secundario">
+              ›
+            </span>
+          </Link>
+        </Seccion>
+      )}
+
+      {perfil?.rol === 'admin' && (
         <Seccion titulo="Usuarios">
           <Link
             to="/ajustes/usuarios"

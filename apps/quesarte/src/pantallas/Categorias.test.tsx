@@ -4,7 +4,6 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import { ProveedorTema, ProveedorToasts } from '@gestion/ui';
 import { money, type Categoria, type Producto } from '@gestion/core';
 import { Categorias } from './Categorias';
-import { StockLayout } from '../componentes/stock/StockLayout';
 import { ProveedorHeader, useHeaderActual } from '../componentes/header/ContextoHeader';
 
 const mocks = vi.hoisted(() => ({
@@ -20,11 +19,11 @@ const mocks = vi.hoisted(() => ({
 // error (`CategoriaDuplicadaError`/`CategoriaInvalidaError`) pasan reales
 // (se ejercita `instanceof` tal cual las usa el componente); solo se
 // mockean los hooks y las funciones de escritura. A diferencia de la
-// versión modal, esta pantalla YA NO recibe `categorias`/`productos` por
-// props: arma sus propias suscripciones con `useCollection`, así que hace
-// falta distinguirlas por colección (mismo truco que Productos.test.tsx/
-// Precios.test.tsx). `useAuth` la consume `StockLayout` (UI-4), que envuelve
-// la ruta — fija un admin.
+// versión modal, esta pantalla arma sus propias suscripciones con
+// `useCollection`, así que hace falta distinguirlas por colección (mismo
+// truco que Productos.test.tsx/Precios.test.tsx). `useAuth` es mockeada
+// para fijar un admin (UI-5c: esta pantalla es subvista de Ajustes, protegida
+// por `RutaSoloAdmin` en App.tsx).
 vi.mock('@gestion/firebase-kit', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@gestion/firebase-kit')>();
   return {
@@ -43,6 +42,8 @@ vi.mock('@gestion/firebase-kit', async (importOriginal) => {
 // (init con env vars falsas de `vitest.config.ts`) + `collection`/`query`/
 // `orderBy` REALES de 'firebase/firestore', porque `nombreColeccion` de abajo
 // lee la forma interna de una query real del SDK modular (`_query.path`).
+// Mismo criterio que cuando era sección de Stock (UI-4): pantalla de Ajustes
+// ahora (UI-5c), pero la lógica de Firestore no cambió.
 
 mocks.useAuth.mockReturnValue({
   usuario: { uid: 'u1' },
@@ -124,15 +125,13 @@ function VisorHeader() {
 
 function renderizar() {
   return render(
-    <MemoryRouter initialEntries={['/stock/categorias']}>
+    <MemoryRouter initialEntries={['/ajustes/categorias']}>
       <ProveedorTema>
         <ProveedorToasts>
           <ProveedorHeader>
             <VisorHeader />
             <Routes>
-              <Route element={<StockLayout />}>
-                <Route path="/stock/categorias" element={<Categorias />} />
-              </Route>
+              <Route path="/ajustes/categorias" element={<Categorias />} />
             </Routes>
           </ProveedorHeader>
         </ProveedorToasts>
@@ -150,20 +149,12 @@ describe('Categorias', () => {
     estadoProductos = { datos: [], cargando: false, error: null };
   });
 
-  it('header contextual: título "Categorías", sin volverA (docs/06 §2, es sección raíz)', () => {
+  it('header contextual: título "Categorías", volverA a "/ajustes" (subvista de Ajustes, UI-5c)', () => {
     configurarCategorias();
     renderizar();
 
     expect(screen.getByTestId('titulo-header').textContent).toBe('Categorías');
-    expect(screen.getByTestId('volver-header').textContent).toBe('');
-  });
-
-  it('muestra el SelectorSeccion con "Categorías" activo, al final del bloque admin', () => {
-    configurarCategorias();
-    renderizar();
-
-    expect(screen.getByRole('navigation', { name: 'Secciones de Stock' })).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Categorías' }).getAttribute('aria-current')).toBe('page');
+    expect(screen.getByTestId('volver-header').textContent).toContain('/ajustes');
   });
 
   it('lista las categorías en el orden recibido (ya ordenadas por `orden`)', () => {

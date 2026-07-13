@@ -128,16 +128,6 @@ export function App() {
                 </RutaSoloAdmin>
               }
             />
-            {/* Categorías (UI-4, 2026-07-10): dejó de ser el modal de
-                Catálogo para ser una sección más del selector, solo admin. */}
-            <Route
-              path="stock/categorias"
-              element={
-                <RutaSoloAdmin>
-                  <Categorias />
-                </RutaSoloAdmin>
-              }
-            />
           </Route>
           <Route path="stock/producto/:id" element={<DetalleProductoPantalla />} />
           <Route
@@ -179,6 +169,14 @@ export function App() {
           />
           <Route path="ajustes" element={<Ajustes />} />
           <Route
+            path="ajustes/categorias"
+            element={
+              <RutaSoloAdmin>
+                <Categorias />
+              </RutaSoloAdmin>
+            }
+          />
+          <Route
             path="ajustes/usuarios"
             element={
               <RutaSoloAdmin>
@@ -186,6 +184,10 @@ export function App() {
               </RutaSoloAdmin>
             }
           />
+          {/* Redirect de la ruta vieja de Categorías (vivía bajo /stock antes de
+              mudarse a /ajustes, UI-5c) — mismo motivo que el redirect de
+              /historial/clientes, deep links viejos en PWAs instaladas. */}
+          <Route path="stock/categorias" element={<Navigate to="/ajustes/categorias" replace />} />
         </Route>
       </Routes>
       <AvisoPwa />
