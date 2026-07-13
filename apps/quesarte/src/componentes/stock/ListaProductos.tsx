@@ -26,19 +26,32 @@ export interface ListaProductosProps {
    * redundante. Por defecto `false` (lista plana, como antes).
    */
   ocultarCategoria?: boolean;
+  /**
+   * Atenúa (opacidad reducida) las filas de productos inactivos
+   * (`producto.activo === false`) y les agrega el badge "Inactivo" (UI-5,
+   * fusión Stock+Catálogo, docs/06-ui-ux.md §2 — espejo del criterio de
+   * dados de baja en `ListaClientes`; nada se comunica solo por color, §5,
+   * así que el badge siempre lleva texto). Por defecto `false`: preserva el
+   * comportamiento de siempre (todas las filas activas, sin decoración
+   * extra) sin romper los usos/tests existentes — hoy el único llamador que
+   * puede recibir productos inactivos es `Productos.tsx`, con este flag en
+   * `true`.
+   */
+  atenuarInactivos?: boolean;
 }
 
 /**
- * Lista maestra de productos activos: una fila-botón por producto con su
- * resumen de stock (según `modoStock`) y las alertas visuales que apliquen
- * (vencimiento, stock bajo). Tocar una fila selecciona el producto (el
- * llamador decide qué hacer con eso — ver `Stock.tsx`).
+ * Lista maestra de productos: una fila-botón por producto con su resumen de
+ * stock (según `modoStock`) y las alertas visuales que apliquen (vencimiento,
+ * stock bajo). Tocar una fila selecciona el producto (el llamador decide qué
+ * hacer con eso — ver `Productos.tsx`).
  */
 export function ListaProductos({
   productos,
   piezasAgrupadas,
   onSeleccionar,
   ocultarCategoria = false,
+  atenuarInactivos = false,
 }: ListaProductosProps) {
   return (
     <ul className="flex flex-col gap-2">
@@ -50,13 +63,16 @@ export function ListaProductos({
           resumen.tipo === 'piezas'
             ? peorEstadoVencimiento(piezasDelProducto.map((p) => p.fechaVencimiento))
             : null;
+        const inactivo = atenuarInactivos && !producto.activo;
 
         return (
           <li key={producto.id}>
             <button
               type="button"
               onClick={() => onSeleccionar(producto)}
-              className="flex min-h-[56px] w-full flex-col gap-1 rounded-card border border-borde bg-superficie p-4 text-left transition-colors hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
+              className={`flex min-h-[56px] w-full flex-col gap-1 rounded-card border border-borde bg-superficie p-4 text-left transition-colors hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 ${
+                inactivo ? 'opacity-60' : ''
+              }`}
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="font-medium text-texto">{producto.nombre}</span>
@@ -71,11 +87,12 @@ export function ListaProductos({
                   Vence {formatearFecha(resumen.vencimientoProximo)}
                 </span>
               )}
-              {(estadoVenc !== null || bajo) && (
+              {(estadoVenc !== null || bajo || inactivo) && (
                 <div className="flex flex-wrap gap-2 pt-1">
                   {estadoVenc === 'vencida' && <BadgeStock variante="peligro">Vencida</BadgeStock>}
                   {estadoVenc === 'vence_pronto' && <BadgeStock variante="advertencia">Vence pronto</BadgeStock>}
                   {bajo && <BadgeStock variante="advertencia">Stock bajo</BadgeStock>}
+                  {inactivo && <BadgeStock variante="neutral">Inactivo</BadgeStock>}
                 </div>
               )}
             </button>

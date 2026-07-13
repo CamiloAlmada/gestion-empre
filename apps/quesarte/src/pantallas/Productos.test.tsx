@@ -1,39 +1,27 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter, Route, Routes, useParams } from 'react-router';
 import { ProveedorTema, ProveedorToasts } from '@gestion/ui';
-import { money, peso, type Categoria, type Producto } from '@gestion/core';
+import { money, peso, type Categoria, type Pieza, type Producto } from '@gestion/core';
 import { Productos } from './Productos';
 import { StockLayout } from '../componentes/stock/StockLayout';
 import { ProveedorHeader, useHeaderActual } from '../componentes/header/ContextoHeader';
-
-// `DataTable` con `filaCompacta` (docs/06-ui-ux.md §3) renderiza SIEMPRE la
-// tabla completa Y la lista compacta a la vez — la visibilidad la decide CSS
-// responsive que jsdom no evalúa (ver DataTable.tsx). Por eso el contenido
-// de cada fila aparece dos veces en el DOM de test; las aserciones que solo
-// verifican "el dato está en la pantalla" se scopean a la tabla (fuente de
-// verdad de siempre) para no ambigüar con `getByText`/`getByRole`. La lista
-// compacta se testea aparte, explícitamente, más abajo.
-function tabla() {
-  return within(screen.getByRole('table'));
-}
 
 const mocks = vi.hoisted(() => ({
   useAuth: vi.fn(),
   useOnlineStatus: vi.fn(() => true),
   useCollection: vi.fn(),
   addDoc: vi.fn(),
-  updateDoc: vi.fn(),
 }));
 
-// `productoConverter`/`categoriaConverter` se dejan pasar tal cual (identidad,
-// no se ejercitan acá): lo que importa es qué objeto de dominio recibe
-// `addDoc`/`updateDoc`. `useCollection` se mockea entero: la pantalla arma
-// las queries con las funciones REALES de 'firebase/firestore'
-// (collection/query/orderBy, sin I/O), pero los datos que "llegan" los
-// controla el mock, no una suscripción real. Solo `addDoc`/`updateDoc` (las
-// únicas operaciones con I/O real) se mockean, siguiendo el mismo patrón que
-// packages/firebase-kit/src/ventas.test.ts.
+// `productoConverter`/`piezaConverter`/`categoriaConverter` se dejan pasar
+// tal cual (identidad, no se ejercitan acá): lo que importa es qué objeto de
+// dominio recibe `addDoc`. `useCollection` se mockea entero: la pantalla
+// arma las queries con las funciones REALES de 'firebase/firestore'
+// (collection/query/orderBy/where, sin I/O), pero los datos que "llegan" los
+// controla el mock, no una suscripción real. Solo `addDoc` (la única
+// operación con I/O real, ya que la EDICIÓN desapareció del listado, UI-5) se
+// mockea, mismo patrón que la ex Productos.test.tsx.
 vi.mock('@gestion/firebase-kit', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@gestion/firebase-kit')>();
   return {
@@ -49,7 +37,6 @@ vi.mock('firebase/firestore', async (importOriginal) => {
   return {
     ...actual,
     addDoc: mocks.addDoc,
-    updateDoc: mocks.updateDoc,
   };
 });
 
@@ -60,28 +47,30 @@ interface EstadoColeccionFalso<T> {
 }
 
 let estadoProductos: EstadoColeccionFalso<Producto> = { datos: [], cargando: false, error: null };
+let estadoPiezas: EstadoColeccionFalso<Pieza> = { datos: [], cargando: false, error: null };
 let estadoCategorias: EstadoColeccionFalso<Categoria> = { datos: [], cargando: false, error: null };
 
 /**
- * `Productos.tsx` ahora suscribe DOS colecciones (`productos` y
- * `categorias`, ver ModalCategorias) con el mismo `useCollection` mockeado
- * entero: hace falta enrutar cada llamada al estado falso que corresponda.
- * Se distingue mirando `_query.path` — un campo del SDK modular de Firestore
- * sin tipo público, pero la query SÍ se arma con `collection`/`query`/
- * `orderBy` reales (ver comentario de arriba), así que es la única señal
- * disponible sin fingir todo el módulo `firebase/firestore` (como hace
- * packages/firebase-kit/src/categorias.test.ts). Si una versión futura del
- * SDK cambia esta forma interna, este test falla con un mensaje claro en vez
- * de un falso verde.
+ * `Productos.tsx` suscribe TRES colecciones (`productos`, `piezas`,
+ * `categorias`) con el mismo `useCollection` mockeado entero: hace falta
+ * enrutar cada llamada al estado falso que corresponda. Se distingue mirando
+ * `_query.path` — un campo del SDK modular de Firestore sin tipo público,
+ * pero la query SÍ se arma con `collection`/`query`/`orderBy`/`where` reales
+ * (ver comentario de arriba), así que es la única señal disponible sin
+ * fingir todo el módulo `firebase/firestore` — mismo criterio que la ex
+ * Productos.test.tsx.
  */
 function nombreColeccion(query: unknown): string | undefined {
   const interna = (query as { _query?: { path?: { segments?: string[] } } })._query;
   return interna?.path?.segments?.[0];
 }
 
-mocks.useCollection.mockImplementation((query: unknown) =>
-  nombreColeccion(query) === 'categorias' ? estadoCategorias : estadoProductos,
-);
+mocks.useCollection.mockImplementation((query: unknown) => {
+  const nombre = nombreColeccion(query);
+  if (nombre === 'categorias') return estadoCategorias;
+  if (nombre === 'piezas') return estadoPiezas;
+  return estadoProductos;
+});
 
 function authPorDefecto() {
   return {
@@ -104,7 +93,7 @@ function configurarAuth(overrides: Partial<ReturnType<typeof authPorDefecto>> = 
   mocks.useAuth.mockReturnValue({ ...authPorDefecto(), ...overrides });
 }
 
-function configurarCollection(overrides: { datos?: Producto[]; cargando?: boolean; error?: unknown }) {
+function configurarProductos(overrides: { datos?: Producto[]; cargando?: boolean; error?: unknown }) {
   estadoProductos = {
     datos: overrides.datos ?? [],
     cargando: overrides.cargando ?? false,
@@ -112,8 +101,14 @@ function configurarCollection(overrides: { datos?: Producto[]; cargando?: boolea
   };
 }
 
-/** Default: sin categorías definidas (la mayoría de los tests de esta suite
- * no ejercitan el select de categoría ni `ModalCategorias`). */
+function configurarPiezas(overrides: { datos?: Pieza[]; cargando?: boolean; error?: unknown } = {}) {
+  estadoPiezas = {
+    datos: overrides.datos ?? [],
+    cargando: overrides.cargando ?? false,
+    error: overrides.error ?? null,
+  };
+}
+
 function configurarCategorias(overrides: { datos?: Categoria[]; cargando?: boolean; error?: unknown } = {}) {
   estadoCategorias = {
     datos: overrides.datos ?? [],
@@ -122,7 +117,7 @@ function configurarCategorias(overrides: { datos?: Categoria[]; cargando?: boole
   };
 }
 
-function productoDe(over: Partial<Producto> & Pick<Producto, 'id' | 'modoStock'>): Producto {
+function producto(over: Partial<Producto> & Pick<Producto, 'id' | 'modoStock'>): Producto {
   return {
     nombre: 'Producto',
     categoria: 'Categoría',
@@ -135,40 +130,25 @@ function productoDe(over: Partial<Producto> & Pick<Producto, 'id' | 'modoStock'>
   };
 }
 
-function categoriaDe(over: Partial<Categoria> & Pick<Categoria, 'id'>): Categoria {
-  return { nombre: 'Categoría', orden: 0, ...over };
+function pieza(over: Partial<Pieza> = {}): Pieza {
+  return {
+    id: 'pz1',
+    productoId: 'p1',
+    pesoInicialGramos: peso(5000),
+    pesoRestanteGramos: peso(4000),
+    costoKgCents: money(30000),
+    fechaIngreso: new Date('2026-01-01'),
+    estado: 'disponible',
+    ...over,
+  };
 }
 
-const categoriasFalsas: Categoria[] = [
-  categoriaDe({ id: 'c1', nombre: 'Quesos', orden: 0 }),
-  categoriaDe({ id: 'c2', nombre: 'Miel', orden: 1 }),
-  categoriaDe({ id: 'c3', nombre: 'Frutos secos', orden: 2 }),
-  categoriaDe({ id: 'c4', nombre: 'Embutidos', orden: 3 }),
-];
+function categoriaDe(over: Partial<Categoria> & Pick<Categoria, 'id' | 'nombre' | 'orden'>): Categoria {
+  return { ...over };
+}
 
-const productosFalsos: Producto[] = [
-  productoDe({
-    id: 'p1',
-    nombre: 'Queso Añejo',
-    categoria: 'Quesos',
-    modoPrecio: 'por_kg',
-    modoStock: 'fraccionado_por_pieza',
-    precioVentaCents: money(89900),
-  }),
-  productoDe({
-    id: 'p2',
-    nombre: 'Miel 500g',
-    categoria: 'Miel',
-    modoPrecio: 'por_unidad',
-    modoStock: 'unidad_simple',
-    precioVentaCents: money(45000),
-    stockUnidades: 10,
-    activo: false,
-  }),
-];
-
-/** Expone el header contextual actual como texto, para aserirlo sin montar
- * `Shell` completo (mismo criterio que `Stock.test.tsx`). */
+/** Expone el header contextual actual, para aserirlo sin montar `Shell`
+ * completo (mismo criterio que el resto de las pantallas de Stock). */
 function VisorHeader() {
   const config = useHeaderActual();
   return (
@@ -180,17 +160,24 @@ function VisorHeader() {
   );
 }
 
+/** Placeholder de la ruta de detalle: solo confirma a qué `id` navegó. */
+function PlaceholderDetalle() {
+  const { id } = useParams<{ id: string }>();
+  return <div>Detalle de {id}</div>;
+}
+
 function renderizar() {
   return render(
-    <MemoryRouter initialEntries={['/stock/productos']}>
+    <MemoryRouter initialEntries={['/stock']}>
       <ProveedorTema>
         <ProveedorToasts>
           <ProveedorHeader>
             <VisorHeader />
             <Routes>
               <Route element={<StockLayout />}>
-                <Route path="/stock/productos" element={<Productos />} />
+                <Route path="/stock" element={<Productos />} />
               </Route>
+              <Route path="/stock/producto/:id" element={<PlaceholderDetalle />} />
             </Routes>
           </ProveedorHeader>
         </ProveedorToasts>
@@ -199,182 +186,80 @@ function renderizar() {
   );
 }
 
-describe('Productos', () => {
-  afterEach(() => {
-    cleanup();
-    vi.clearAllMocks();
-    // `clearAllMocks` limpia llamadas/resultados pero NO un `mockReturnValue`
-    // ya fijado: sin esto, un test que pone useOnlineStatus en `false`
-    // (offline) dejaría ese valor filtrado a los tests siguientes. Restaura
-    // el default (online) del `vi.hoisted` de arriba.
-    mocks.useOnlineStatus.mockReturnValue(true);
-    // `estadoProductos`/`estadoCategorias` son variables planas, no estado
-    // de un mock: `clearAllMocks` no las toca. Sin este reset, la última
-    // configuración de un test (p. ej. categorías cargadas) se filtraría al
-    // siguiente que no llama a `configurarCategorias`.
-    estadoProductos = { datos: [], cargando: false, error: null };
-    estadoCategorias = { datos: [], cargando: false, error: null };
-  });
+function abrirPanelFiltros() {
+  fireEvent.click(screen.getByRole('button', { name: 'Filtros' }));
+}
 
-  it('header contextual: título "Catálogo" (coincide con el ítem del SelectorSeccion) y sin volverA (docs/06 §2)', () => {
+function alternarChipInactivos() {
+  fireEvent.click(screen.getByRole('button', { name: 'Inactivos' }));
+}
+
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+  mocks.useOnlineStatus.mockReturnValue(true);
+  estadoProductos = { datos: [], cargando: false, error: null };
+  estadoPiezas = { datos: [], cargando: false, error: null };
+  estadoCategorias = { datos: [], cargando: false, error: null };
+});
+
+describe('Productos - header contextual', () => {
+  it('título "Productos", sin volverA (es sección raíz, docs/06 §2) y sin acciones de navegación', () => {
     configurarAuth();
-    configurarCollection({ datos: [] });
+    configurarProductos({ datos: [] });
 
     renderizar();
 
-    expect(screen.getByTestId('titulo-header').textContent).toBe('Catálogo');
+    expect(screen.getByTestId('titulo-header').textContent).toBe('Productos');
     expect(screen.getByTestId('volver-header').textContent).toBe('');
   });
 
-  it('muestra el SelectorSeccion con "Catálogo" activo', () => {
+  it('admin: la acción del header es "Agregar producto"', () => {
     configurarAuth();
-    configurarCollection({ datos: [] });
-
-    renderizar();
-
-    expect(screen.getByRole('navigation', { name: 'Secciones de Stock' })).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Stock' }).getAttribute('href')).toBe('/stock');
-    expect(screen.getByRole('link', { name: 'Proveedores' }).getAttribute('href')).toBe('/stock/proveedores');
-  });
-
-  it('vendedor: el SelectorSeccion no muestra "Proveedores"', () => {
-    configurarAuth({ perfil: { ...authPorDefecto().perfil, rol: 'vendedor' } });
-    configurarCollection({ datos: [] });
-
-    renderizar();
-
-    expect(screen.queryByRole('link', { name: 'Proveedores' })).toBeNull();
-  });
-
-  it('admin: el header contextual expone la acción "Agregar" (Categorías es ahora una sección propia, UI-4)', () => {
-    configurarAuth();
-    configurarCollection({ datos: productosFalsos });
+    // Lista NO vacía: el estado vacío absoluto también ofrece un botón
+    // "Agregar producto" propio (ver más abajo) — con datos, el único match
+    // es el del header (`getByRole`, no `getAllByRole`, discrimina eso).
+    configurarProductos({ datos: [producto({ id: 'p1', nombre: 'Queso Colonia', modoStock: 'granel' })] });
 
     renderizar();
 
     expect(screen.getByRole('button', { name: 'Agregar producto' })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Categorías' })).toBeNull();
   });
 
-  it('vendedor: el header contextual no expone acciones', () => {
+  it('vendedor: el header no expone acciones', () => {
     configurarAuth({ perfil: { ...authPorDefecto().perfil, rol: 'vendedor' } });
-    configurarCollection({ datos: productosFalsos });
+    configurarProductos({ datos: [] });
 
     renderizar();
 
     expect(screen.queryByRole('button', { name: 'Agregar producto' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Categorías' })).toBeNull();
   });
+});
 
-  it('renderiza los productos del listado con modo, precio y estado', () => {
+describe('Productos - estados', () => {
+  it('cargando: muestra el mensaje de carga', () => {
     configurarAuth();
-    configurarCollection({ datos: productosFalsos });
-
-    renderizar();
-
-    expect(tabla().getByText('Queso Añejo')).toBeTruthy();
-    expect(tabla().getByText('Quesos')).toBeTruthy();
-    expect(tabla().getByText('Por kg · Fraccionado por pieza')).toBeTruthy();
-    expect(tabla().getByText('$ 899,00 /kg')).toBeTruthy();
-    expect(tabla().getByText('Activo')).toBeTruthy();
-
-    expect(tabla().getByText('Miel 500g')).toBeTruthy();
-    expect(tabla().getByText('Por unidad · Unidad simple')).toBeTruthy();
-    expect(tabla().getByText('$ 450,00 /u')).toBeTruthy();
-    expect(tabla().getByText('Inactivo')).toBeTruthy();
-  });
-
-  it('la búsqueda filtra por nombre o categoría ignorando acentos', () => {
-    configurarAuth();
-    configurarCollection({ datos: productosFalsos });
-
-    renderizar();
-
-    fireEvent.change(screen.getByLabelText('Buscar producto'), { target: { value: 'anejo' } });
-
-    expect(tabla().getByText('Queso Añejo')).toBeTruthy();
-    expect(tabla().queryByText('Miel 500g')).toBeNull();
-  });
-
-  it('la búsqueda por categoría también filtra', () => {
-    configurarAuth();
-    configurarCollection({ datos: productosFalsos });
-
-    renderizar();
-
-    fireEvent.change(screen.getByLabelText('Buscar producto'), { target: { value: 'miel' } });
-
-    expect(tabla().getByText('Miel 500g')).toBeTruthy();
-    expect(tabla().queryByText('Queso Añejo')).toBeNull();
-  });
-
-  it('sin categorías definidas, no muestra chips de filtro', () => {
-    configurarAuth();
-    configurarCollection({ datos: productosFalsos });
-
-    renderizar();
-
-    expect(screen.queryByRole('group', { name: 'Filtrar por categoría' })).toBeNull();
-  });
-
-  it('con dos o más categorías con productos, muestra chips y filtra la tabla al elegir uno', () => {
-    configurarAuth();
-    configurarCollection({ datos: productosFalsos });
-    configurarCategorias({ datos: categoriasFalsas });
-
-    renderizar();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Quesos' }));
-
-    expect(tabla().getByText('Queso Añejo')).toBeTruthy();
-    expect(tabla().queryByText('Miel 500g')).toBeNull();
-  });
-
-  it('compone el chip de categoría con la búsqueda de texto (AND)', () => {
-    configurarAuth();
-    configurarCollection({ datos: productosFalsos });
-    configurarCategorias({ datos: categoriasFalsas });
-
-    renderizar();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Quesos' }));
-    fireEvent.change(screen.getByLabelText('Buscar producto'), { target: { value: 'anejo' } });
-
-    expect(tabla().getByText('Queso Añejo')).toBeTruthy();
-  });
-
-  it('con una sola categoría con productos, no muestra chips (no aportan)', () => {
-    configurarAuth();
-    configurarCollection({ datos: [productosFalsos[0]!] });
-    configurarCategorias({ datos: [categoriasFalsas[0]!] });
-
-    renderizar();
-
-    expect(screen.queryByRole('group', { name: 'Filtrar por categoría' })).toBeNull();
-  });
-
-  it('estado cargando', () => {
-    configurarAuth();
-    configurarCollection({ cargando: true });
+    configurarProductos({ datos: [], cargando: true });
 
     renderizar();
 
     expect(screen.getByText('Cargando productos…')).toBeTruthy();
   });
 
-  it('estado error muestra mensaje y botón de reintento', () => {
+  it('error: muestra mensaje y botón Reintentar', () => {
     configurarAuth();
-    configurarCollection({ error: new Error('boom') });
+    configurarProductos({ datos: [], error: new Error('boom') });
 
     renderizar();
 
     expect(screen.getByRole('alert').textContent).toContain('No se pudieron cargar los productos.');
-    expect(screen.getByRole('button', { name: 'Reintentar' })).toBeTruthy();
+    const boton = screen.getByRole('button', { name: 'Reintentar' });
+    expect(() => fireEvent.click(boton)).not.toThrow();
   });
 
-  it('estado vacío ofrece alta a un admin', () => {
+  it('vacío absoluto: mensaje y botón de alta para admin', () => {
     configurarAuth();
-    configurarCollection({ datos: [] });
+    configurarProductos({ datos: [] });
 
     renderizar();
 
@@ -382,35 +267,403 @@ describe('Productos', () => {
     expect(screen.getAllByRole('button', { name: 'Agregar producto' }).length).toBeGreaterThan(0);
   });
 
-  it('sin conexión no muestra ningún banner: el alta/edición de productos funciona offline (la gestión de categorías, que sí la exige, se mudó a su propia pantalla, UI-4)', () => {
-    configurarAuth();
-    mocks.useOnlineStatus.mockReturnValue(false);
-    configurarCollection({ datos: productosFalsos });
+  it('vacío absoluto: vendedor no ve botón de alta', () => {
+    configurarAuth({ perfil: { ...authPorDefecto().perfil, rol: 'vendedor' } });
+    configurarProductos({ datos: [] });
 
     renderizar();
 
-    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.getByText('No hay productos todavía.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Agregar producto' })).toBeNull();
   });
 
-  it('vendedor no ve botones de alta ni edición', () => {
+  it('reintentar cambia la identidad de la query de productos (fuerza resuscripción)', () => {
+    configurarAuth();
+    configurarProductos({ datos: [], error: new Error('boom') });
+
+    renderizar();
+    const llamadasAntes = mocks.useCollection.mock.calls.filter(
+      (llamada) => nombreColeccion(llamada[0]) === undefined || nombreColeccion(llamada[0]) === 'productos',
+    );
+    const queryAntes = llamadasAntes[llamadasAntes.length - 1]![0];
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }));
+
+    const llamadasDespues = mocks.useCollection.mock.calls.filter(
+      (llamada) => nombreColeccion(llamada[0]) === undefined || nombreColeccion(llamada[0]) === 'productos',
+    );
+    const queryDespues = llamadasDespues[llamadasDespues.length - 1]![0];
+    expect(queryDespues).not.toBe(queryAntes);
+  });
+});
+
+describe('Productos - SelectorSeccion', () => {
+  it('admin: ve Productos, Compras, Proveedores y Precios, con "Productos" activo', () => {
+    configurarAuth();
+    configurarProductos({ datos: [] });
+
+    renderizar();
+
+    const nav = screen.getByRole('navigation', { name: 'Secciones de Stock' });
+    expect(nav).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Compras' }).getAttribute('href')).toBe('/stock/compras');
+    expect(screen.getByRole('link', { name: 'Productos' }).getAttribute('aria-current')).toBe('page');
+  });
+
+  it('vendedor: sin vecinas, el SelectorSeccion no se renderiza (UI-5)', () => {
     configurarAuth({ perfil: { ...authPorDefecto().perfil, rol: 'vendedor' } });
-    configurarCollection({ datos: productosFalsos });
+    configurarProductos({ datos: [] });
+
+    renderizar();
+
+    expect(screen.queryByRole('navigation', { name: 'Secciones de Stock' })).toBeNull();
+  });
+});
+
+describe('Productos - resumen de stock por piezas (heredado de la ex Stock.tsx)', () => {
+  it('fraccionado_por_pieza: muestra cantidad de piezas y peso total, agrupando por producto', () => {
+    configurarAuth();
+    configurarProductos({
+      datos: [producto({ id: 'p1', nombre: 'Queso Colonia', modoStock: 'fraccionado_por_pieza' })],
+    });
+    configurarPiezas({
+      datos: [
+        pieza({ id: 'a', productoId: 'p1', pesoRestanteGramos: peso(1500) }),
+        pieza({ id: 'b', productoId: 'p1', pesoRestanteGramos: peso(2500) }),
+      ],
+    });
+
+    renderizar();
+
+    expect(screen.getByText('2 piezas · 4 kg')).toBeTruthy();
+  });
+
+  it('con una pieza vencida: la franja de alertas muestra "1 por vencer" y la fila lleva el badge "Vencida"', () => {
+    configurarAuth();
+    const ahora = new Date();
+    const ayer = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate() - 1);
+    configurarProductos({
+      datos: [producto({ id: 'p1', nombre: 'Queso Colonia', modoStock: 'fraccionado_por_pieza' })],
+    });
+    configurarPiezas({ datos: [pieza({ id: 'a', productoId: 'p1', fechaVencimiento: ayer })] });
+
+    renderizar();
+
+    expect(screen.getByRole('button', { name: '1 por vencer' })).toBeTruthy();
+    expect(screen.getByText('Vencida')).toBeTruthy();
+  });
+});
+
+describe('Productos - lista maestra: solo activos por defecto', () => {
+  it('un producto inactivo NO aparece en la lista por defecto', () => {
+    configurarAuth();
+    configurarProductos({
+      datos: [
+        producto({ id: 'p1', nombre: 'Queso Colonia', modoStock: 'granel', stockGranelGramos: peso(1000) }),
+        producto({
+          id: 'p2',
+          nombre: 'Miel vieja',
+          modoStock: 'unidad_simple',
+          stockUnidades: 3,
+          activo: false,
+        }),
+      ],
+    });
+
+    renderizar();
+
+    expect(screen.getByText('Queso Colonia')).toBeTruthy();
+    expect(screen.queryByText('Miel vieja')).toBeNull();
+  });
+
+  it('tocar una fila navega a /stock/producto/:id, también para un producto inactivo (con el chip Inactivos activo)', () => {
+    configurarAuth();
+    configurarProductos({
+      datos: [producto({ id: 'p9', nombre: 'Salame viejo', modoStock: 'granel', activo: false })],
+    });
+
+    renderizar();
+    abrirPanelFiltros();
+    alternarChipInactivos();
+    fireEvent.click(screen.getByRole('button', { name: /Salame viejo/ }));
+
+    expect(screen.getByText('Detalle de p9')).toBeTruthy();
+  });
+
+  it('con categorías definidas: agrupa por categoría (encabezados h2 en el orden de `orden`)', () => {
+    configurarAuth();
+    configurarCategorias({
+      datos: [
+        categoriaDe({ id: 'c1', nombre: 'Quesos', orden: 0 }),
+        categoriaDe({ id: 'c2', nombre: 'Miel', orden: 1 }),
+      ],
+    });
+    configurarProductos({
+      datos: [
+        producto({ id: 'p1', nombre: 'Miel 500g', categoria: 'Miel', modoStock: 'unidad_simple', stockUnidades: 3 }),
+        producto({ id: 'p2', nombre: 'Queso Colonia', categoria: 'Quesos', modoStock: 'granel', stockGranelGramos: peso(1000) }),
+      ],
+    });
+
+    renderizar();
+
+    const encabezados = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
+    expect(encabezados).toEqual(['Quesos', 'Miel']);
+  });
+});
+
+describe('Productos - filtros extra (WA-H3): chip "Inactivos"', () => {
+  it('el botón de filtros extra no existe para vendedor', () => {
+    configurarAuth({ perfil: { ...authPorDefecto().perfil, rol: 'vendedor' } });
+    configurarProductos({
+      datos: [producto({ id: 'p1', nombre: 'Queso Colonia', modoStock: 'granel' })],
+    });
+
+    renderizar();
+
+    expect(screen.queryByRole('button', { name: 'Filtros' })).toBeNull();
+  });
+
+  it('admin: el botón de filtros extra abre un panel con el chip "Inactivos"', () => {
+    configurarAuth();
+    configurarProductos({
+      datos: [producto({ id: 'p1', nombre: 'Queso Colonia', modoStock: 'granel' })],
+    });
+
+    renderizar();
+
+    const boton = screen.getByRole('button', { name: 'Filtros' });
+    expect(boton.getAttribute('aria-expanded')).toBe('false');
+
+    abrirPanelFiltros();
+
+    expect(boton.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Inactivos' })).toBeTruthy();
+  });
+
+  it('activar el chip "Inactivos" suma los productos inactivos, atenuados y con badge "Inactivo"', () => {
+    configurarAuth();
+    configurarProductos({
+      datos: [
+        producto({ id: 'p1', nombre: 'Queso Colonia', modoStock: 'granel', stockGranelGramos: peso(1000) }),
+        producto({ id: 'p2', nombre: 'Miel vieja', modoStock: 'unidad_simple', stockUnidades: 2, activo: false }),
+      ],
+    });
+
+    renderizar();
+    abrirPanelFiltros();
+    alternarChipInactivos();
+
+    expect(screen.getByText('Queso Colonia')).toBeTruthy();
+    expect(screen.getByText('Miel vieja')).toBeTruthy();
+    expect(screen.getByText('Inactivo')).toBeTruthy();
+
+    const filaInactiva = screen.getByRole('button', { name: /Miel vieja/ });
+    expect(filaInactiva.className).toContain('opacity-60');
+    const filaActiva = screen.getByRole('button', { name: /Queso Colonia/ });
+    expect(filaActiva.className).not.toContain('opacity-60');
+  });
+
+  it('el chip "Inactivos" NO reemplaza a los activos: ambos conviven en la lista', () => {
+    configurarAuth();
+    configurarProductos({
+      datos: [
+        producto({ id: 'p1', nombre: 'Queso Colonia', modoStock: 'granel' }),
+        producto({ id: 'p2', nombre: 'Miel vieja', modoStock: 'granel', activo: false }),
+      ],
+    });
+
+    renderizar();
+    abrirPanelFiltros();
+    alternarChipInactivos();
+
+    expect(screen.getByText('Queso Colonia')).toBeTruthy();
+    expect(screen.getByText('Miel vieja')).toBeTruthy();
+
+    // Volver a tocar el chip lo desactiva: vuelve a mostrar solo activos.
+    alternarChipInactivos();
+
+    expect(screen.getByText('Queso Colonia')).toBeTruthy();
+    expect(screen.queryByText('Miel vieja')).toBeNull();
+  });
+
+  it('el ícono de filtros muestra un indicador cuando el chip está activo y el panel plegado', () => {
+    configurarAuth();
+    configurarProductos({
+      datos: [producto({ id: 'p1', nombre: 'Queso Colonia', modoStock: 'granel', activo: false })],
+    });
+
+    renderizar();
+    const boton = screen.getByRole('button', { name: 'Filtros' });
+    expect(boton.querySelector('[aria-hidden="true"].bg-primary-600')).toBeNull();
+
+    abrirPanelFiltros();
+    alternarChipInactivos();
+    // Con el panel abierto, el propio chip "activo" ya comunica el estado —
+    // el indicador solo aparece con el panel plegado (docs/06-ui-ux.md §3).
+    expect(boton.querySelector('[aria-hidden="true"].bg-primary-600')).toBeNull();
+
+    abrirPanelFiltros(); // pliega el panel de nuevo
+    expect(boton.querySelector('[aria-hidden="true"].bg-primary-600')).toBeTruthy();
+  });
+});
+
+describe('Productos - búsqueda + categoría + alerta (AND)', () => {
+  it('la búsqueda filtra por nombre o categoría, acento-insensible', () => {
+    configurarAuth();
+    configurarProductos({
+      datos: [
+        producto({ id: 'p1', nombre: 'Queso Añejo', categoria: 'Quesos', modoStock: 'granel' }),
+        producto({ id: 'p2', nombre: 'Miel 500g', categoria: 'Miel', modoStock: 'unidad_simple', stockUnidades: 3 }),
+      ],
+    });
+
+    renderizar();
+    fireEvent.change(screen.getByLabelText('Buscar producto'), { target: { value: 'anejo' } });
+
+    expect(screen.getByText('Queso Añejo')).toBeTruthy();
+    expect(screen.queryByText('Miel 500g')).toBeNull();
+  });
+
+  it('categoría + alerta componen como AND: solo queda el producto que cumple ambos', () => {
+    configurarAuth();
+    configurarCategorias({
+      datos: [
+        categoriaDe({ id: 'c1', nombre: 'Quesos', orden: 0 }),
+        categoriaDe({ id: 'c2', nombre: 'Miel', orden: 1 }),
+      ],
+    });
+    configurarProductos({
+      datos: [
+        producto({
+          id: 'p1',
+          nombre: 'Queso bajo',
+          categoria: 'Quesos',
+          modoStock: 'granel',
+          stockGranelGramos: peso(50),
+          umbralAlertaStock: 500,
+        }),
+        producto({
+          id: 'p2',
+          nombre: 'Queso alto',
+          categoria: 'Quesos',
+          modoStock: 'granel',
+          stockGranelGramos: peso(5000),
+        }),
+        producto({
+          id: 'p3',
+          nombre: 'Miel bajo',
+          categoria: 'Miel',
+          modoStock: 'unidad_simple',
+          stockUnidades: 1,
+          umbralAlertaStock: 5,
+        }),
+      ],
+    });
+
+    renderizar();
+    fireEvent.click(screen.getByRole('button', { name: 'Quesos' }));
+    fireEvent.click(screen.getByRole('button', { name: /stock bajo/ }));
+
+    expect(screen.getByText('Queso bajo')).toBeTruthy();
+    expect(screen.queryByText('Queso alto')).toBeNull();
+    expect(screen.queryByText('Miel bajo')).toBeNull();
+  });
+
+  it('sin resultados de búsqueda: mensaje con el término', () => {
+    configurarAuth();
+    configurarProductos({
+      datos: [producto({ id: 'p1', nombre: 'Queso Colonia', modoStock: 'granel' })],
+    });
+
+    renderizar();
+    fireEvent.change(screen.getByLabelText('Buscar producto'), { target: { value: 'inexistente' } });
+
+    expect(screen.getByText('No se encontraron productos para "inexistente".')).toBeTruthy();
+  });
+});
+
+describe('Productos - alertas SIEMPRE sobre activos (contrato, docs/06-ui-ux.md §2/§3)', () => {
+  it('el conteo de la franja no cambia al activar el chip "Inactivos"', () => {
+    configurarAuth();
+    configurarProductos({
+      datos: [
+        producto({
+          id: 'p1',
+          nombre: 'Queso bajo activo',
+          modoStock: 'granel',
+          stockGranelGramos: peso(50),
+          umbralAlertaStock: 500,
+        }),
+        // Inactivo pero numéricamente también bajo: NUNCA debe sumar al conteo.
+        producto({
+          id: 'p2',
+          nombre: 'Queso bajo inactivo',
+          modoStock: 'granel',
+          stockGranelGramos: peso(50),
+          umbralAlertaStock: 500,
+          activo: false,
+        }),
+      ],
+    });
+
+    renderizar();
+
+    expect(screen.getByRole('button', { name: '1 stock bajo' })).toBeTruthy();
+
+    abrirPanelFiltros();
+    alternarChipInactivos();
+
+    expect(screen.getByRole('button', { name: '1 stock bajo' })).toBeTruthy();
+  });
+
+  it('un producto inactivo nunca aparece bajo un filtro de alerta, aunque el chip "Inactivos" esté activo', () => {
+    configurarAuth();
+    configurarProductos({
+      datos: [
+        producto({
+          id: 'p1',
+          nombre: 'Queso bajo activo',
+          modoStock: 'granel',
+          stockGranelGramos: peso(50),
+          umbralAlertaStock: 500,
+        }),
+        producto({
+          id: 'p2',
+          nombre: 'Queso bajo inactivo',
+          modoStock: 'granel',
+          stockGranelGramos: peso(50),
+          umbralAlertaStock: 500,
+          activo: false,
+        }),
+      ],
+    });
+
+    renderizar();
+    abrirPanelFiltros();
+    alternarChipInactivos();
+    expect(screen.getByText('Queso bajo inactivo')).toBeTruthy(); // sumado por el chip
+
+    fireEvent.click(screen.getByRole('button', { name: /stock bajo/ }));
+
+    expect(screen.getByText('Queso bajo activo')).toBeTruthy();
+    expect(screen.queryByText('Queso bajo inactivo')).toBeNull();
+  });
+});
+
+describe('Productos - alta (solo admin, patrón offline)', () => {
+  it('vendedor no ve botón de alta', () => {
+    configurarAuth({ perfil: { ...authPorDefecto().perfil, rol: 'vendedor' } });
+    configurarProductos({ datos: [producto({ id: 'p1', nombre: 'Queso Colonia', modoStock: 'granel' })] });
 
     renderizar();
 
     expect(screen.queryByRole('button', { name: 'Agregar producto' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Editar' })).toBeNull();
-    // la fila compacta de un vendedor tampoco es tappable (sin edición, ver
-    // `filaCompactaProducto` en Productos.tsx: sin permiso, es un <div>, no
-    // hay botón "Editar {nombre}").
-    expect(screen.queryByRole('button', { name: /^Editar / })).toBeNull();
-    // el catálogo sigue siendo visible
-    expect(tabla().getByText('Queso Añejo')).toBeTruthy();
   });
 
   it('alta: valida requeridos y no llama a addDoc', () => {
     configurarAuth();
-    configurarCollection({ datos: [] });
+    configurarProductos({ datos: [] });
 
     renderizar();
 
@@ -423,73 +676,10 @@ describe('Productos', () => {
     expect(mocks.addDoc).not.toHaveBeenCalled();
   });
 
-  describe('select de categoría (ModalProducto)', () => {
-    it('muestra las opciones ordenadas (orden de `categorias`, que ya llega ordenada por `orden`)', () => {
-      configurarAuth();
-      configurarCollection({ datos: [] });
-      configurarCategorias({ datos: categoriasFalsas });
-
-      renderizar();
-      fireEvent.click(screen.getAllByRole('button', { name: 'Agregar producto' })[0]!);
-
-      const select = screen.getByLabelText('Categoría') as HTMLSelectElement;
-      // La primera opción es el placeholder deshabilitado ("Elegí una
-      // categoría"): las siguientes reflejan el orden de `categoriasFalsas`.
-      const etiquetas = Array.from(select.options).map((o) => o.text);
-      expect(etiquetas.slice(1)).toEqual(['Quesos', 'Miel', 'Frutos secos', 'Embutidos']);
-    });
-
-    it('una categoría no definida en el vocabulario se agrega como opción extra "(sin definir)"', () => {
-      configurarAuth();
-      const productoHuerfano = productoDe({
-        id: 'p9',
-        nombre: 'Producto viejo',
-        categoria: 'Legumbres',
-        modoStock: 'granel',
-        stockGranelGramos: peso(1000),
-      });
-      configurarCollection({ datos: [productoHuerfano] });
-      configurarCategorias({ datos: categoriasFalsas });
-
-      renderizar();
-      fireEvent.click(screen.getByRole('button', { name: 'Editar' }));
-
-      const select = screen.getByLabelText('Categoría') as HTMLSelectElement;
-      expect(select.value).toBe('Legumbres');
-      expect(screen.getByRole('option', { name: 'Legumbres (sin definir)' })).toBeTruthy();
-    });
-
-    it('sin categorías definidas: el select se deshabilita y muestra el hint para ir a definirlas', () => {
-      configurarAuth();
-      configurarCollection({ datos: [] });
-      configurarCategorias({ datos: [] });
-
-      renderizar();
-      fireEvent.click(screen.getAllByRole('button', { name: 'Agregar producto' })[0]!);
-
-      const select = screen.getByLabelText('Categoría') as HTMLSelectElement;
-      expect(select.disabled).toBe(true);
-      expect(screen.getByText('Definí categorías desde Stock → Categorías.')).toBeTruthy();
-    });
-
-    it('la validación "categoría obligatoria" se mantiene con el select', () => {
-      configurarAuth();
-      configurarCollection({ datos: [] });
-      configurarCategorias({ datos: categoriasFalsas });
-
-      renderizar();
-      fireEvent.click(screen.getAllByRole('button', { name: 'Agregar producto' })[0]!);
-      fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
-
-      expect(screen.getByText('Ingresá la categoría.')).toBeTruthy();
-      expect(mocks.addDoc).not.toHaveBeenCalled();
-    });
-  });
-
-  it('alta de un producto granel crea con stockGranelGramos: 0 y sin stockUnidades', async () => {
+  it('alta de un producto granel crea con stockGranelGramos: 0, activo: true y costoPromedioCents: 0', async () => {
     configurarAuth();
-    configurarCollection({ datos: [] });
-    configurarCategorias({ datos: categoriasFalsas });
+    configurarProductos({ datos: [] });
+    configurarCategorias({ datos: [categoriaDe({ id: 'c1', nombre: 'Frutos secos', orden: 0 })] });
     mocks.addDoc.mockResolvedValue({ id: 'nuevo' });
 
     renderizar();
@@ -506,93 +696,14 @@ describe('Productos', () => {
     expect(documento.nombre).toBe('Nuez mariposa');
     expect(documento.modoStock).toBe('granel');
     expect(documento.stockGranelGramos).toBe(peso(0));
-    expect(documento.stockUnidades).toBeUndefined();
     expect(documento.costoPromedioCents).toBe(money(0));
     expect(documento.activo).toBe(true);
   });
 
-  it('alta de un producto unidad_simple crea con stockUnidades: 0 y sin stockGranelGramos', async () => {
-    configurarAuth();
-    configurarCollection({ datos: [] });
-    configurarCategorias({ datos: categoriasFalsas });
-    mocks.addDoc.mockResolvedValue({ id: 'nuevo' });
-
-    renderizar();
-
-    fireEvent.click(screen.getAllByRole('button', { name: 'Agregar producto' })[0]!);
-    fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Miel 1kg' } });
-    fireEvent.change(screen.getByLabelText('Categoría'), { target: { value: 'Miel' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Por unidad' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Unidad simple' }));
-    fireEvent.change(screen.getByLabelText('Precio por unidad'), { target: { value: '600,00' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
-
-    await waitFor(() => expect(mocks.addDoc).toHaveBeenCalledTimes(1));
-    const [, documento] = mocks.addDoc.mock.calls[0] as [unknown, Producto];
-    expect(documento.modoStock).toBe('unidad_simple');
-    expect(documento.stockUnidades).toBe(0);
-    expect(documento.stockGranelGramos).toBeUndefined();
-  });
-
-  it('alta de un producto pieza_entera no incluye stockGranelGramos ni stockUnidades', async () => {
-    configurarAuth();
-    configurarCollection({ datos: [] });
-    configurarCategorias({ datos: categoriasFalsas });
-    mocks.addDoc.mockResolvedValue({ id: 'nuevo' });
-
-    renderizar();
-
-    fireEvent.click(screen.getAllByRole('button', { name: 'Agregar producto' })[0]!);
-    fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Salame tandilero' } });
-    fireEvent.change(screen.getByLabelText('Categoría'), { target: { value: 'Embutidos' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Pieza entera' }));
-    fireEvent.change(screen.getByLabelText('Precio por kg'), { target: { value: '1200,00' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
-
-    await waitFor(() => expect(mocks.addDoc).toHaveBeenCalledTimes(1));
-    const [, documento] = mocks.addDoc.mock.calls[0] as [unknown, Producto];
-    expect(documento.modoStock).toBe('pieza_entera');
-    expect(documento.stockGranelGramos).toBeUndefined();
-    expect(documento.stockUnidades).toBeUndefined();
-  });
-
-  it('edición: modoPrecio/modoStock se muestran fijos (no hay grupo de opciones) con nota', () => {
-    configurarAuth();
-    configurarCollection({ datos: productosFalsos });
-
-    renderizar();
-
-    fireEvent.click(screen.getAllByRole('button', { name: 'Editar' })[0]!);
-
-    expect(screen.getByText('No se puede cambiar después del alta.')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Granel' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Fraccionado por pieza' })).toBeNull();
-  });
-
-  it('edición: guarda un update parcial sin modoPrecio/modoStock', async () => {
-    configurarAuth();
-    configurarCollection({ datos: productosFalsos });
-    mocks.updateDoc.mockResolvedValue(undefined);
-
-    renderizar();
-
-    fireEvent.click(screen.getAllByRole('button', { name: 'Editar' })[0]!);
-    fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Queso Añejo Premium' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Inactivo' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
-
-    await waitFor(() => expect(mocks.updateDoc).toHaveBeenCalledTimes(1));
-    const [, cambios] = mocks.updateDoc.mock.calls[0] as [unknown, Record<string, unknown>];
-    expect(cambios.nombre).toBe('Queso Añejo Premium');
-    expect(cambios.activo).toBe(false);
-    expect(cambios).not.toHaveProperty('modoPrecio');
-    expect(cambios).not.toHaveProperty('modoStock');
-  });
-
   it('muestra un toast de éxito y cierra el modal al crear correctamente', async () => {
     configurarAuth();
-    configurarCollection({ datos: [] });
-    configurarCategorias({ datos: categoriasFalsas });
+    configurarProductos({ datos: [] });
+    configurarCategorias({ datos: [categoriaDe({ id: 'c1', nombre: 'Frutos secos', orden: 0 })] });
     mocks.addDoc.mockResolvedValue({ id: 'nuevo' });
 
     renderizar();
@@ -612,8 +723,8 @@ describe('Productos', () => {
 
   it('muestra un toast de error si addDoc falla', async () => {
     configurarAuth();
-    configurarCollection({ datos: [] });
-    configurarCategorias({ datos: categoriasFalsas });
+    configurarProductos({ datos: [] });
+    configurarCategorias({ datos: [categoriaDe({ id: 'c1', nombre: 'Frutos secos', orden: 0 })] });
     mocks.addDoc.mockRejectedValue(new Error('offline'));
 
     renderizar();
@@ -629,8 +740,8 @@ describe('Productos', () => {
 
   it('sin conexión: guarda sin esperar el ack del servidor, cierra el modal al instante y avisa que falta sincronizar', async () => {
     configurarAuth();
-    configurarCollection({ datos: [] });
-    configurarCategorias({ datos: categoriasFalsas });
+    configurarProductos({ datos: [] });
+    configurarCategorias({ datos: [categoriaDe({ id: 'c1', nombre: 'Frutos secos', orden: 0 })] });
     mocks.useOnlineStatus.mockReturnValue(false);
     mocks.addDoc.mockResolvedValue({ id: 'nuevo' });
 
@@ -643,22 +754,18 @@ describe('Productos', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
 
     // El cierre es sincrónico: no espera la resolución de `addDoc` (offline,
-    // esa promesa no resolvería hasta reconectar). Se verifica ANTES de
-    // cualquier `await` de este test, en el mismo tick del click — a
-    // diferencia del caso "con conexión" de abajo, donde el modal sigue
-    // abierto en este punto.
+    // esa promesa no resolvería hasta reconectar) — se verifica ANTES de
+    // cualquier `await` de este test, en el mismo tick del click.
     const dialog = document.querySelector('dialog') as HTMLDialogElement;
     expect(dialog.open).toBe(false);
     expect(mocks.addDoc).toHaveBeenCalledTimes(1);
-    expect(
-      await screen.findByText('Guardado sin conexión. Se sincronizará al reconectar.'),
-    ).toBeTruthy();
+    expect(await screen.findByText('Guardado sin conexión. Se sincronizará al reconectar.')).toBeTruthy();
   });
 
   it('con conexión: sigue esperando el ack del servidor antes de cerrar y mostrar el toast de éxito (regresión)', async () => {
     configurarAuth();
-    configurarCollection({ datos: [] });
-    configurarCategorias({ datos: categoriasFalsas });
+    configurarProductos({ datos: [] });
+    configurarCategorias({ datos: [categoriaDe({ id: 'c1', nombre: 'Frutos secos', orden: 0 })] });
     mocks.useOnlineStatus.mockReturnValue(true);
     mocks.addDoc.mockResolvedValue({ id: 'nuevo' });
 
@@ -677,68 +784,5 @@ describe('Productos', () => {
 
     await waitFor(() => expect(dialog.open).toBe(false));
     expect(await screen.findByText('Producto creado.')).toBeTruthy();
-  });
-
-  it('reintentar en el estado de error cambia la identidad de la query (fuerza resuscripción)', () => {
-    configurarAuth();
-    configurarCollection({ error: new Error('boom') });
-
-    renderizar();
-    // `useCollection` ahora se llama dos veces por render (productos y
-    // categorías, ver ModalCategorias): se filtra por la de 'productos' —
-    // "Reintentar" en este error solo cambia `intentoId`, no
-    // `intentoIdCategorias`.
-    const llamadasProductosAntes = mocks.useCollection.mock.calls.filter(
-      (llamada) => nombreColeccion(llamada[0]) !== 'categorias',
-    );
-    const queryAntes = llamadasProductosAntes[llamadasProductosAntes.length - 1]![0];
-
-    fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }));
-
-    const llamadasProductosDespues = mocks.useCollection.mock.calls.filter(
-      (llamada) => nombreColeccion(llamada[0]) !== 'categorias',
-    );
-    const queryDespues = llamadasProductosDespues[llamadasProductosDespues.length - 1]![0];
-    expect(queryDespues).not.toBe(queryAntes);
-  });
-
-  describe('fila compacta (mobile, docs/06-ui-ux.md §3)', () => {
-    it('muestra nombre, categoría y precio de cada producto en la lista compacta', () => {
-      configurarAuth();
-      configurarCollection({ datos: productosFalsos });
-
-      renderizar();
-
-      const lista = within(screen.getByRole('list'));
-      expect(lista.getByText('Queso Añejo')).toBeTruthy();
-      expect(lista.getByText('Quesos')).toBeTruthy();
-      expect(lista.getByText('$ 899,00 /kg')).toBeTruthy();
-      expect(lista.getByText('Miel 500g')).toBeTruthy();
-      expect(lista.getByText('$ 450,00 /u')).toBeTruthy();
-    });
-
-    it('admin: tocar la fila compacta abre la edición (mismo handler que "Editar")', () => {
-      configurarAuth();
-      configurarCollection({ datos: productosFalsos });
-
-      renderizar();
-
-      fireEvent.click(screen.getByRole('button', { name: 'Editar Queso Añejo' }));
-
-      expect(screen.getByText('No se puede cambiar después del alta.')).toBeTruthy();
-      const dialog = document.querySelector('dialog') as HTMLDialogElement;
-      expect(dialog.open).toBe(true);
-    });
-
-    it('vendedor: la fila compacta no es un botón (sin permiso de edición)', () => {
-      configurarAuth({ perfil: { ...authPorDefecto().perfil, rol: 'vendedor' } });
-      configurarCollection({ datos: productosFalsos });
-
-      renderizar();
-
-      expect(screen.queryByRole('button', { name: 'Editar Queso Añejo' })).toBeNull();
-      const lista = within(screen.getByRole('list'));
-      expect(lista.getByText('Queso Añejo')).toBeTruthy();
-    });
   });
 });

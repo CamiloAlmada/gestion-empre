@@ -142,14 +142,13 @@ describe('Proveedores', () => {
     expect(screen.getAllByRole('button', { name: 'Agregar proveedor' }).length).toBeGreaterThan(0);
   });
 
-  it('muestra el SelectorSeccion con Stock, Catálogo y Proveedores activo', () => {
+  it('muestra el SelectorSeccion con Productos, Compras, Proveedores y Precios; Proveedores activo (UI-5)', () => {
     configurarCollection({ datos: [] });
 
     renderizar();
 
     expect(screen.getByRole('navigation', { name: 'Secciones de Stock' })).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Stock' }).getAttribute('href')).toBe('/stock');
-    expect(screen.getByRole('link', { name: 'Catálogo' }).getAttribute('href')).toBe('/stock/productos');
+    expect(screen.getByRole('link', { name: 'Productos' }).getAttribute('href')).toBe('/stock');
     expect(screen.getByRole('link', { name: 'Proveedores' }).getAttribute('aria-current')).toBe('page');
   });
 
