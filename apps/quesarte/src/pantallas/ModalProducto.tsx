@@ -1,20 +1,17 @@
 import { useEffect, useId, useState } from 'react';
-import { Button, Input, Modal, MoneyInput } from '@gestion/ui';
+import { Link } from 'react-router';
+import { Button, Input, Modal, MoneyInput, useToasts } from '@gestion/ui';
 import type { Categoria, ModoPrecio, ModoStock, Money, Producto } from '@gestion/core';
+import {
+  CategoriaDuplicadaError,
+  CategoriaInvalidaError,
+  crearCategoria,
+  useOnlineStatus,
+} from '@gestion/firebase-kit';
+import { db } from '../firebase';
+import { ETIQUETAS_MODO_PRECIO, ETIQUETAS_MODO_STOCK } from '../componentes/stock/etiquetasProducto';
 
-/** Etiquetas en español de `modoPrecio` (docs/02-dominio-quesarte.md). */
-export const ETIQUETAS_MODO_PRECIO: Record<ModoPrecio, string> = {
-  por_kg: 'Por kg',
-  por_unidad: 'Por unidad',
-};
-
-/** Etiquetas en español de `modoStock` (docs/02-dominio-quesarte.md). */
-export const ETIQUETAS_MODO_STOCK: Record<ModoStock, string> = {
-  fraccionado_por_pieza: 'Fraccionado por pieza',
-  pieza_entera: 'Pieza entera',
-  granel: 'Granel',
-  unidad_simple: 'Unidad simple',
-};
+export { ETIQUETAS_MODO_PRECIO, ETIQUETAS_MODO_STOCK };
 
 const OPCIONES_MODO_PRECIO: { valor: ModoPrecio; etiqueta: string }[] = [
   { valor: 'por_kg', etiqueta: ETIQUETAS_MODO_PRECIO.por_kg },
@@ -28,28 +25,48 @@ const OPCIONES_MODO_STOCK: { valor: ModoStock; etiqueta: string }[] = [
   { valor: 'unidad_simple', etiqueta: ETIQUETAS_MODO_STOCK.unidad_simple },
 ];
 
-/** Datos validados que salen del formulario. `Productos.tsx` decide, según
- * alta o edición, qué campos efectivamente escribe (ver `crearProducto` /
- * `actualizarProducto`): modoPrecio/modoStock solo se usan en alta. */
-export interface DatosProductoFormulario {
+/**
+ * Datos validados que salen del formulario, discriminados por `tipo`
+ * (UI-5b, docs/06-ui-ux.md §2): el ALTA sigue emitiendo `modoPrecio`/
+ * `modoStock`/`precioVentaCents` REQUERIDOS (`crearProducto` los necesita
+ * para construir el documento); la EDICIÓN ni siquiera los tiene en su tipo
+ * — no se recolectan en el formulario. El precio se fija en el alta y se
+ * cambia SOLO en la sección Precios (costo y margen a la vista ahí): la
+ * edición de la ficha nunca lo escribe, cierra el doble camino de escritura
+ * que había entre el modal de catálogo y el de precios. El llamador narrowea
+ * por `datos.tipo` antes de invocar `crearProducto`/`actualizarProducto` (ver
+ * `Productos.tsx`/`DetalleProductoPantalla.tsx`).
+ */
+export interface DatosAltaProducto {
+  tipo: 'alta';
   nombre: string;
   categoria: string;
   modoPrecio: ModoPrecio;
   modoStock: ModoStock;
   precioVentaCents: Money;
   umbralAlertaStock?: number;
+}
+
+export interface DatosEdicionProducto {
+  tipo: 'edicion';
+  nombre: string;
+  categoria: string;
+  umbralAlertaStock?: number;
   activo: boolean;
 }
 
+export type DatosProductoFormulario = DatosAltaProducto | DatosEdicionProducto;
+
 export interface ModalProductoProps {
   abierto: boolean;
-  /** `null` = alta. Con producto, `modoPrecio`/`modoStock` quedan fijos. */
+  /** `null` = alta. Con producto, `modoPrecio`/`modoStock`/precio quedan fijos
+   * (no se muestran ni se editan acá). */
   producto: Producto | null;
   /** `true` mientras `onGuardar` está resolviendo (deshabilita los botones). */
   guardando: boolean;
-  /** Vocabulario vigente, YA ordenado por `orden` (arma la query
-   * `Productos.tsx`, ver `ModalCategorias`). Opciones del select de
-   * categoría. */
+  /** Vocabulario vigente, YA ordenado por `orden` (arma la query el
+   * llamador). Opciones del select de categoría — se actualiza solo vía la
+   * `useCollection` del padre cuando se crea una categoría nueva acá adentro. */
   categorias: Categoria[];
   onGuardar: (datos: DatosProductoFormulario) => void;
   onCerrar: () => void;
@@ -104,15 +121,32 @@ function GrupoOpciones<T extends string>({
   );
 }
 
+/** Valor centinela de la opción "+ Nueva categoría…" del select: nunca puede
+ * chocar con un nombre real (el select solo ofrece nombres `trim()`eados no
+ * vacíos como opciones normales). */
+const VALOR_NUEVA_CATEGORIA = '__crear_categoria__';
+
 interface CampoCategoriaProps {
+  /** Se resetea el sub-formulario de creación cada vez que el modal (padre)
+   * pasa a abierto — mismo criterio que el resto de los campos de
+   * `ModalProducto`, ver su propio `useEffect`. */
+  abierto: boolean;
   categorias: Categoria[];
   value: string;
   onChange: (valor: string) => void;
   error?: string;
+  /** Cierra el modal entero: lo dispara el link "Gestionar categorías" antes
+   * de navegar (docs/06-ui-ux.md §2, picker de categoría). */
+  onCerrarModal: () => void;
 }
 
 /**
- * Select nativo de categoría (reemplaza el `Input` de texto libre — CAT-2).
+ * Select nativo de categoría (reemplaza el `Input` de texto libre — CAT-2)
+ * con creación inline (UI-5b, docs/06-ui-ux.md §2, "Picker de categoría con
+ * creación inline" — condición del dueño al aprobar la mudanza de Categorías
+ * a Ajustes: el momento de necesidad real de dar de alta un producto NUNCA
+ * obliga a salir del flujo para crear la categoría que falta).
+ *
  * No `SearchSelect`: el vocabulario esperado del negocio es un puñado de
  * categorías (Quesos, Embutidos, Miel, Frutos secos, Especias…), muy por
  * debajo de donde un combobox con filtro empieza a pagar su complejidad; el
@@ -126,14 +160,125 @@ interface CampoCategoriaProps {
  * histórico todavía no migrado): se agrega como opción extra "(sin
  * definir)" para no perder el valor ni bloquear la edición del resto del
  * producto.
+ *
+ * Elegir "+ Nueva categoría…" cambia a un sub-formulario (nombre + Crear/
+ * Cancelar) SIN tocar `value` todavía: recién al crear con éxito se
+ * selecciona la categoría nueva (por nombre) y se vuelve al select — la
+ * lista viva llega sola por la `useCollection` del padre, no hace falta
+ * refrescar nada acá. "Cancelar" vuelve al select dejando `value` como
+ * estaba (no crea nada).
  */
-function CampoCategoria({ categorias, value, onChange, error }: CampoCategoriaProps) {
+function CampoCategoria({ abierto, categorias, value, onChange, error, onCerrarModal }: CampoCategoriaProps) {
   const id = useId();
   const idError = `${id}-error`;
   const idHint = `${id}-hint`;
+  const enLinea = useOnlineStatus();
+  const { mostrarToast } = useToasts();
+
+  const [modo, setModo] = useState<'select' | 'crear'>('select');
+  const [nombreNuevo, setNombreNuevo] = useState('');
+  const [creando, setCreando] = useState(false);
+  const [errorCrear, setErrorCrear] = useState<string | undefined>();
+
+  // Mismo criterio que `ModalProducto`: el sub-formulario de creación vuelve
+  // a su estado inicial cada vez que el modal se reabre, no solo al montar.
+  useEffect(() => {
+    if (!abierto) return;
+    setModo('select');
+    setNombreNuevo('');
+    setErrorCrear(undefined);
+    setCreando(false);
+  }, [abierto]);
 
   const huerfana = value !== '' && !categorias.some((c) => c.nombre === value);
-  const sinOpciones = categorias.length === 0 && !huerfana;
+
+  function handleChangeSelect(valor: string) {
+    if (valor === VALOR_NUEVA_CATEGORIA) {
+      setModo('crear');
+      setNombreNuevo('');
+      setErrorCrear(undefined);
+      return;
+    }
+    onChange(valor);
+  }
+
+  function cancelarCreacion() {
+    setModo('select');
+    setNombreNuevo('');
+    setErrorCrear(undefined);
+  }
+
+  /**
+   * Mismo patrón híbrido de escrituras offline del proyecto
+   * (docs/06-ui-ux.md §8): en línea espera el ack antes de avisar (y ahí sí
+   * puede mostrar el error de validación/duplicado INLINE, en el campo,
+   * porque la respuesta ya está). Sin conexión, dispara sin `await` (el
+   * `getDocs` interno de `crearCategoria` resuelve de caché al toque, pero
+   * el `setDoc` final no confirma hasta reconectar — mismo motivo que
+   * cualquier otra escritura del proyecto), selecciona el nombre tipeado
+   * OPTIMISTAMENTE y avisa con un toast que falta sincronizar; un `.catch`
+   * tardío cubre que el server la rechace al reconectar (p. ej. una
+   * categoría duplicada creada mientras tanto desde otro dispositivo).
+   */
+  async function handleCrear() {
+    const nombreLimpio = nombreNuevo.trim();
+    if (nombreLimpio === '') {
+      setErrorCrear('Ingresá el nombre de la categoría.');
+      return;
+    }
+    setErrorCrear(undefined);
+
+    const escritura = crearCategoria(db, nombreLimpio);
+
+    if (!enLinea) {
+      onChange(nombreLimpio);
+      setModo('select');
+      setNombreNuevo('');
+      mostrarToast('Guardado sin conexión. Se sincronizará al reconectar.', 'info');
+      escritura.catch(() => mostrarToast('No se pudo sincronizar la categoría creada.', 'error'));
+      return;
+    }
+
+    setCreando(true);
+    try {
+      await escritura;
+      onChange(nombreLimpio);
+      setModo('select');
+      setNombreNuevo('');
+      mostrarToast('Categoría creada.', 'exito');
+    } catch (err) {
+      if (err instanceof CategoriaDuplicadaError || err instanceof CategoriaInvalidaError) {
+        setErrorCrear(err.message);
+      } else {
+        mostrarToast('No se pudo crear la categoría. Intentá de nuevo.', 'error');
+      }
+    } finally {
+      setCreando(false);
+    }
+  }
+
+  if (modo === 'crear') {
+    return (
+      <div className="flex flex-col gap-2 rounded-elemento border border-borde p-3">
+        <Input
+          label="Nombre de la nueva categoría"
+          value={nombreNuevo}
+          onChange={setNombreNuevo}
+          error={errorCrear}
+          disabled={creando}
+          placeholder="Ej: Especias"
+        />
+        <div className="flex justify-end gap-2">
+          <Button variante="secundaria" onClick={cancelarCreacion} disabled={creando}>
+            Cancelar
+          </Button>
+          <Button onClick={() => void handleCrear()} disabled={creando}>
+            {creando ? 'Creando…' : 'Crear'}
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-1">
@@ -143,11 +288,10 @@ function CampoCategoria({ categorias, value, onChange, error }: CampoCategoriaPr
       <select
         id={id}
         value={value}
-        onChange={(e) => onChange(e.target.value)}
-        disabled={sinOpciones}
+        onChange={(e) => handleChangeSelect(e.target.value)}
         aria-invalid={error !== undefined ? true : undefined}
-        aria-describedby={error !== undefined ? idError : sinOpciones ? idHint : undefined}
-        className={`min-h-11 rounded-control border bg-superficie px-3 py-2 text-texto outline-none focus-visible:ring-2 focus-visible:ring-primary-600 disabled:bg-fondo disabled:text-texto-secundario ${
+        aria-describedby={error !== undefined ? idError : categorias.length === 0 ? idHint : undefined}
+        className={`min-h-11 rounded-control border bg-superficie px-3 py-2 text-texto outline-none focus-visible:ring-2 focus-visible:ring-primary-600 ${
           error ? 'border-peligro' : 'border-borde'
         }`}
       >
@@ -160,18 +304,26 @@ function CampoCategoria({ categorias, value, onChange, error }: CampoCategoriaPr
           </option>
         ))}
         {huerfana && <option value={value}>{value} (sin definir)</option>}
+        <option value={VALOR_NUEVA_CATEGORIA}>+ Nueva categoría…</option>
       </select>
       {error !== undefined ? (
         <p id={idError} className="text-sm text-peligro">
           {error}
         </p>
       ) : (
-        sinOpciones && (
+        categorias.length === 0 && (
           <p id={idHint} className="text-sm text-texto-secundario">
-            Definí categorías desde Stock → Categorías.
+            Todavía no hay categorías: creá la primera con "+ Nueva categoría…".
           </p>
         )
       )}
+      <Link
+        to="/ajustes/categorias"
+        onClick={onCerrarModal}
+        className="self-start text-sm font-medium text-primary-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 dark:text-primary-300"
+      >
+        Gestionar categorías
+      </Link>
     </div>
   );
 }
@@ -184,7 +336,9 @@ function CampoCategoria({ categorias, value, onChange, error }: CampoCategoriaPr
  *
  * `modoPrecio`/`modoStock` solo son editables en alta: cambiarlos con stock
  * vivo corrompería el inventario (piezas y stock agregado ya creados bajo el
- * modo anterior). En edición se muestran como texto fijo.
+ * modo anterior). En edición se muestran como texto fijo. El PRECIO
+ * directamente no se muestra en edición (docs/06-ui-ux.md §2, UI-5b): se
+ * fija en el alta y se cambia solo en la sección Precios.
  */
 export function ModalProducto({
   abierto,
@@ -215,7 +369,8 @@ export function ModalProducto({
     setCategoria(producto?.categoria ?? '');
     setModoPrecio(producto?.modoPrecio ?? 'por_kg');
     setModoStock(producto?.modoStock ?? 'fraccionado_por_pieza');
-    setPrecio(producto?.precioVentaCents ?? null);
+    // Solo relevante en alta: la edición no muestra ni valida precio.
+    setPrecio(null);
     setUmbralTexto(producto?.umbralAlertaStock !== undefined ? String(producto.umbralAlertaStock) : '');
     setActivo(producto?.activo ?? true);
     setErrores({});
@@ -228,7 +383,7 @@ export function ModalProducto({
 
     if (nombreLimpio === '') nuevosErrores.nombre = 'Ingresá el nombre del producto.';
     if (categoriaLimpia === '') nuevosErrores.categoria = 'Ingresá la categoría.';
-    if (precio === null) nuevosErrores.precio = 'Ingresá el precio de venta.';
+    if (esAlta && precio === null) nuevosErrores.precio = 'Ingresá el precio de venta.';
 
     let umbral: number | undefined;
     const umbralLimpio = umbralTexto.trim();
@@ -243,15 +398,25 @@ export function ModalProducto({
     setErrores(nuevosErrores);
     if (Object.keys(nuevosErrores).length > 0) return null;
 
+    if (esAlta) {
+      return {
+        tipo: 'alta',
+        nombre: nombreLimpio,
+        categoria: categoriaLimpia,
+        modoPrecio,
+        modoStock,
+        // Validado arriba: si llegamos acá, precio no es null.
+        precioVentaCents: precio as Money,
+        umbralAlertaStock: umbral,
+      };
+    }
+
     return {
+      tipo: 'edicion',
       nombre: nombreLimpio,
       categoria: categoriaLimpia,
-      modoPrecio,
-      modoStock,
-      // Validado arriba: si llegamos acá, precio no es null.
-      precioVentaCents: precio as Money,
       umbralAlertaStock: umbral,
-      activo: esAlta ? true : activo,
+      activo,
     };
   }
 
@@ -281,10 +446,12 @@ export function ModalProducto({
       <div className="flex flex-col gap-4">
         <Input label="Nombre" value={nombre} onChange={setNombre} error={errores.nombre} />
         <CampoCategoria
+          abierto={abierto}
           categorias={categorias}
           value={categoria}
           onChange={setCategoria}
           error={errores.categoria}
+          onCerrarModal={onCerrar}
         />
 
         {esAlta ? (
@@ -315,7 +482,12 @@ export function ModalProducto({
           </div>
         )}
 
-        <MoneyInput label={etiquetaPrecio} value={precio} onChange={setPrecio} error={errores.precio} />
+        {/* Precio SOLO en alta (docs/06-ui-ux.md §2, UI-5b): se fija acá y se
+            cambia SOLO desde la sección Precios (costo y margen a la vista
+            ahí) — la edición de la ficha nunca lo muestra ni lo escribe. */}
+        {esAlta && (
+          <MoneyInput label={etiquetaPrecio} value={precio} onChange={setPrecio} error={errores.precio} />
+        )}
 
         <Input
           label="Umbral de alerta de stock (opcional)"

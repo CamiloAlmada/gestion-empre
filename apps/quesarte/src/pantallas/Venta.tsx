@@ -417,7 +417,7 @@ export function Venta() {
       <div className="flex flex-col items-center gap-3 rounded-card border border-borde bg-superficie p-8 text-center">
         <p className="text-texto-secundario">Sin productos — creá el catálogo primero.</p>
         <Link
-          to="/stock/productos"
+          to="/stock"
           className="inline-flex min-h-[44px] items-center justify-center rounded-control bg-primary-600 px-4 font-medium text-white hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2 focus-visible:ring-offset-superficie"
         >
           Ir a Productos

@@ -1,7 +1,8 @@
-import { formatearPeso, type MovimientoStock, type Pieza, type Producto } from '@gestion/core';
+import { formatearPeso, peso, type MovimientoStock, type Pieza, type Producto } from '@gestion/core';
 import type { EstadoCollection } from '@gestion/firebase-kit';
 import { DataTable, type ColumnaDataTable } from '@gestion/ui';
 import { BadgeStock } from './BadgeStock';
+import { ETIQUETAS_MODO_PRECIO, ETIQUETAS_MODO_STOCK } from './etiquetasProducto';
 import {
   estadoVencimiento,
   etiquetaTipoMovimiento,
@@ -20,12 +21,95 @@ export interface DetalleProductoProps {
   estadoMovimientos: EstadoCollection<MovimientoStock>;
   esAdmin: boolean;
   onAjustarPieza: (pieza: Pieza) => void;
+  /** Abre `ModalProducto` en modo edición (UI-5b, docs/06-ui-ux.md §2): el
+   * botón "Editar" de la ficha de configuración lo dispara — el llamador
+   * (`DetalleProductoPantalla`) es quien monta el modal. */
+  onEditar: () => void;
 }
 
 // min-h-[44px]: target táctil mínimo (docs/06-ui-ux.md §5), aunque la celda
 // de DataTable ya suma su propio padding alrededor.
 const CLASE_BOTON_FILA =
   'inline-flex min-h-[44px] items-center justify-center rounded-control border border-borde px-3 text-sm font-medium text-texto hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600';
+
+/** Punto de color + texto ("Activo"/"Inactivo"): nada se comunica solo por
+ * color (docs/06-ui-ux.md §5). Reintroducido acá tras la fusión UI-5b — vivía
+ * en la ex `Productos.tsx`/Catálogo (con `DataTable`) hasta que UI-5a la
+ * quitó del listado; el detalle es ahora el único lugar que necesita
+ * mostrar el estado del producto. */
+function IndicadorEstado({ activo }: { activo: boolean }) {
+  return (
+    <span className="flex items-center gap-2 text-sm text-texto">
+      <span aria-hidden="true" className={`h-2 w-2 rounded-full ${activo ? 'bg-exito' : 'bg-texto-secundario'}`} />
+      {activo ? 'Activo' : 'Inactivo'}
+    </span>
+  );
+}
+
+/** Texto del umbral de alerta con su unidad, según `modoStock`
+ * (`umbralAlertaStock` es gramos o unidades — docs/02-dominio-quesarte.md,
+ * ver `stockBajo` en `resumen.ts`): `unidad_simple` cuenta unidades, el
+ * resto (piezas y granel) pesa en gramos/kg. */
+function textoUmbral(producto: Producto): string {
+  const umbral = producto.umbralAlertaStock;
+  if (umbral === undefined) return '';
+  if (producto.modoStock === 'unidad_simple') {
+    return `${umbral} ${umbral === 1 ? 'unidad' : 'unidades'}`;
+  }
+  return formatearPeso(peso(umbral));
+}
+
+/**
+ * Ficha de configuración del producto (UI-5b, docs/06-ui-ux.md §2: "el
+ * detalle del producto es el hub único"): categoría, modo, umbral (si tiene)
+ * y estado — visible para CUALQUIER rol (es información de catálogo, no un
+ * dato sensible). El botón "Editar" es SOLO admin e INLINE acá (no en el
+ * cluster flotante del header: ese ya usa sus 2 acciones de stock).
+ */
+function FichaConfiguracion({
+  producto,
+  esAdmin,
+  onEditar,
+}: {
+  producto: Producto;
+  esAdmin: boolean;
+  onEditar: () => void;
+}) {
+  const umbral = textoUmbral(producto);
+  return (
+    <section
+      aria-labelledby="ficha-configuracion-titulo"
+      className="flex flex-col gap-2 rounded-card border border-borde bg-superficie p-4"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <h2 id="ficha-configuracion-titulo" className="text-lg font-semibold text-texto">
+          Configuración
+        </h2>
+        {esAdmin && (
+          <button type="button" onClick={onEditar} className={CLASE_BOTON_FILA}>
+            Editar
+          </button>
+        )}
+      </div>
+      <p className="text-texto">
+        <span className="font-medium">Categoría:</span> {producto.categoria}
+      </p>
+      <p className="text-texto">
+        <span className="font-medium">Modo:</span> {ETIQUETAS_MODO_PRECIO[producto.modoPrecio]} ·{' '}
+        {ETIQUETAS_MODO_STOCK[producto.modoStock]}
+      </p>
+      {umbral !== '' && (
+        <p className="text-texto">
+          <span className="font-medium">Umbral de alerta:</span> {umbral}
+        </p>
+      )}
+      <div className="flex items-center gap-2">
+        <span className="font-medium text-texto">Estado:</span>
+        <IndicadorEstado activo={producto.activo} />
+      </div>
+    </section>
+  );
+}
 
 /**
  * Detalle de stock de UN producto, montado en su propia ruta
@@ -37,7 +121,9 @@ const CLASE_BOTON_FILA =
  * (ingresar piezas, sumar stock, ajuste/merma) también viven en el header
  * (hasta 2 acciones, docs/06-ui-ux.md §2); acá solo queda el ajuste POR
  * PIEZA (`onAjustarPieza`), una acción de fila que no tiene sentido en el
- * header.
+ * header. La ficha de configuración (`FichaConfiguracion`, categoría/modo/
+ * umbral/estado + "Editar" solo-admin inline) SÍ vive acá, arriba de todo —
+ * es el hub único del producto (UI-5b, docs/06-ui-ux.md §2).
  */
 export function DetalleProducto({
   producto,
@@ -46,6 +132,7 @@ export function DetalleProducto({
   estadoMovimientos,
   esAdmin,
   onAjustarPieza,
+  onEditar,
 }: DetalleProductoProps) {
   const esPorPieza = resumen.tipo === 'piezas';
 
@@ -174,6 +261,8 @@ export function DetalleProducto({
 
   return (
     <div className="flex flex-col gap-4">
+      <FichaConfiguracion producto={producto} esAdmin={esAdmin} onEditar={onEditar} />
+
       <p className="text-texto-secundario">{textoResumen(resumen)}</p>
 
       {esPorPieza ? (

@@ -19,7 +19,7 @@ import { ListaProductosAgrupada } from '../componentes/stock/ListaProductosAgrup
 import { agruparPiezasPorProducto, calcularResumen, type ResumenStock } from '../componentes/stock/resumen';
 import { IconoFiltros } from '../componentes/iconos';
 import { useHeader } from '../componentes/header/ContextoHeader';
-import { ModalProducto, type DatosProductoFormulario } from './ModalProducto';
+import { ModalProducto, type DatosAltaProducto, type DatosProductoFormulario } from './ModalProducto';
 
 const coleccionProductos = collection(db, 'productos').withConverter(productoConverter);
 const coleccionCategorias = collection(db, 'categorias').withConverter(categoriaConverter);
@@ -41,7 +41,7 @@ const CLASE_ACCION_PRIMARIA =
  * detalle del producto), y `activo: true`. `id` es un valor ficticio: el
  * converter nunca lo persiste (lo asigna Firestore) — ver producto.test.ts.
  */
-async function crearProducto(datos: DatosProductoFormulario): Promise<void> {
+async function crearProducto(datos: DatosAltaProducto): Promise<void> {
   const camposStock: Partial<Producto> =
     datos.modoStock === 'granel'
       ? { stockGranelGramos: peso(0) }
@@ -255,6 +255,11 @@ export function Productos() {
    * cubre el caso borde de que el servidor la rechace al reconectar.
    */
   async function handleGuardar(datos: DatosProductoFormulario) {
+    // Este flujo es alta-only (`producto={null}` siempre, ver el
+    // `ModalProducto` de abajo): narrowea el tipo — `ModalProducto` nunca
+    // emite `'edicion'` acá, pero TS no lo sabe por la sola firma de
+    // `onGuardar` (compartida con la edición del detalle, UI-5b).
+    if (datos.tipo !== 'alta') return;
     const escritura = crearProducto(datos);
 
     if (!enLinea) {
