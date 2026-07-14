@@ -339,6 +339,15 @@ derivado con fallback de lectura, colección `configuracion` con
 plantillas (semi), WA-C2 botones WhatsApp + lista de inactivos + privacidad
 del teléfono (semi), WA-D seed demo (semi), review integral senior.
 
+CANDIDATO post-elicitación (idea del dueño, 2026-07-14 — llevar a la sesión
+con Adrián, doc 10): plantillas de WhatsApp más potentes — ABM de plantillas
+nuevas (hoy solo se editan/restauran las del seed), más placeholders
+disponibles, y selección context-aware del tipo de mensaje: desde la ficha
+del cliente se elige entre las genéricas; desde una venta se ofrece
+directamente la de venta. Nota técnica: la mitad ya existe (las plantillas
+tienen campo `contexto` y `BotonWhatsApp` ya filtra por él); lo nuevo es el
+ABM, los placeholders extra y el selector en la ficha.
+
 POSPUESTO hasta después de la demo: doc 09 §B borradores, §C insumos, §D
 fotos (doc aún no versionado en el repo) y cualquier trabajo nuevo de
 proveedores del doc 07 (la parte ya en producción queda como está). El doc 09
