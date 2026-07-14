@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router';
+import { MemoryRouter, Route, Routes, useParams } from 'react-router';
 import type { FirestoreError } from 'firebase/firestore';
 import { money, type Cliente, type Venta } from '@gestion/core';
 import { ProveedorToasts } from '@gestion/ui';
@@ -119,6 +119,13 @@ function VisorHeader() {
   );
 }
 
+/** Pantalla de destino de prueba para verificar la navegación NAV-2b (fila
+ * de venta tocable → `/historial/venta/:id`). */
+function DetalleVentaFalso() {
+  const { id } = useParams<{ id: string }>();
+  return <p>Detalle de venta {id}</p>;
+}
+
 function renderizar(id = 'c1') {
   return render(
     <MemoryRouter initialEntries={[`/clientes/cliente/${id}`]}>
@@ -127,6 +134,7 @@ function renderizar(id = 'c1') {
           <VisorHeader />
           <Routes>
             <Route path="/clientes/cliente/:id" element={<DetalleClientePantalla />} />
+            <Route path="/historial/venta/:id" element={<DetalleVentaFalso />} />
           </Routes>
         </ProveedorHeader>
       </ProveedorToasts>
@@ -273,8 +281,9 @@ describe('DetalleClientePantalla - historial de ventas', () => {
 
     renderizar();
 
-    expect(within(screen.getByRole('table')).getByText('#1001')).toBeTruthy();
-    expect(within(screen.getByRole('table')).getByText('#1002')).toBeTruthy();
+    const lista = within(screen.getByRole('list', { name: 'Ventas de Ana Pérez' }));
+    expect(lista.getByText('Venta #1001')).toBeTruthy();
+    expect(lista.getByText('Venta #1002')).toBeTruthy();
   });
 
   it('sin ventas: mensaje de vacío', () => {
@@ -290,7 +299,7 @@ describe('DetalleClientePantalla - historial de ventas', () => {
   it('NO filtra las ventas anuladas de la lista: aparecen con el badge "Anulada" (reconcilia con stats ya revertidas)', () => {
     configurarAuth('admin');
     // Stats coherentes con UNA venta anulada de las 3 que trae el historial:
-    // "2 ventas" en las stats, pero la tabla muestra las 3 (con la anulada
+    // "2 ventas" en las stats, pero la lista muestra las 3 (con la anulada
     // distinguible por su badge) — nunca 3 filas indistinguibles.
     configurarCliente(
       estadoOkDoc(
@@ -311,13 +320,13 @@ describe('DetalleClientePantalla - historial de ventas', () => {
 
     renderizar();
 
-    const tabla = within(screen.getByRole('table'));
-    expect(tabla.getByText('#1001')).toBeTruthy();
-    expect(tabla.getByText('#1002')).toBeTruthy();
-    expect(tabla.getByText('#1003')).toBeTruthy();
-    expect(tabla.getByText('Anulada')).toBeTruthy();
+    const lista = within(screen.getByRole('list', { name: 'Ventas de Ana Pérez' }));
+    expect(lista.getByText('Venta #1001')).toBeTruthy();
+    expect(lista.getByText('Venta #1002')).toBeTruthy();
+    expect(lista.getByText('Venta #1003')).toBeTruthy();
+    expect(lista.getByText('Anulada')).toBeTruthy();
     // Solo una fila anulada: el badge no aparece más de una vez.
-    expect(tabla.getAllByText('Anulada').length).toBe(1);
+    expect(lista.getAllByText('Anulada').length).toBe(1);
   });
 
   it('una venta completada no muestra el badge "Anulada"', () => {
@@ -327,7 +336,42 @@ describe('DetalleClientePantalla - historial de ventas', () => {
 
     renderizar();
 
-    expect(within(screen.getByRole('table')).queryByText('Anulada')).toBeNull();
+    expect(within(screen.getByRole('list')).queryByText('Anulada')).toBeNull();
+  });
+});
+
+describe('DetalleClientePantalla - ventas tocables (NAV-2b, docs/06-ui-ux.md §2, 2026-07-14)', () => {
+  it('tocar una fila de venta navega a /historial/venta/:id', () => {
+    configurarAuth('admin');
+    configurarCliente(estadoOkDoc(clienteDe({ id: 'c1', nombre: 'Ana Pérez' })));
+    configurarVentas(estadoOkColeccion([ventaDe({ id: 'v1', numero: 1001 })]));
+
+    renderizar();
+    fireEvent.click(screen.getByRole('button', { name: 'Ver venta #1001' }));
+
+    expect(screen.getByText('Detalle de venta v1')).toBeTruthy();
+  });
+
+  it('una venta ANULADA también es tocable y navega igual (el detalle ya sabe mostrarlas)', () => {
+    configurarAuth('admin');
+    configurarCliente(estadoOkDoc(clienteDe({ id: 'c1', nombre: 'Ana Pérez' })));
+    configurarVentas(estadoOkColeccion([ventaDe({ id: 'v2', numero: 1002, estado: 'anulada' })]));
+
+    renderizar();
+    fireEvent.click(screen.getByRole('button', { name: 'Ver venta #1002' }));
+
+    expect(screen.getByText('Detalle de venta v2')).toBeTruthy();
+  });
+
+  it('vendedor también puede tocar la fila (no gateado por rol)', () => {
+    configurarAuth('vendedor');
+    configurarCliente(estadoOkDoc(clienteDe({ id: 'c1', nombre: 'Ana Pérez' })));
+    configurarVentas(estadoOkColeccion([ventaDe({ id: 'v1', numero: 1001 })]));
+
+    renderizar();
+    fireEvent.click(screen.getByRole('button', { name: 'Ver venta #1001' }));
+
+    expect(screen.getByText('Detalle de venta v1')).toBeTruthy();
   });
 });
 
