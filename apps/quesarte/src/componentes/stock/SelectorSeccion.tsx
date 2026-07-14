@@ -154,7 +154,13 @@ export function SelectorSeccion({ items }: SelectorSeccionProps) {
               to={item.a}
               viewTransition
               aria-current={activo ? 'page' : undefined}
-              className={`flex min-h-[48px] items-center justify-center whitespace-nowrap rounded-control px-4 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-inset ${
+              // `px-3` (era `px-4`, ajuste del dueño 2026-07-14): con los 4
+              // ítems post UI-5 la fila quedaba AL RAS del ancho de un
+              // teléfono común y el del extremo se recortaba; -8px por ítem
+              // alcanza para que entre completa sin scroll. El target táctil
+              // no se resiente: el ancho mínimo real de un ítem (texto +
+              // 24px) sigue holgado sobre los 48px del alto.
+              className={`flex min-h-[48px] items-center justify-center whitespace-nowrap rounded-control px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-inset ${
                 activo
                   ? // `view-transition-name` SOLO en el activo (docs/06-ui-ux.md
                     // §2/§3, UI-4c): la View Transitions API exige un nombre
