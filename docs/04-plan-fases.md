@@ -1,5 +1,5 @@
 # 04 — Plan de implementación por fases
-
+    
 Trabajar fase por fase y, dentro de cada fase, tarea por tarea. No arrancar una
 fase sin cerrar los criterios de aceptación de la anterior. Ante ambigüedad de
 negocio, preguntar antes de asumir.
@@ -353,6 +353,19 @@ fotos (doc aún no versionado en el repo) y cualquier trabajo nuevo de
 proveedores del doc 07 (la parte ya en producción queda como está). El doc 09
 §A sigue EN PAUSA. La sesión de elicitación (doc 10 §8) reordena el roadmap
 post-demo, incluida Fase 3.
+
+## Tanda NAV-2 + tarea COSTO-1 — IMPLEMENTADAS (2026-07-14)
+
+NAV-2 (pedidos del dueño al validar): detalle de venta migrado a ruta real
+`/historial/venta/:id` (era estado interno de Historial, herencia pre-SH-1;
+usa `useDoc` puntual — la lista de Historial está paginada y una venta vieja
+linkeada podía no estar en la ventana); ventas TOCABLES en la ficha de
+cliente; `‹` consciente del historial (`location.key !== 'default'` →
+`navigate(-1)`; `volverA` queda como fallback de deep links/PWA fría;
+aria-label "Volver"). COSTO-1: ⓘ junto al costo en Precios con el desglose
+mercadería/gastos/costo real de la última compra confirmada (solo lectura,
+cero cambio de modelo; primer consumidor real del índice compras
+estado+fecha de F2-F1). 1003 tests.
 
 ## Tarea WA-I — Identidad visual de WhatsApp en los botones — IMPLEMENTADA
 
