@@ -338,6 +338,33 @@ proveedores del doc 07 (la parte ya en producción queda como está). El doc 09
 §A sigue EN PAUSA. La sesión de elicitación (doc 10 §8) reordena el roadmap
 post-demo, incluida Fase 3.
 
+## Tanda UI-5 — Fusión Stock+Catálogo y reorganización del tab Stock — IMPLEMENTADA COMPLETA
+
+Estado (2026-07-13): las 3 tareas (UI-5a fusión, UI-5b detalle-hub + picker,
+UI-5c Categorías→Ajustes) mergeadas. Review senior integral: DEVUELTO por un
+MEDIO (creación inline de categoría offline podía duplicar vocabulario por
+chequeo de duplicados sobre caché sin revalidación server-side) → corregido
+por su autor con la decisión del tech lead: crear categoría exige conexión,
+mismo criterio que `Categorias.tsx`. 967 tests.
+
+Decisión (dueño, 2026-07-13, análisis UX/IA previo): Stock y Catálogo eran
+~90% la misma pantalla para el vendedor (partición por completitud de datos,
+no por tarea). Sección única **Productos** (`/stock`); detalle de producto
+como hub de configuración con edición solo-admin SIN precio (el precio se
+fija en el alta y se cambia solo en Precios — se cerró el doble camino de
+escritura); Categorías vive en Ajustes; selector admin de 4 ítems sin
+scroll; el vendedor queda sin selector ni swipe. Condición del dueño: picker
+de categoría con creación inline + link "Gestionar categorías" (docs/06 §2).
+Redirects: `/stock/productos` → `/stock`, `/stock/categorias` →
+`/ajustes/categorias`.
+
+Deuda anotada por el review (menores, no urgentes):
+- Índice compuesto `productos: activo ASC + nombre ASC` quedó huérfano en
+  `firestore.indexes.json` (ninguna query lo usa tras la fusión) — limpiar
+  en la próxima tanda que toque índices.
+- `aria-controls` faltante en el botón de filtros extra (patrón WA-H3):
+  aplica al de Productos Y al de Precios — mejorar juntos.
+
 ## Fase 3 — Inteligencia de negocio
 
 Objetivo: reportes que responden preguntas de plata.
