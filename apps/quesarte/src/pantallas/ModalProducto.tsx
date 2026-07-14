@@ -167,6 +167,22 @@ interface CampoCategoriaProps {
  * lista viva llega sola por la `useCollection` del padre, no hace falta
  * refrescar nada acá. "Cancelar" vuelve al select dejando `value` como
  * estaba (no crea nada).
+ *
+ * **Sin conexión, la creación queda BLOQUEADA** (review UI-5, hallazgo M1):
+ * `crearCategoria` chequea duplicados con un `getDocs` que offline resuelve
+ * de CACHÉ, y el `setDoc` de la categoría nueva se commitea siempre al
+ * reconectar — Firestore no revalida duplicados server-side (no hay
+ * constraint ni transacción para esto). Con caché stale (dispositivo recién
+ * instalado, o categoría creada mientras tanto en otro equipo) el patrón
+ * híbrido offline de docs/06-ui-ux.md §8 generaría un duplicado silencioso.
+ * Mismo motivo exacto por el que `Categorias.tsx` bloquea TODA mutación de
+ * vocabulario sin conexión (ver su JSDoc) — este picker sigue ese mismo
+ * criterio: la opción "+ Nueva categoría…" del select queda deshabilitada
+ * offline (con un hint visible ANTES de que el usuario llegue a tipear
+ * nada) y, si la conexión se corta mientras el sub-formulario ya está
+ * abierto, el botón "Crear" también se deshabilita con el mismo aviso. El
+ * `<select>` (elegir una categoría YA creada) y el link "Gestionar
+ * categorías" siguen usables sin conexión — solo la ESCRITURA se bloquea.
  */
 function CampoCategoria({ abierto, categorias, value, onChange, error, onCerrarModal }: CampoCategoriaProps) {
   const id = useId();
@@ -194,6 +210,11 @@ function CampoCategoria({ abierto, categorias, value, onChange, error, onCerrarM
 
   function handleChangeSelect(valor: string) {
     if (valor === VALOR_NUEVA_CATEGORIA) {
+      // Defensivo: la opción ya viene `disabled` en el `<select>` sin
+      // conexión (un navegador real no dispara `onChange` con ella
+      // seleccionada), pero un `change` sintético no respeta eso — sin este
+      // guard se podría entrar al sub-formulario igual.
+      if (!enLinea) return;
       setModo('crear');
       setNombreNuevo('');
       setErrorCrear(undefined);
@@ -209,18 +230,18 @@ function CampoCategoria({ abierto, categorias, value, onChange, error, onCerrarM
   }
 
   /**
-   * Mismo patrón híbrido de escrituras offline del proyecto
-   * (docs/06-ui-ux.md §8): en línea espera el ack antes de avisar (y ahí sí
-   * puede mostrar el error de validación/duplicado INLINE, en el campo,
-   * porque la respuesta ya está). Sin conexión, dispara sin `await` (el
-   * `getDocs` interno de `crearCategoria` resuelve de caché al toque, pero
-   * el `setDoc` final no confirma hasta reconectar — mismo motivo que
-   * cualquier otra escritura del proyecto), selecciona el nombre tipeado
-   * OPTIMISTAMENTE y avisa con un toast que falta sincronizar; un `.catch`
-   * tardío cubre que el server la rechace al reconectar (p. ej. una
-   * categoría duplicada creada mientras tanto desde otro dispositivo).
+   * A diferencia del resto de las escrituras del proyecto (patrón híbrido
+   * offline de docs/06-ui-ux.md §8), esta acción NO tiene rama offline
+   * (review UI-5, hallazgo M1): el chequeo de duplicados de `crearCategoria`
+   * es un `getDocs` client-side contra caché, nunca revalidado
+   * server-side — crear sin conexión podría generar un duplicado silencioso
+   * si la caché está stale. La UI ya deja esta función inalcanzable offline
+   * (opción del select y botón "Crear" deshabilitados, ver el JSX); el
+   * guard de acá es la defensa de fondo, mismo criterio que
+   * `handleChangeSelect` arriba.
    */
   async function handleCrear() {
+    if (!enLinea) return;
     const nombreLimpio = nombreNuevo.trim();
     if (nombreLimpio === '') {
       setErrorCrear('Ingresá el nombre de la categoría.');
@@ -228,20 +249,9 @@ function CampoCategoria({ abierto, categorias, value, onChange, error, onCerrarM
     }
     setErrorCrear(undefined);
 
-    const escritura = crearCategoria(db, nombreLimpio);
-
-    if (!enLinea) {
-      onChange(nombreLimpio);
-      setModo('select');
-      setNombreNuevo('');
-      mostrarToast('Guardado sin conexión. Se sincronizará al reconectar.', 'info');
-      escritura.catch(() => mostrarToast('No se pudo sincronizar la categoría creada.', 'error'));
-      return;
-    }
-
     setCreando(true);
     try {
-      await escritura;
+      await crearCategoria(db, nombreLimpio);
       onChange(nombreLimpio);
       setModo('select');
       setNombreNuevo('');
@@ -265,14 +275,23 @@ function CampoCategoria({ abierto, categorias, value, onChange, error, onCerrarM
           value={nombreNuevo}
           onChange={setNombreNuevo}
           error={errorCrear}
-          disabled={creando}
+          disabled={creando || !enLinea}
           placeholder="Ej: Especias"
         />
+        {/* La conexión se cortó con el sub-formulario ya abierto (si hubiera
+            estado offline desde el principio, ni se podía llegar acá: la
+            opción "+ Nueva categoría…" del select queda deshabilitada más
+            abajo). Mismo tratamiento visual que el banner de `Categorias.tsx`. */}
+        {!enLinea && (
+          <p role="status" className="flex items-center gap-1.5 text-sm text-advertencia">
+            <span aria-hidden="true">⚠</span> Necesitás conexión para crear categorías.
+          </p>
+        )}
         <div className="flex justify-end gap-2">
           <Button variante="secundaria" onClick={cancelarCreacion} disabled={creando}>
             Cancelar
           </Button>
-          <Button onClick={() => void handleCrear()} disabled={creando}>
+          <Button onClick={() => void handleCrear()} disabled={creando || !enLinea}>
             {creando ? 'Creando…' : 'Crear'}
           </Button>
         </div>
@@ -290,7 +309,7 @@ function CampoCategoria({ abierto, categorias, value, onChange, error, onCerrarM
         value={value}
         onChange={(e) => handleChangeSelect(e.target.value)}
         aria-invalid={error !== undefined ? true : undefined}
-        aria-describedby={error !== undefined ? idError : categorias.length === 0 ? idHint : undefined}
+        aria-describedby={error !== undefined ? idError : !enLinea || categorias.length === 0 ? idHint : undefined}
         className={`min-h-11 rounded-control border bg-superficie px-3 py-2 text-texto outline-none focus-visible:ring-2 focus-visible:ring-primary-600 ${
           error ? 'border-peligro' : 'border-borde'
         }`}
@@ -304,11 +323,22 @@ function CampoCategoria({ abierto, categorias, value, onChange, error, onCerrarM
           </option>
         ))}
         {huerfana && <option value={value}>{value} (sin definir)</option>}
-        <option value={VALOR_NUEVA_CATEGORIA}>+ Nueva categoría…</option>
+        {/* Sin conexión, crear queda deshabilitado (review UI-5, M1: el
+            chequeo de duplicados de `crearCategoria` es client-side contra
+            caché, nunca revalidado server-side — ver el JSDoc de
+            `CampoCategoria`). Elegir una categoría YA creada (el resto de
+            las opciones de este mismo select) sigue andando offline. */}
+        <option value={VALOR_NUEVA_CATEGORIA} disabled={!enLinea}>
+          + Nueva categoría…
+        </option>
       </select>
       {error !== undefined ? (
         <p id={idError} className="text-sm text-peligro">
           {error}
+        </p>
+      ) : !enLinea ? (
+        <p id={idHint} role="status" className="flex items-center gap-1.5 text-sm text-advertencia">
+          <span aria-hidden="true">⚠</span> Necesitás conexión para crear categorías.
         </p>
       ) : (
         categorias.length === 0 && (
