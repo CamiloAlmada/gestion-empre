@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { MemoryRouter } from 'react-router';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { MemoryRouter, Route, Routes, useParams } from 'react-router';
 import type { FirestoreError } from 'firebase/firestore';
 import { money, type Venta } from '@gestion/core';
 import { ProveedorToasts } from '@gestion/ui';
@@ -11,27 +11,13 @@ import {
 } from '../componentes/historial/constantes';
 import { Historial } from './Historial';
 
-const mocks = vi.hoisted(() => {
-  class AnulacionInvalidaError extends Error {}
-  return {
-    useAuth: vi.fn(),
-    useOnlineStatus: vi.fn(() => true),
-    useCollection: vi.fn(),
-    useDoc: vi.fn(),
-    anularVenta: vi.fn(),
-    AnulacionInvalidaError,
-  };
-});
+const mocks = vi.hoisted(() => ({
+  useCollection: vi.fn(),
+}));
 
 vi.mock('@gestion/firebase-kit', () => ({
-  useAuth: mocks.useAuth,
-  useOnlineStatus: mocks.useOnlineStatus,
   useCollection: mocks.useCollection,
-  useDoc: mocks.useDoc,
   ventaConverter: {},
-  usuarioConverter: {},
-  anularVenta: mocks.anularVenta,
-  AnulacionInvalidaError: mocks.AnulacionInvalidaError,
 }));
 
 vi.mock('../firebase', () => ({ db: {} }));
@@ -48,9 +34,7 @@ function crearRef(path: string): RefFalsa {
 
 vi.mock('firebase/firestore', () => ({
   collection: (_db: unknown, path: string) => crearRef(path),
-  doc: (_db: unknown, coleccion: string, id: string) => crearRef(`${coleccion}/${id}`),
   query: (ref: RefFalsa, ...clausulas: unknown[]) => ({ ...ref, __clausulas: clausulas }),
-  where: (...args: unknown[]) => ({ __tipo: 'where', args }),
   orderBy: (...args: unknown[]) => ({ __tipo: 'orderBy', args }),
   limit: (n: number) => ({ __tipo: 'limit', n }),
 }));
@@ -86,17 +70,6 @@ function venta(over: Partial<Venta> = {}): Venta {
   };
 }
 
-function configurarAuth(rol: 'admin' | 'vendedor') {
-  mocks.useAuth.mockReturnValue({
-    usuario: { uid: 'u-actor' },
-    perfil: { uid: 'u-actor', nombre: 'Actor', email: 'actor@a.com', rol, activo: true },
-    cargando: false,
-    ingresarConEmail: vi.fn(),
-    restablecerPassword: vi.fn(),
-    salir: vi.fn(),
-  });
-}
-
 function configurarVentas(estado: EstadoFalso<Venta>) {
   mocks.useCollection.mockImplementation((q: RefFalsa | null) => {
     if (q === null) return { datos: [], cargando: false, error: null };
@@ -116,13 +89,24 @@ function VisorHeader() {
   );
 }
 
+/** Pantalla de destino de prueba: expone el `:id` recibido, para verificar
+ * que la navegación desde `ListaVentas` (NAV-2a, docs/06-ui-ux.md §2,
+ * 2026-07-14) manda al `id` correcto de `/historial/venta/:id`. */
+function DetalleVentaFalso() {
+  const { id } = useParams<{ id: string }>();
+  return <p>Detalle de venta {id}</p>;
+}
+
 function renderizar() {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={['/historial']}>
       <ProveedorToasts>
         <ProveedorHeader>
           <VisorHeader />
-          <Historial />
+          <Routes>
+            <Route path="/historial" element={<Historial />} />
+            <Route path="/historial/venta/:id" element={<DetalleVentaFalso />} />
+          </Routes>
         </ProveedorHeader>
       </ProveedorToasts>
     </MemoryRouter>,
@@ -132,13 +116,10 @@ function renderizar() {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
-  mocks.useOnlineStatus.mockReturnValue(true);
-  mocks.useDoc.mockReturnValue({ datos: null, cargando: false, error: null });
 });
 
 describe('Historial - header', () => {
   it('vuelve a Venta (docs/06-ui-ux.md §2, 2026-07-10: Historial es historial DE VENTAS y cuelga de Venta)', () => {
-    configurarAuth('admin');
     configurarVentas(estadoOk([]));
 
     renderizar();
@@ -149,7 +130,6 @@ describe('Historial - header', () => {
 
 describe('Historial - estados', () => {
   it('cargando: muestra el mensaje de carga', () => {
-    configurarAuth('admin');
     configurarVentas({ datos: [], cargando: true, error: null });
 
     renderizar();
@@ -158,7 +138,6 @@ describe('Historial - estados', () => {
   });
 
   it('error: muestra mensaje y botón Reintentar', () => {
-    configurarAuth('admin');
     const error = { code: 'unavailable' } as FirestoreError;
     configurarVentas({ datos: [], cargando: false, error });
 
@@ -172,19 +151,16 @@ describe('Historial - estados', () => {
   });
 
   it('vacío: mensaje "Todavía no hay ventas"', () => {
-    configurarAuth('admin');
     configurarVentas(estadoOk([]));
 
     renderizar();
 
     expect(screen.getByText('Todavía no hay ventas.')).toBeTruthy();
   });
-
 });
 
 describe('Historial - listado', () => {
   it('renderiza las ventas del mock: número, total formateado y badge de anulada', () => {
-    configurarAuth('admin');
     configurarVentas(
       estadoOk([
         venta({ id: 'v1', numero: 1001 }),
@@ -201,7 +177,6 @@ describe('Historial - listado', () => {
   });
 
   it('"Cargar más" expande el límite de la query en INCREMENTO_LIMITE_VENTAS', () => {
-    configurarAuth('admin');
     const muchasVentas = Array.from({ length: LIMITE_INICIAL_VENTAS }, (_, i) =>
       venta({ id: `v${i}`, numero: 1000 + i }),
     );
@@ -220,7 +195,6 @@ describe('Historial - listado', () => {
   });
 
   it('menos ventas que el límite: no muestra "Cargar más"', () => {
-    configurarAuth('admin');
     configurarVentas(estadoOk([venta()]));
 
     renderizar();
@@ -229,55 +203,16 @@ describe('Historial - listado', () => {
   });
 });
 
-describe('Historial - detalle y permisos de anulación', () => {
-  it('tocar una venta muestra el detalle con sus ítems', () => {
-    configurarAuth('admin');
-    configurarVentas(estadoOk([venta()]));
+describe('Historial - navegación al detalle (NAV-2a, docs/06-ui-ux.md §2, 2026-07-14)', () => {
+  it('tocar una venta navega a /historial/venta/:id (ya no queda embebido en esta pantalla)', () => {
+    configurarVentas(estadoOk([venta({ id: 'v1', numero: 1001 })]));
 
     renderizar();
     fireEvent.click(screen.getByRole('button', { name: /Venta #1001/ }));
 
-    expect(screen.getByRole('heading', { name: 'Venta #1001' })).toBeTruthy();
-    // `DetalleVenta` ahora tiene tabla Y lista compacta a la vez (modo
-    // compacto de `DataTable`, docs/06-ui-ux.md §3): se scopea a la tabla
-    // para no ambigüar con la lista.
-    expect(within(screen.getByRole('table')).getByText('Queso Colonia')).toBeTruthy();
-  });
-
-  it('vendedor: en el detalle no ve el botón Anular venta', () => {
-    configurarAuth('vendedor');
-    configurarVentas(estadoOk([venta()]));
-
-    renderizar();
-    fireEvent.click(screen.getByRole('button', { name: /Venta #1001/ }));
-
-    expect(screen.queryByRole('button', { name: 'Anular venta' })).toBeNull();
-  });
-
-  it('admin: ve el botón Anular venta y abre el modal de confirmación', () => {
-    configurarAuth('admin');
-    configurarVentas(estadoOk([venta()]));
-
-    renderizar();
-    fireEvent.click(screen.getByRole('button', { name: /Venta #1001/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Anular venta' }));
-
-    expect(screen.getByText('Anular venta #1001')).toBeTruthy();
-  });
-
-  it('admin: confirmar la anulación llama a anularVenta con la venta y el uid del admin', async () => {
-    configurarAuth('admin');
-    mocks.anularVenta.mockResolvedValue(undefined);
-    configurarVentas(estadoOk([venta()]));
-
-    renderizar();
-    fireEvent.click(screen.getByRole('button', { name: /Venta #1001/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Anular venta' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Confirmar anulación' }));
-
-    await waitFor(() => expect(mocks.anularVenta).toHaveBeenCalledWith({}, venta(), 'u-actor'));
-    await waitFor(() =>
-      expect(screen.getByText('Venta anulada. Se restauró el stock.')).toBeTruthy(),
-    );
+    expect(screen.getByText('Detalle de venta v1')).toBeTruthy();
+    // El listado (y sus modales de anulación) ya no están montados: la
+    // anulación se mudó con el detalle a `DetalleVentaPantalla`.
+    expect(screen.queryByText('Venta #1001')).toBeNull();
   });
 });

@@ -54,6 +54,11 @@ const DetalleProveedorPantalla = lazy(() =>
 const Historial = lazy(() =>
   import('./pantallas/Historial').then((m) => ({ default: m.Historial })),
 );
+const DetalleVentaPantalla = lazy(() =>
+  import('./pantallas/DetalleVentaPantalla').then((m) => ({
+    default: m.DetalleVentaPantalla,
+  })),
+);
 const Clientes = lazy(() =>
   import('./pantallas/Clientes').then((m) => ({ default: m.Clientes })),
 );
@@ -157,6 +162,12 @@ export function App() {
               §2, 2026-07-10) pero su URL no cambió: hay PWAs instaladas con
               ese deep link ("ver/anular la última venta"). */}
           <Route path="historial" element={<Historial />} />
+          {/* Detalle de UNA venta, en ruta real (tanda NAV-2a,
+              docs/06-ui-ux.md §2, 2026-07-14): antes vivía como estado
+              interno de Historial. Anida bajo /historial a propósito —
+              Shell.tsx (`obtenerTabActiva`) lee el primer segmento de la
+              ruta, así que hereda el mapeo a la tab Venta sin tocarlo. */}
+          <Route path="historial/venta/:id" element={<DetalleVentaPantalla />} />
           {/* Redirects de las rutas viejas de Clientes (vivían bajo
               /historial antes de que el tab se invirtiera) — mismo motivo,
               deep links viejos en PWAs instaladas. */}

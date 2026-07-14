@@ -1,12 +1,11 @@
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router';
 import { collection, limit, orderBy, query } from 'firebase/firestore';
 import type { Venta } from '@gestion/core';
-import { useAuth, useCollection, useOnlineStatus, ventaConverter } from '@gestion/firebase-kit';
+import { useCollection, ventaConverter } from '@gestion/firebase-kit';
 import { Button } from '@gestion/ui';
 import { db } from '../firebase';
-import { DetalleVenta } from '../componentes/historial/DetalleVenta';
 import { ListaVentas } from '../componentes/historial/ListaVentas';
-import { ModalConfirmarAnulacion } from '../componentes/historial/ModalConfirmarAnulacion';
 import {
   INCREMENTO_LIMITE_VENTAS,
   LIMITE_INICIAL_VENTAS,
@@ -14,13 +13,18 @@ import {
 import { useHeader } from '../componentes/header/ContextoHeader';
 
 /**
- * Pantalla Historial: listado de ventas (más recientes primero) con
- * drill-down a detalle en la misma pantalla (sin ruta nueva), mismo patrón
- * que `Stock.tsx`. Trae ventas con UNA sola `useCollection` memoizada
- * (`orderBy('fecha', 'desc')` + `limit`); "Cargar más" agranda el límite en
- * vez de paginar por cursor (ver `constantes.ts`, suficiente para Fase 1).
- * La anulación (solo admin) se dispara desde el detalle pero el modal de
- * confirmación se orquesta acá, igual que los modales de escritura de Stock.
+ * Pantalla Historial: listado de ventas (más recientes primero). Trae
+ * ventas con UNA sola `useCollection` memoizada (`orderBy('fecha', 'desc')`
+ * + `limit`); "Cargar más" agranda el límite en vez de paginar por cursor
+ * (ver `constantes.ts`, suficiente para Fase 1).
+ *
+ * El detalle de una venta vive en su propia ruta
+ * (`/historial/venta/:id`, `DetalleVentaPantalla.tsx` — tanda NAV-2a,
+ * docs/06-ui-ux.md §2, 2026-07-14): tocar una fila navega ahí en vez de
+ * setear estado interno (herencia pre-SH-1 que esta tanda corrigió, mismo
+ * motivo que movió el detalle de producto a ruta real). La anulación
+ * (modal incluido) se mudó con el detalle a esa pantalla nueva — esta
+ * pantalla ya no la orquesta.
  *
  * Historial DE VENTAS (docs/06-ui-ux.md §2, 2026-07-10, ajustado tras uso
  * real del dueño): cuelga del tab **Venta** — su `‹ volver` lleva a Venta y
@@ -32,9 +36,7 @@ import { useHeader } from '../componentes/header/ContextoHeader';
  * ninguna acción propia de vuelta hacia esas pantallas.
  */
 export function Historial() {
-  const { perfil } = useAuth();
-  const enLinea = useOnlineStatus();
-  const esAdmin = perfil?.rol === 'admin';
+  const navigate = useNavigate();
 
   useHeader({
     titulo: 'Historial',
@@ -43,8 +45,6 @@ export function Historial() {
 
   const [intento, setIntento] = useState(0);
   const [limiteVentas, setLimiteVentas] = useState(LIMITE_INICIAL_VENTAS);
-  const [ventaSeleccionadaId, setVentaSeleccionadaId] = useState<string | null>(null);
-  const [modalAnularAbierto, setModalAnularAbierto] = useState(false);
 
   // `db` es el import estable de '../firebase'; las dependencias reales son
   // `limiteVentas` (Cargar más) e `intento` (Reintentar fuerza resubscribe,
@@ -60,18 +60,12 @@ export function Historial() {
   );
   const ventas = useCollection<Venta>(ventasQuery);
 
-  const ventaSeleccionada = ventas.datos.find((v) => v.id === ventaSeleccionadaId) ?? null;
-
   function reintentar() {
     setIntento((n) => n + 1);
   }
 
   function cargarMas() {
     setLimiteVentas((l) => l + INCREMENTO_LIMITE_VENTAS);
-  }
-
-  function volverAlListado() {
-    setVentaSeleccionadaId(null);
   }
 
   let contenido;
@@ -86,16 +80,6 @@ export function Historial() {
         <Button onClick={reintentar}>Reintentar</Button>
       </div>
     );
-  } else if (ventaSeleccionada !== null) {
-    contenido = (
-      <DetalleVenta
-        venta={ventaSeleccionada}
-        esAdmin={esAdmin}
-        db={db}
-        onVolver={volverAlListado}
-        onAnular={() => setModalAnularAbierto(true)}
-      />
-    );
   } else if (ventas.datos.length === 0) {
     contenido = (
       <div className="flex flex-col items-center gap-3 rounded-card border border-borde bg-superficie p-8 text-center">
@@ -107,7 +91,7 @@ export function Historial() {
       <>
         <ListaVentas
           ventas={ventas.datos}
-          onSeleccionar={(venta) => setVentaSeleccionadaId(venta.id)}
+          onSeleccionar={(venta) => navigate(`/historial/venta/${venta.id}`)}
         />
         {ventas.datos.length >= limiteVentas && (
           <div className="flex justify-center pt-2">
@@ -120,20 +104,5 @@ export function Historial() {
     );
   }
 
-  return (
-    <div className="flex flex-col gap-4">
-      {contenido}
-
-      {esAdmin && perfil !== null && ventaSeleccionada !== null && (
-        <ModalConfirmarAnulacion
-          abierto={modalAnularAbierto}
-          onCerrar={() => setModalAnularAbierto(false)}
-          db={db}
-          venta={ventaSeleccionada}
-          usuarioId={perfil.uid}
-          enLinea={enLinea}
-        />
-      )}
-    </div>
-  );
+  return <div className="flex flex-col gap-4">{contenido}</div>;
 }

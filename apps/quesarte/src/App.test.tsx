@@ -28,6 +28,10 @@ vi.mock('@gestion/firebase-kit', () => ({
   clienteConverter: {},
   categoriaConverter: {},
   configuracionConverter: {},
+  // `ventaConverter` (NAV-2a): `DetalleVentaPantalla` NO está mockeada acá
+  // (a diferencia de las demás pantallas del suite), así que necesita este
+  // export real para su `useMemo` de `doc(...).withConverter(ventaConverter)`.
+  ventaConverter: {},
 }));
 
 // Mismo motivo que el mock de '@gestion/firebase-kit' de arriba: Venta arma
@@ -409,6 +413,26 @@ describe('App - rutas', () => {
     renderizarEn('/historial');
 
     expect(await screen.findByText('Contenido de Historial')).toBeTruthy();
+  });
+
+  // NAV-2a (docs/06-ui-ux.md §2, 2026-07-14): el detalle de una venta ahora
+  // vive en su propia ruta, anidada bajo /historial a propósito (hereda el
+  // tab activo Venta sin tocar `TAB_POR_SEGMENTO`, ver DetalleVentaPantalla).
+  // `DetalleVentaPantalla` NO está mockeada acá (a diferencia de las demás
+  // pantallas de este suite): usa `useDoc`/`doc()`, ya mockeados arriba para
+  // toda la suite, así que puede montarse real — este test verifica el
+  // wiring de la ruta en `App.tsx`, no repite la cobertura de contenido de
+  // `DetalleVentaPantalla.test.tsx`.
+  it('navega a /historial/venta/:id (ruta real de detalle, no estado interno de Historial)', async () => {
+    configurarAuth('admin');
+
+    renderizarEn('/historial/venta/v1');
+
+    // `useDoc` mockeado devuelve `datos: null` (mock genérico del suite): cae
+    // en "no encontrada", suficiente para confirmar que la ruta resuelve a
+    // `DetalleVentaPantalla` real y el tab activo sigue siendo Venta.
+    expect(await screen.findByText('No encontramos esa venta.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Venta' }).getAttribute('aria-current')).toBe('page');
   });
 
   describe('redirects de rutas viejas', () => {
