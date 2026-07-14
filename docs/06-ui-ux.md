@@ -59,7 +59,12 @@ tech lead; no se ignora en silencio.
     reordenar) sí vive en Ajustes.
 - **Historial** (2026-07-10, ajustado tras uso real del dueño) es el historial
   DE VENTAS: cuelga del tab **Venta** (su `‹ volver` lleva a Venta; el tab
-  Venta queda activo mientras se está en él o en el detalle de una venta). Dos
+  Venta queda activo mientras se está en él o en el detalle de una venta).
+  **El detalle de una venta vive en ruta real** (`/historial/venta/:id`,
+  tanda NAV-2 2026-07-14 — antes era estado interno de Historial, herencia
+  pre-SH-1 que violaba la regla de subvistas con rutas reales): linkeable
+  desde cualquier lado; en particular, las ventas listadas en la ficha de un
+  cliente son TOCABLES y navegan a ese detalle (pedido del dueño). Dos
   entradas: el icono de historial (reloj con flecha antihoraria "rebobinando")
   arriba a la derecha del header de Venta — el flujo natural de "acabo de
   cobrar, quiero ver/anular la última venta" — y el MISMO icono en el header
@@ -85,9 +90,18 @@ tech lead; no se ignora en silencio.
   - El título es el de la **vista actual**, no el del tab (en Stock → Productos
     dice "Productos"). Conciso (~15 caracteres).
   - Subvistas muestran a la izquierda la flecha `‹` SOLA (sin el nombre del
-    padre al lado — el destino lo define `volverA` y el `aria-label` dice
-    "Volver a {Padre}"). Ese botón ES el breadcrumb en mobile; no hay
-    breadcrumbs multi-nivel.
+    padre al lado). Ese botón ES el breadcrumb en mobile; no hay breadcrumbs
+    multi-nivel.
+  - **El `‹` es consciente del historial** (tanda NAV-2, 2026-07-14, pedido
+    del dueño: "ir a la pantalla anterior siempre, no a lugares fijos"): si
+    hay una entrada previa DENTRO de la app en el historial del navegador,
+    el botón hace back real (`navigate(-1)` — llegaste al detalle de una
+    venta desde la ficha de un cliente, el `‹` te devuelve a esa ficha, no
+    al tab Venta). El `volverA` que declara cada pantalla pasa a ser el
+    destino de FALLBACK: entrada directa por URL, deep link o PWA recién
+    abierta, donde no hay historial propio al que volver. Como el destino
+    real puede variar, el `aria-label` pasa a ser "Volver" a secas (siempre
+    veraz), no "Volver a {Padre}".
 - **Selector de sección** (2026-07-10, decidido con el dueño — patrón
   "secondary tabs" de Material 3; los chips NO se usan para navegar, solo para
   filtrar): dentro del tab **Stock**, las pantallas raíz de sección muestran
