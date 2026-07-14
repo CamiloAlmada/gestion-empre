@@ -67,14 +67,24 @@ function renderizar(overrides: Partial<ModalProductoProps> = {}) {
     onCerrar,
     ...overrides,
   };
-  render(
-    <MemoryRouter>
-      <ProveedorToasts>
-        <ModalProducto {...props} />
-      </ProveedorToasts>
-    </MemoryRouter>,
-  );
-  return { onGuardar, onCerrar };
+  function elemento() {
+    return (
+      <MemoryRouter>
+        <ProveedorToasts>
+          <ModalProducto {...props} />
+        </ProveedorToasts>
+      </MemoryRouter>
+    );
+  }
+  const { rerender } = render(elemento());
+  // Re-renderiza con un elemento NUEVO (mismos valores de `props`, pero otra
+  // referencia de objeto): sirve para que un cambio en un mock de hook leído
+  // directo en el cuerpo del componente (p. ej. `useOnlineStatus()`) se
+  // refleje sin desmontar. Pasarle a `rerender` el MISMO objeto elemento dos
+  // veces hace que React bail-outee la actualización (props idénticas por
+  // referencia en la raíz) y no vuelva a invocar el cuerpo del componente —
+  // confirmado con un repro mínimo aislado antes de este fix.
+  return { onGuardar, onCerrar, rerenderMismo: () => rerender(elemento()) };
 }
 
 function abrirCreacionInline() {
@@ -232,32 +242,73 @@ describe('ModalProducto - picker de categoría con creación inline (UI-5b, docs
     expect(mocks.crearCategoria).not.toHaveBeenCalled();
   });
 
-  it('offline: no espera el ack, selecciona el nombre optimistamente y avisa que falta sincronizar', async () => {
+  // Review UI-5, hallazgo M1: crear categoría offline quedó BLOQUEADO (no
+  // "optimista + sincroniza después" como el resto de las escrituras del
+  // proyecto) — el chequeo de duplicados de `crearCategoria` es client-side
+  // contra caché, nunca revalidado server-side, así que offline podía
+  // generar un duplicado silencioso. Mismo criterio que `Categorias.tsx`.
+  it('offline: la opción "+ Nueva categoría…" queda deshabilitada, con un aviso ANTES de poder tipear nada', () => {
     mocks.useOnlineStatus.mockReturnValue(false);
-    mocks.crearCategoria.mockResolvedValue({ categoriaId: 'c9' });
     renderizar();
 
-    abrirCreacionInline();
-    fireEvent.change(screen.getByLabelText('Nombre de la nueva categoría'), { target: { value: 'Especias' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Crear' }));
-
-    // Sincrónico: vuelve al select en el mismo tick, sin esperar el ack.
     const select = screen.getByLabelText('Categoría') as HTMLSelectElement;
-    expect(select.value).toBe('Especias');
-    expect(mocks.crearCategoria).toHaveBeenCalledTimes(1);
-    expect(await screen.findByText('Guardado sin conexión. Se sincronizará al reconectar.')).toBeTruthy();
+    const opcionNueva = Array.from(select.options).find((o) => o.text === '+ Nueva categoría…');
+    expect(opcionNueva?.disabled).toBe(true);
+    expect(screen.getByText('Necesitás conexión para crear categorías.')).toBeTruthy();
+
+    // Un `change` sintético que fuerce igual la opción deshabilitada (lo que
+    // un navegador real no permite disparar) tampoco abre el sub-formulario:
+    // `handleChangeSelect` guardea offline como defensa de fondo.
+    abrirCreacionInline();
+    expect(screen.queryByLabelText('Nombre de la nueva categoría')).toBeNull();
+    expect(mocks.crearCategoria).not.toHaveBeenCalled();
   });
 
-  it('offline: si la sincronización tardía falla, avisa con un toast de error (no cuelga la UI)', async () => {
+  it('offline: el resto del select (elegir una categoría ya creada) y "Gestionar categorías" siguen usables', () => {
     mocks.useOnlineStatus.mockReturnValue(false);
-    mocks.crearCategoria.mockRejectedValue(new Error('rechazada al reconectar'));
     renderizar();
+
+    fireEvent.change(screen.getByLabelText('Categoría'), { target: { value: 'Miel' } });
+    expect((screen.getByLabelText('Categoría') as HTMLSelectElement).value).toBe('Miel');
+    expect(screen.getByRole('link', { name: 'Gestionar categorías' }).getAttribute('href')).toBe(
+      '/ajustes/categorias',
+    );
+  });
+
+  it('offline con el sub-formulario ya abierto (la conexión se cortó a mitad de camino): "Crear" se deshabilita con el mismo aviso, sin llamar a crearCategoria', () => {
+    const { rerenderMismo } = renderizar();
+    abrirCreacionInline();
+    fireEvent.change(screen.getByLabelText('Nombre de la nueva categoría'), { target: { value: 'Especias' } });
+
+    mocks.useOnlineStatus.mockReturnValue(false);
+    rerenderMismo();
+
+    expect(screen.getByRole('button', { name: 'Crear' }).hasAttribute('disabled')).toBe(true);
+    expect(screen.getByText('Necesitás conexión para crear categorías.')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Crear' }));
+    expect(mocks.crearCategoria).not.toHaveBeenCalled();
+  });
+
+  it('al reconectar, la acción se vuelve a habilitar y crear funciona', async () => {
+    mocks.useOnlineStatus.mockReturnValue(false);
+    const { rerenderMismo } = renderizar();
+
+    const select = screen.getByLabelText('Categoría') as HTMLSelectElement;
+    expect(Array.from(select.options).find((o) => o.text === '+ Nueva categoría…')?.disabled).toBe(true);
+
+    mocks.crearCategoria.mockResolvedValue({ categoriaId: 'c9' });
+    mocks.useOnlineStatus.mockReturnValue(true);
+    rerenderMismo();
+
+    expect(screen.queryByText('Necesitás conexión para crear categorías.')).toBeNull();
 
     abrirCreacionInline();
     fireEvent.change(screen.getByLabelText('Nombre de la nueva categoría'), { target: { value: 'Especias' } });
     fireEvent.click(screen.getByRole('button', { name: 'Crear' }));
 
-    expect(await screen.findByText('No se pudo sincronizar la categoría creada.')).toBeTruthy();
+    expect(await screen.findByText('Categoría creada.')).toBeTruthy();
+    expect(mocks.crearCategoria).toHaveBeenCalledTimes(1);
   });
 
   it('"Gestionar categorías" navega a /ajustes/categorias y cierra el modal', () => {
