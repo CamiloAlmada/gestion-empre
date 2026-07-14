@@ -1,5 +1,5 @@
 import { Suspense, useEffect, useRef } from 'react';
-import { Link, Outlet, useLocation, useNavigate } from 'react-router';
+import { Outlet, useLocation, useNavigate } from 'react-router';
 import { BarraPestanas, useToasts, type ItemBarraPestanas } from '@gestion/ui';
 import { useAuth, useOnlineStatus } from '@gestion/firebase-kit';
 import {
@@ -63,8 +63,7 @@ const CLASES_HEADER =
 const CLASES_CLUSTER_ACCIONES = 'fixed right-4 z-30 flex gap-2 md:hidden [&>*]:shadow-flotante';
 
 // Flecha de volver SOLA (docs/06-ui-ux.md §2, rediseño 2026-07-10): sin el
-// nombre del padre al lado — ese texto ahora vive únicamente en el
-// `aria-label` ("Volver a {Padre}"). Target 44×44px (h-11/w-11 = 2.75rem).
+// nombre del padre al lado. Target 44×44px (h-11/w-11 = 2.75rem).
 const CLASE_VOLVER =
   'flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-2xl text-texto-secundario ' +
   'hover:bg-superficie hover:text-texto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600';
@@ -155,6 +154,38 @@ function ShellInterior() {
   const hayAcciones = config?.acciones !== undefined;
   const hayAccionHeader = config?.accionHeader !== undefined;
 
+  /**
+   * `‹` consciente del historial (tanda NAV-2c, docs/06-ui-ux.md §2,
+   * 2026-07-14, pedido del dueño: "ir a la pantalla anterior siempre, no a
+   * lugares fijos"): con una entrada previa DENTRO de la app (llegaste al
+   * detalle de una venta desde la ficha de un cliente, por ejemplo), hace
+   * back real con `navigate(-1)` — vuelve exactamente a esa ficha, no a un
+   * destino fijo. `volverA` pasa a ser el FALLBACK: entrada directa por URL,
+   * deep link o PWA recién abierta, donde no hay historial propio al que
+   * volver.
+   *
+   * Detección: `location.key !== 'default'`. Verificado contra el código
+   * fuente de react-router@7.18.1 (`createBrowserHistory`/`createMemoryHistory`
+   * en `chunk-KS7C4IRE.mjs`): la PRIMERA entrada de una sesión de
+   * navegación (primer load del navegador sin `history.state` todavía, o la
+   * primera entrada de `MemoryRouter` en los tests) siempre recibe la key
+   * literal `'default'`; cualquier entrada agregada con `push` (navegación
+   * interna) recibe una key aleatoria de `createKey()`. Es el mismo criterio
+   * en ambos `history` (browser real y el que usan los tests con
+   * `MemoryRouter`), así que no hace falta el fallback de
+   * `window.history.state?.idx` que también soporta react-router — `key` ya
+   * alcanza y es más simple de testear sin tocar `window.history` a mano.
+   */
+  function volverAtras() {
+    if (location.key !== 'default') {
+      navigate(-1);
+      return;
+    }
+    if (config?.volverA !== undefined) {
+      navigate(config.volverA.a);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-fondo">
       <header className={CLASES_HEADER}>
@@ -167,13 +198,9 @@ function ShellInterior() {
         <div className="mx-auto grid max-w-5xl grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3">
           <div className="flex min-w-0 items-center justify-start">
             {config?.volverA !== undefined && (
-              <Link
-                to={config.volverA.a}
-                aria-label={`Volver a ${config.volverA.etiqueta}`}
-                className={CLASE_VOLVER}
-              >
+              <button type="button" onClick={volverAtras} aria-label="Volver" className={CLASE_VOLVER}>
                 <span aria-hidden="true">‹</span>
-              </Link>
+              </button>
             )}
           </div>
           <h1 className="truncate text-center text-lg font-semibold text-texto">{titulo}</h1>

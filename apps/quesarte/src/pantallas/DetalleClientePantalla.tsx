@@ -1,5 +1,5 @@
-import { useMemo, useState, type ReactNode } from 'react';
-import { Link, useParams } from 'react-router';
+import { useMemo, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router';
 import { collection, doc, orderBy, query, where } from 'firebase/firestore';
 import { formatearMoney, type Venta } from '@gestion/core';
 import {
@@ -14,7 +14,7 @@ import {
   ventaConverter,
   type DatosCliente,
 } from '@gestion/firebase-kit';
-import { Button, DataTable, StatCard, useToasts, type ColumnaDataTable } from '@gestion/ui';
+import { Button, StatCard, useToasts } from '@gestion/ui';
 import { db } from '../firebase';
 import { useHeader } from '../componentes/header/ContextoHeader';
 import { formatearFecha } from '../componentes/stock/resumen';
@@ -54,6 +54,7 @@ function textoDiasDesdeUltimaCompra(dias: number | null): string {
  */
 export function DetalleClientePantalla() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const { perfil } = useAuth();
   const enLinea = useOnlineStatus();
   const { mostrarToast } = useToasts();
@@ -212,57 +213,49 @@ export function DetalleClientePantalla() {
   // La query trae TODAS las ventas del cliente (también las anuladas: no se
   // filtran — mostrar el badge es más honesto que ocultarlas, ver
   // `BadgeEstadoVenta`). Sin esto, las stats ya revertidas ("2 ventas") no
-  // reconciliarían con filas indistinguibles en la tabla. Cada celda de una
-  // fila anulada se de-enfatiza (`opacity-60`, `DataTable` no expone
-  // className por fila) — mismo criterio visual que el badge: el color no es
-  // la única señal, el texto "Anulada" lo es.
-  function celda(contenido: ReactNode, anulada: boolean) {
-    return anulada ? <span className="opacity-60">{contenido}</span> : contenido;
-  }
-
-  const columnasVentas: ColumnaDataTable<Venta>[] = [
-    {
-      clave: 'numero',
-      titulo: 'N°',
-      render: (v) => celda(`#${v.numero}`, v.estado === 'anulada'),
-    },
-    {
-      clave: 'fecha',
-      titulo: 'Fecha',
-      render: (v) => celda(formatearFechaHora(v.fecha), v.estado === 'anulada'),
-    },
-    {
-      clave: 'medioPago',
-      titulo: 'Medio de pago',
-      render: (v) => celda(ETIQUETAS_MEDIO_PAGO[v.medioPago], v.estado === 'anulada'),
-    },
-    {
-      clave: 'total',
-      titulo: 'Total',
-      alinear: 'derecha',
-      render: (v) => celda(formatearMoney(v.totalCents), v.estado === 'anulada'),
-    },
-    {
-      clave: 'estado',
-      titulo: 'Estado',
-      render: (v) => <BadgeEstadoVenta estado={v.estado} />,
-    },
-  ];
-
-  function filaCompactaVenta(v: Venta) {
+  // reconciliarían con filas indistinguibles en la lista. Fila de-enfatizada
+  // (`opacity-60`) para las anuladas — mismo criterio visual que el badge:
+  // el color no es la única señal, el texto "Anulada" lo es.
+  //
+  // Fila-botón tocable (NAV-2b, docs/06-ui-ux.md §2, 2026-07-14, pedido del
+  // dueño): navega al detalle de la venta en su ruta real
+  // (`/historial/venta/:id`, `DetalleVentaPantalla.tsx`) — las anuladas
+  // también navegan, el detalle ya sabe mostrarlas. Mismo patrón que las
+  // filas tocables de `Precios.tsx`/`Proveedores.tsx` (`<li><button>` con
+  // chevron `›`, target ≥44px): reemplaza al `DataTable` que usaba esta
+  // sección antes porque su modo tabla no es clickable (mismo motivo
+  // documentado en `Compras.tsx` para no usar `DataTable` en listas
+  // navegables).
+  function filaVenta(v: Venta) {
     const anulada = v.estado === 'anulada';
     return (
-      <div className={`flex min-h-[56px] flex-col gap-1 p-4 ${anulada ? 'opacity-60' : ''}`}>
-        <div className="flex items-baseline justify-between gap-2">
-          <span className="font-medium text-texto">Venta #{v.numero}</span>
-          <span className="tabular-nums font-semibold text-texto">{formatearMoney(v.totalCents)}</span>
-        </div>
-        <div className="flex items-center justify-between gap-2 text-sm text-texto-secundario">
-          <span>{formatearFechaHora(v.fecha)}</span>
-          <span>{ETIQUETAS_MEDIO_PAGO[v.medioPago]}</span>
-        </div>
-        <BadgeEstadoVenta estado={v.estado} />
-      </div>
+      <li key={v.id}>
+        <button
+          type="button"
+          onClick={() => navigate(`/historial/venta/${v.id}`)}
+          aria-label={`Ver venta #${v.numero}`}
+          className={`flex min-h-[56px] w-full items-center gap-2 rounded-card border border-borde bg-superficie p-4 text-left transition-colors hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 ${
+            anulada ? 'opacity-60' : ''
+          }`}
+        >
+          <div className="flex flex-1 flex-col gap-1">
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="font-medium text-texto">Venta #{v.numero}</span>
+              <span className="tabular-nums font-semibold text-texto">
+                {formatearMoney(v.totalCents)}
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-sm text-texto-secundario">
+              <span>{formatearFechaHora(v.fecha)}</span>
+              <span>{ETIQUETAS_MEDIO_PAGO[v.medioPago]}</span>
+            </div>
+            <BadgeEstadoVenta estado={v.estado} />
+          </div>
+          <span aria-hidden="true" className="text-texto-secundario">
+            ›
+          </span>
+        </button>
+      </li>
     );
   }
 
@@ -320,14 +313,15 @@ export function DetalleClientePantalla() {
 
       <div className="flex flex-col gap-2">
         <h3 className="font-semibold text-texto">Historial de ventas</h3>
-        <DataTable
-          columnas={columnasVentas}
-          filas={ventas.datos}
-          claveFila={(v) => v.id}
-          etiqueta={`Ventas de ${datosCliente.nombre}`}
-          filaCompacta={filaCompactaVenta}
-          vacio="Este cliente todavía no tiene ventas registradas."
-        />
+        {ventas.datos.length === 0 ? (
+          <div className="rounded-card border border-borde bg-superficie p-8 text-center text-texto-secundario">
+            Este cliente todavía no tiene ventas registradas.
+          </div>
+        ) : (
+          <ul aria-label={`Ventas de ${datosCliente.nombre}`} className="flex flex-col gap-2">
+            {ventas.datos.map((v) => filaVenta(v))}
+          </ul>
+        )}
       </div>
 
       {esAdmin && datosCliente.activo && (

@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router';
+import { MemoryRouter, Route, Routes, useNavigate } from 'react-router';
 import { ProveedorToasts } from '@gestion/ui';
 import { Shell } from './Shell';
 import { useHeader } from './componentes/header/ContextoHeader';
@@ -49,6 +49,22 @@ function PantallaConHeader({
 }) {
   useHeader({ titulo, volverA, acciones, accionHeader });
   return <div>Contenido de {titulo}</div>;
+}
+
+/** Pantalla de prueba con un botón que navega (push) a otra ruta — simula
+ * "tocar una fila" (p.ej. ficha de cliente → detalle de venta) para probar
+ * el back real de NAV-2c (`navigate(-1)` vs. el fallback `volverA.a`). */
+function PantallaConNavegacion({ titulo, destino }: { titulo: string; destino: string }) {
+  const navigate = useNavigate();
+  useHeader({ titulo });
+  return (
+    <div>
+      <p>Contenido de {titulo}</p>
+      <button type="button" onClick={() => navigate(destino)}>
+        Ir a {destino}
+      </button>
+    </div>
+  );
 }
 
 function renderizarEn(ruta: string) {
@@ -177,19 +193,23 @@ describe('Shell', () => {
     renderizarEn('/stock/productos');
 
     expect(screen.getByRole('heading', { name: 'Productos', level: 1 })).toBeTruthy();
-    const volver = screen.getByRole('link', { name: /Stock/ });
-    expect(volver.getAttribute('href')).toBe('/stock');
+    // NAV-2c (docs/06-ui-ux.md §2, 2026-07-14): el `‹` es un botón (no un
+    // link con `href` fijo) — sin historial previo (primera entrada de esta
+    // sesión de `MemoryRouter`), tocarlo cae al fallback `volverA.a`.
+    const volver = screen.getByRole('button', { name: 'Volver' });
+    fireEvent.click(volver);
+    expect(screen.getByText('Contenido de Stock')).toBeTruthy();
   });
 
   describe('header fundido (docs/06-ui-ux.md §2, rediseño 2026-07-10)', () => {
-    it('la flecha de volver va sola (sin el nombre del padre al lado) con aria-label "Volver a {Padre}"', () => {
+    it('la flecha de volver va sola (sin el nombre del padre al lado) con aria-label "Volver" (NAV-2c, 2026-07-14: el destino real puede variar, ya no es fijo)', () => {
       configurarAuth('admin');
 
       renderizarEn('/stock/productos');
 
-      const volver = screen.getByRole('link', { name: 'Volver a Stock' });
+      const volver = screen.getByRole('button', { name: 'Volver' });
       // Contenido visible: solo el glifo del ícono (aria-hidden), nada de
-      // texto "Stock" al lado — ese nombre vive únicamente en el aria-label.
+      // texto "Stock" al lado — el aria-label ya no lo incluye tampoco.
       expect(volver.textContent).toBe('‹');
       // Target táctil ≥44px (docs/06-ui-ux.md §5).
       expect(volver.className).toContain('h-11');
@@ -441,6 +461,117 @@ describe('Shell', () => {
       renderizarEn('/venta');
 
       expect(screen.queryByRole('link', { name: 'Historial' })).toBeNull();
+    });
+  });
+
+  describe('NAV-2c: `‹` consciente del historial (docs/06-ui-ux.md §2, 2026-07-14)', () => {
+    it('con una entrada previa dentro de la app, "Volver" hace back real al origen — aunque sea distinto del fallback declarado por la subvista', () => {
+      configurarAuth('admin');
+
+      render(
+        <MemoryRouter initialEntries={['/reportes']}>
+          <ProveedorToasts>
+            <Routes>
+              <Route element={<Shell />}>
+                <Route
+                  path="reportes"
+                  element={<PantallaConNavegacion titulo="Reportes" destino="/stock/productos" />}
+                />
+                <Route
+                  path="stock/productos"
+                  element={
+                    <PantallaConHeader titulo="Productos" volverA={{ etiqueta: 'Stock', a: '/stock' }} />
+                  }
+                />
+                <Route path="stock" element={<div>Contenido de Stock</div>} />
+              </Route>
+            </Routes>
+          </ProveedorToasts>
+        </MemoryRouter>,
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'Ir a /stock/productos' }));
+      expect(screen.getByRole('heading', { name: 'Productos', level: 1 })).toBeTruthy();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Volver' }));
+
+      // Volvió al origen REAL (Reportes, de donde se navegó), no al fallback
+      // `volverA` declarado por Productos (Stock) — prueba que `navigate(-1)`
+      // gana cuando hay historial propio.
+      expect(screen.getByText('Contenido de Reportes')).toBeTruthy();
+      expect(screen.queryByText('Contenido de Stock')).toBeNull();
+    });
+
+    it('sin entrada previa (deep link / primera entrada de la sesión), "Volver" cae al fallback `volverA.a`', () => {
+      configurarAuth('admin');
+
+      renderizarEn('/stock/productos');
+
+      expect(screen.getByRole('heading', { name: 'Productos', level: 1 })).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: 'Volver' }));
+
+      expect(screen.getByText('Contenido de Stock')).toBeTruthy();
+    });
+
+    it('caso cliente → venta → cliente: el back del detalle de venta vuelve a la ficha del cliente, no al fallback fijo (Historial)', () => {
+      configurarAuth('admin');
+
+      render(
+        <MemoryRouter initialEntries={['/clientes/cliente/c1']}>
+          <ProveedorToasts>
+            <Routes>
+              <Route element={<Shell />}>
+                <Route
+                  path="clientes/cliente/:id"
+                  element={<PantallaConNavegacion titulo="Cliente" destino="/historial/venta/v1" />}
+                />
+                <Route
+                  path="historial/venta/:id"
+                  element={
+                    <PantallaConHeader titulo="Venta" volverA={{ etiqueta: 'Historial', a: '/historial' }} />
+                  }
+                />
+                <Route path="historial" element={<div>Contenido de Historial</div>} />
+              </Route>
+            </Routes>
+          </ProveedorToasts>
+        </MemoryRouter>,
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'Ir a /historial/venta/v1' }));
+      expect(screen.getByRole('heading', { name: 'Venta', level: 1 })).toBeTruthy();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Volver' }));
+
+      expect(screen.getByText('Contenido de Cliente')).toBeTruthy();
+      expect(screen.queryByText('Contenido de Historial')).toBeNull();
+    });
+
+    it('caso entrada directa por URL a la venta: el back va al fallback `/historial`, no hay ficha de cliente a la que volver', () => {
+      configurarAuth('admin');
+
+      render(
+        <MemoryRouter initialEntries={['/historial/venta/v1']}>
+          <ProveedorToasts>
+            <Routes>
+              <Route element={<Shell />}>
+                <Route
+                  path="historial/venta/:id"
+                  element={
+                    <PantallaConHeader titulo="Venta" volverA={{ etiqueta: 'Historial', a: '/historial' }} />
+                  }
+                />
+                <Route path="historial" element={<div>Contenido de Historial</div>} />
+              </Route>
+            </Routes>
+          </ProveedorToasts>
+        </MemoryRouter>,
+      );
+
+      expect(screen.getByRole('heading', { name: 'Venta', level: 1 })).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: 'Volver' }));
+
+      expect(screen.getByText('Contenido de Historial')).toBeTruthy();
     });
   });
 
