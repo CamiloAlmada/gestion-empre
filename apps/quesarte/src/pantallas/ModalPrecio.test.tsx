@@ -402,4 +402,100 @@ describe('ModalPrecio', () => {
       }
     });
   });
+
+  describe('COSTO-2 (parte 2): bug de corrupción de datos — el precio de un producto quedaba "clavado" en el de otro', () => {
+    function productoA(over: Partial<Producto> = {}): Producto {
+      // "Magro con sal" del reporte del dueño: el primer producto abierto
+      // tras recargar, cuyo precio ($370) quedaba pegado en todos los
+      // siguientes.
+      return productoDe({
+        id: 'A',
+        nombre: 'Magro con sal',
+        modoStock: 'granel',
+        costoPromedioCents: money(30000),
+        precioVentaCents: money(37000),
+        ...over,
+      });
+    }
+
+    function productoB(over: Partial<Producto> = {}): Producto {
+      // "Chacarero" de la captura real: costo $627,86/kg, precio real $730,00.
+      return productoDe({
+        id: 'B',
+        nombre: 'Chacarero',
+        modoStock: 'granel',
+        costoPromedioCents: money(62786),
+        precioVentaCents: money(73000),
+        ...over,
+      });
+    }
+
+    it('abrir A con foco en el precio → cerrar → abrir B: el input y el margen mostrados pertenecen TODOS a B', () => {
+      const { actualizar } = renderizar({ producto: productoA(), abierto: true });
+
+      // Simula el autofoco nativo de `dialog.showModal()` sobre el primer
+      // campo enfocable del diálogo (el input de precio) — jsdom no lo
+      // implementa (ver `test-setup.ts`), así que se dispara a mano; el
+      // efecto sobre el `enfocadoRef` interno de `MoneyInput` es el mismo
+      // que en un navegador real.
+      fireEvent.focus(screen.getByLabelText('Precio de venta por kg'));
+
+      // `Precios.tsx` pasa `abierto:false, producto:null` en el mismo
+      // render al cerrar (ver JSDoc de `productoMostrado`).
+      actualizar({ abierto: false, producto: null });
+      actualizar({ abierto: true, producto: productoB() });
+
+      expect(screen.getByText('Editar precio · Chacarero')).toBeTruthy();
+      expect(screen.getByText('Costo promedio: $ 627,86 por kg')).toBeTruthy();
+      // Antes del fix: quedaba en "370,00" (el precio de A).
+      expect((screen.getByLabelText('Precio de venta por kg') as HTMLInputElement).value).toBe('730,00');
+      // Margen real de B (costo $627,86, precio $730,00) ≈ 13,99 % — mismo
+      // número que la captura del dueño, ahora coherente con el input.
+      expect(screen.getByText('13,99 %')).toBeTruthy();
+    });
+
+    it('editar el precio en A (sin guardar), cancelar y abrir B: no arrastra el texto tipeado en A', () => {
+      const { actualizar, onCerrar } = renderizar({ producto: productoA(), abierto: true });
+
+      const input = screen.getByLabelText('Precio de venta por kg');
+      fireEvent.focus(input);
+      fireEvent.change(input, { target: { value: '999,00' } });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+      expect(onCerrar).toHaveBeenCalledTimes(1);
+
+      actualizar({ abierto: false, producto: null });
+      actualizar({ abierto: true, producto: productoB() });
+
+      expect((screen.getByLabelText('Precio de venta por kg') as HTMLInputElement).value).toBe('730,00');
+    });
+
+    it('reabrir el MISMO producto tras un tipeo sin guardar: vuelve a mostrar el precio persistido, no el tipeo descartado', () => {
+      const a = productoA();
+      const { actualizar } = renderizar({ producto: a, abierto: true });
+
+      const input = screen.getByLabelText('Precio de venta por kg');
+      fireEvent.focus(input);
+      fireEvent.change(input, { target: { value: '999,00' } });
+
+      actualizar({ abierto: false, producto: null });
+      actualizar({ abierto: true, producto: a });
+
+      expect((screen.getByLabelText('Precio de venta por kg') as HTMLInputElement).value).toBe('370,00');
+    });
+
+    it('guardar en B nunca escribe el precio de A (severidad: corrupción de datos)', () => {
+      const { actualizar, onGuardar } = renderizar({ producto: productoA(), abierto: true });
+
+      fireEvent.focus(screen.getByLabelText('Precio de venta por kg'));
+      actualizar({ abierto: false, producto: null });
+      actualizar({ abierto: true, producto: productoB() });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+      expect(onGuardar).toHaveBeenCalledTimes(1);
+      const [datos] = onGuardar.mock.calls[0] as [DatosPrecioFormulario];
+      expect(datos.precioVentaCents).toBe(money(73000)); // el de B — NUNCA money(37000), el de A
+    });
+  });
 });
