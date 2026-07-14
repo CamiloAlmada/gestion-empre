@@ -338,6 +338,18 @@ proveedores del doc 07 (la parte ya en producción queda como está). El doc 09
 §A sigue EN PAUSA. La sesión de elicitación (doc 10 §8) reordena el roadmap
 post-demo, incluida Fase 3.
 
+## Tarea WA-I — Identidad visual de WhatsApp en los botones — IMPLEMENTADA
+
+Estado (2026-07-13): mergeada. `IconoWhatsApp` (glifo oficial, currentColor)
+en packages/ui; tokens de marca fijos `--color-whatsapp`/`--color-whatsapp-
+oscuro` (sin pares light/dark: son identidad de un tercero); botón
+`bg-whatsapp` con label/ícono en NEGRO — único par que pasa AA en las 4
+combinaciones tema×estilo (blanco falla sobre AMBOS verdes: 1.98/4.14).
+Review senior del punto de contraste: APROBADO CON OBSERVACIONES (2 menores
+corregidas). Bonus: `scripts/contraste.mjs` quedó versionado como herramienta
+reproducible de la tabla docs/06 §7 (reproduce exactos los valores
+históricos). Sin cambios de comportamiento (link/aria/targets verificados).
+
 ## Tanda UI-5 — Fusión Stock+Catálogo y reorganización del tab Stock — IMPLEMENTADA COMPLETA
 
 Estado (2026-07-13): las 3 tareas (UI-5a fusión, UI-5b detalle-hub + picker,
