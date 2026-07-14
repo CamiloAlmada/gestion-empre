@@ -377,16 +377,17 @@ ninguno de los dos lados depende del tema.
 | Descartado: `texto` (token adaptativo) / `whatsapp` | light 9.79:1, **dark 1.90:1** (Minimalista; en Cálido 8.34 / 1.77) | ❌ en dark (el token se aclara para leerse sobre fondos oscuros del tema, no sirve sobre un verde fijo) |
 | `whatsapp-oscuro` / `superficie`, como componente UI (borde, si se necesitara) | ≥3:1 en las 4 | 3.96 / 4.70 / 3.96 / 4.20 | ✅ ≥3:1 (❌ si se usara como texto 4.5:1: falla en 3 de 4) |
 
-**Elegido**: fondo `bg-whatsapp`, label e ícono (`IconoWhatsApp`, `fill:
-currentColor`) en `text-black` fijo — el único par de los candidatos que
-cumple 4.5:1 en las 4 combinaciones, porque ninguno de los dos lados depende
-del tema. `hover:bg-whatsapp-oscuro` mantiene el mismo negro (5.08:1).
+**Elegido**: fondo `bg-whatsapp`, label en `text-black` fijo — el único par
+de los candidatos que cumple 4.5:1 en las 4 combinaciones, porque ninguno de
+los dos lados depende del tema. `hover:bg-whatsapp-oscuro` mantiene el mismo
+negro (5.08:1).
 
-**Nota del logotipo**: `IconoWhatsApp` (`packages/ui`) es un uso decorativo
-exento de par AA propio (ver "usos decorativos aprobados" abajo: podría
-pintarse blanco sobre el verde de marca como badge). En `BotonWhatsApp`
-hereda `currentColor` del label (negro), así que en la práctica usa el mismo
-par ya aprobado arriba.
+**Nota del logotipo** (decisión del dueño, 2026-07-14): el glifo
+`IconoWhatsApp` va **blanco** sobre el verde (`text-white` en el ícono, look
+clásico de la marca) — uso decorativo exento de par AA propio (ver "usos
+decorativos aprobados" abajo): es logotipo, no comunica información por sí
+solo; el nombre accesible y el contraste exigible los lleva el LABEL, que
+sigue en el par negro/verde aprobado arriba.
 
 **Usos decorativos aprobados** (sin requisito de par AA por no llevar texto ni
 comunicar información por sí solos — la información va por otra vía):

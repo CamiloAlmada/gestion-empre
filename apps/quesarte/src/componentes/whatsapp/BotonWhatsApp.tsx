@@ -43,14 +43,15 @@ export interface BotonWhatsAppProps {
 }
 
 // Identidad visual de marca (tarea WA-I, docs/06-ui-ux.md §7 "Marca
-// WhatsApp"): fondo `bg-whatsapp` (#25D366) con label/ícono en NEGRO fijo
+// WhatsApp"): fondo `bg-whatsapp` (#25D366) con label en NEGRO fijo
 // (`text-black`, no un token semántico — igual criterio que `text-white` en
 // `Button` primaria: un literal de Tailwind, no un hex hardcodeado). Es el
 // ÚNICO par verificado que pasa AA (≥4.5:1 texto) en las 4 combinaciones
 // tema×estilo, porque ambos lados son colores FIJOS: ni el texto adaptativo
 // (`texto`, que en dark casi blanco) ni blanco sobre el verde (~2:1, el caso
 // que motivó esta tarea) cumplen. `hover:bg-whatsapp-oscuro` (#128C7E)
-// también pasa con el mismo negro (5.08:1) — ver ratios en docs/06 §7.
+// también pasa con el mismo negro (5.08:1) — ver ratios en docs/06 §7. El
+// GLIFO va aparte en blanco (exento como logotipo, ver el JSX de abajo).
 const CLASE_BOTON =
   'inline-flex min-h-[44px] items-center justify-center gap-2 rounded-control bg-whatsapp px-4 font-medium text-black hover:bg-whatsapp-oscuro focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2 focus-visible:ring-offset-superficie';
 
@@ -167,7 +168,11 @@ export function BotonWhatsApp({
         aria-label={ariaLabel}
         className={`${CLASE_BOTON} ${className}`}
       >
-        <IconoWhatsApp className="h-5 w-5" />
+        {/* Glifo BLANCO (decisión del dueño 2026-07-14, look clásico de la
+            marca): logotipo exento de AA (docs/06 §7, "usos decorativos") —
+            el contraste exigible lo lleva el label, que sigue en el par
+            negro/verde aprobado (`text-black` de CLASE_BOTON). */}
+        <IconoWhatsApp className="h-5 w-5 text-white" />
         WhatsApp
       </button>
 
