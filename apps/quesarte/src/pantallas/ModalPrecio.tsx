@@ -16,6 +16,8 @@ import {
   normalizarPorcentaje,
   textoPorcentajeDesdeBps,
 } from '../componentes/stock/CampoPorcentaje';
+import { formatearFecha } from '../componentes/stock/resumen';
+import { useDesgloseUltimaCompra } from '../componentes/compras/useDesgloseUltimaCompra';
 
 /** Datos validados que salen del formulario hacia `Precios.tsx`. `undefined`
  * en `margenObjetivoBps` significa "borrar el campo" (mismo criterio que
@@ -73,6 +75,11 @@ interface Errores {
  * además el editor de margen objetivo queda deshabilitado con una nota
  * corta (no tiene sentido cargar un objetivo que nunca va a poder sugerir
  * un precio sin el peso de la pieza de por medio).
+ *
+ * COSTO-2 (doc 03): bajo "Costo promedio", una línea "Última compra" con el
+ * mismo desglose que `ModalDesgloseCosto` (COSTO-1), vía el hook compartido
+ * `useDesgloseUltimaCompra` — sin compra confirmada que incluya el producto,
+ * la línea no aparece (nada de estados vacíos acá, ver JSDoc del hook).
  */
 export function ModalPrecio({ abierto, producto, guardando, onGuardar, onCerrar }: ModalPrecioProps) {
   const [precio, setPrecio] = useState<Money | null>(null);
@@ -100,6 +107,8 @@ export function ModalPrecio({ abierto, producto, guardando, onGuardar, onCerrar 
     );
     setErrores({});
   }, [abierto, producto]);
+
+  const { desglose: desgloseUltimaCompra } = useDesgloseUltimaCompra(productoMostrado, abierto);
 
   if (productoMostrado === null) {
     // Nunca se abrió todavía: el `<dialog>` no está `open`, no hay nada
@@ -181,6 +190,20 @@ export function ModalPrecio({ abierto, producto, guardando, onGuardar, onCerrar 
         <p className="text-sm text-texto-secundario">
           Costo promedio: {tieneCosto ? `${formatearMoney(costoCents)} ${etiquetaUnidadCosto}` : '—'}
         </p>
+
+        {/* COSTO-2: mismo desglose que el ⓘ de Precios (`ModalDesgloseCosto`),
+            en línea y compacto — sin compra confirmada que incluya el
+            producto, `desgloseUltimaCompra` es `null` y esta línea no se
+            renderiza (doc 03: "el modal no agrega ruido"). */}
+        {desgloseUltimaCompra !== null && (
+          // Un único string armado antes del JSX (no varios `{expr}` sueltos
+          // dentro del `<p>`): queda como UN solo nodo de texto, más simple
+          // de testear con `getByText` y sin nodos de texto partidos por
+          // interpolación (mismo criterio ya aplicado en `ModalDesgloseCosto`).
+          <p className="text-sm text-texto-secundario">
+            {`Última compra (${formatearFecha(desgloseUltimaCompra.fecha)} · ${desgloseUltimaCompra.proveedorNombre}): mercadería ${formatearMoney(desgloseUltimaCompra.mercaderiaCents)} · gastos ${formatearMoney(desgloseUltimaCompra.gastosCents)}${desgloseUltimaCompra.unidad === 'kg' ? ' /kg' : ' /u'}`}
+          </p>
+        )}
 
         <MoneyInput
           label={`Precio de venta ${etiquetaUnidadPrecio}`}

@@ -1,8 +1,53 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { ProveedorTema } from '@gestion/ui';
-import { money, type Producto } from '@gestion/core';
+import { money, peso, type Compra, type Producto } from '@gestion/core';
 import { ModalPrecio, type DatosPrecioFormulario, type ModalPrecioProps } from './ModalPrecio';
+
+const mocks = vi.hoisted(() => ({ useCollection: vi.fn(), useOnlineStatus: vi.fn(() => true) }));
+
+// Mismo criterio que `ModalDesgloseCosto.test.tsx` (comparte el hook
+// `useDesgloseUltimaCompra`, COSTO-2): `firebase/firestore` y `../firebase`
+// van SIN mockear, solo `useCollection`/`useOnlineStatus`.
+vi.mock('@gestion/firebase-kit', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@gestion/firebase-kit')>();
+  return { ...actual, useCollection: mocks.useCollection, useOnlineStatus: mocks.useOnlineStatus };
+});
+
+interface EstadoColeccionFalso<T> {
+  datos: T[];
+  cargando: boolean;
+  error: unknown;
+}
+
+let estadoCompras: EstadoColeccionFalso<Compra> = { datos: [], cargando: false, error: null };
+
+mocks.useCollection.mockImplementation((query: unknown) =>
+  query === null ? { datos: [], cargando: false, error: null } : estadoCompras,
+);
+
+function configurarCompras(overrides: { datos?: Compra[]; cargando?: boolean; error?: unknown } = {}) {
+  estadoCompras = {
+    datos: overrides.datos ?? [],
+    cargando: overrides.cargando ?? false,
+    error: overrides.error ?? null,
+  };
+}
+
+function compraDe(over: Partial<Compra> & Pick<Compra, 'id'>): Compra {
+  return {
+    fecha: new Date(2026, 6, 1),
+    usuarioId: 'admin-1',
+    estado: 'confirmada',
+    proveedorNombre: 'Proveedor',
+    items: [],
+    gastos: [],
+    totalFacturaCents: money(0),
+    totalGastosCents: money(0),
+    totalRealCents: money(0),
+    ...over,
+  };
+}
 
 function productoDe(over: Partial<Producto> & Pick<Producto, 'id'>): Producto {
   return {
@@ -29,16 +74,33 @@ function renderizar(overrides: Partial<ModalPrecioProps> = {}) {
     onCerrar,
     ...overrides,
   };
-  render(
+  const resultado = render(
     <ProveedorTema>
       <ModalPrecio {...props} />
     </ProveedorTema>,
   );
-  return { onGuardar, onCerrar };
+  /** Re-renderiza la MISMA instancia con props nuevas — necesario para
+   * reproducir en tests la secuencia real "abrir A → cerrar → abrir B"
+   * sobre la instancia estable de `ModalPrecio` (nunca se desmonta, ver su
+   * JSDoc), en vez de montar una instancia nueva por test. */
+  function actualizar(nuevos: Partial<ModalPrecioProps>) {
+    Object.assign(props, nuevos);
+    resultado.rerender(
+      <ProveedorTema>
+        <ModalPrecio {...props} />
+      </ProveedorTema>,
+    );
+  }
+  return { onGuardar, onCerrar, actualizar };
 }
 
 describe('ModalPrecio', () => {
-  afterEach(cleanup);
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+    mocks.useOnlineStatus.mockReturnValue(true);
+    estadoCompras = { datos: [], cargando: false, error: null };
+  });
 
   it('título incluye el nombre del producto', () => {
     renderizar({ producto: productoDe({ id: 'p1', nombre: 'Queso Colonia' }) });
@@ -245,6 +307,99 @@ describe('ModalPrecio', () => {
       expect(screen.getByText('40,00 %')).toBeTruthy(); // margen actual
       const input = screen.getByLabelText('Margen objetivo (%)') as HTMLInputElement;
       expect(input.disabled).toBe(false);
+    });
+  });
+
+  describe('COSTO-2 (parte 1): línea inline "Última compra"', () => {
+    it('ítem al peso (/kg): fecha, proveedor, mercadería y gastos normalizados, sufijo /kg', () => {
+      configurarCompras({
+        datos: [
+          compraDe({
+            id: 'c1',
+            fecha: new Date(2026, 5, 15),
+            proveedorNombre: 'Lácteos del Sur',
+            items: [
+              {
+                productoId: 'p1',
+                nombreProducto: 'Queso Añejo',
+                gramos: peso(1500),
+                costoFacturaCents: money(30000),
+                gastoProrrateadoCents: money(3000),
+                costoRealCents: money(33000),
+                costoRealKgCents: money(22000),
+              },
+            ],
+          }),
+        ],
+      });
+      renderizar({ producto: productoDe({ id: 'p1', modoStock: 'granel' }) });
+
+      expect(
+        screen.getByText(
+          'Última compra (15/06/2026 · Lácteos del Sur): mercadería $ 200,00 · gastos $ 20,00 /kg',
+        ),
+      ).toBeTruthy();
+    });
+
+    it('ítem por unidad (/u): mercadería y gastos normalizados, sufijo /u', () => {
+      configurarCompras({
+        datos: [
+          compraDe({
+            id: 'c1',
+            fecha: new Date(2026, 5, 20),
+            proveedorNombre: 'Apiario Norte',
+            items: [
+              {
+                productoId: 'p2',
+                nombreProducto: 'Miel 500g',
+                unidades: 4,
+                costoFacturaCents: money(40000),
+                gastoProrrateadoCents: money(4000),
+                costoRealCents: money(44000),
+              },
+            ],
+          }),
+        ],
+      });
+      renderizar({
+        producto: productoDe({ id: 'p2', modoStock: 'unidad_simple', modoPrecio: 'por_unidad' }),
+      });
+
+      expect(
+        screen.getByText('Última compra (20/06/2026 · Apiario Norte): mercadería $ 100,00 · gastos $ 10,00 /u'),
+      ).toBeTruthy();
+    });
+
+    it('sin compra confirmada que incluya el producto: la línea NO aparece (nada de estados vacíos)', () => {
+      configurarCompras({ datos: [] });
+      renderizar({ producto: productoDe({ id: 'p1' }) });
+
+      expect(screen.queryByText(/Última compra/)).toBeNull();
+    });
+
+    it('un producto sin costo tampoco muestra la línea, aunque haya compras confirmadas de otros productos', () => {
+      configurarCompras({
+        datos: [
+          compraDe({
+            id: 'c1',
+            items: [{ productoId: 'p1', nombreProducto: 'Queso Añejo', costoFacturaCents: money(1000) }],
+          }),
+        ],
+      });
+      renderizar({ producto: productoDe({ id: 'p1', costoPromedioCents: money(0) }) });
+
+      // Sin costo, la búsqueda ni siquiera importa acá: el contrato pide que
+      // no aparezca ruido — y de hecho el producto de la compra no matchea.
+      expect(screen.queryByText(/Última compra/)).toBeNull();
+    });
+
+    it('con el modal cerrado, la query de compras queda desactivada (sin suscripción activa)', () => {
+      configurarCompras({ datos: [] });
+      renderizar({ abierto: false, producto: null });
+
+      for (const llamada of mocks.useCollection.mock.calls) {
+        expect(llamada[0]).toBeNull();
+      }
     });
   });
 });
