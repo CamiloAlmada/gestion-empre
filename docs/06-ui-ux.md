@@ -370,24 +370,24 @@ ninguno de los dos lados depende del tema.
 
 | Uso | Par | Ratio (las 4 combinaciones) | AA |
 |---|---|---|---|
-| Label/ícono del botón WhatsApp (elegido) | `black` (texto/ícono) / `whatsapp` | 10.59:1 | ✅ ≥4.5:1 |
-| — hover | `black` / `whatsapp-oscuro` | 5.08:1 | ✅ ≥4.5:1 |
-| Descartado: blanco / `whatsapp-oscuro` | blanco/`whatsapp-oscuro` | 4.14:1 | ❌ <4.5:1 (texto normal) |
-| Descartado: blanco / `whatsapp` | blanco/`whatsapp` | 1.98:1 | ❌ (el caso que motivó la tarea) |
+| Label/ícono del botón WhatsApp (EN USO por excepción de marca del dueño, ver abajo) | blanco/`whatsapp` | 1.98:1 | ❌ asumido |
+| — hover (misma excepción) | blanco/`whatsapp-oscuro` | 4.14:1 | ❌ asumido |
+| Alternativa AA descartada por el dueño: negro / `whatsapp` | `black`/`whatsapp` | 10.59:1 | ✅ ≥4.5:1 |
+| Alternativa AA descartada por el dueño: blanco / teal `#075E54` | blanco/#075E54 | 7.67:1 | ✅ ≥4.5:1 |
 | Descartado: `texto` (token adaptativo) / `whatsapp` | light 9.79:1, **dark 1.90:1** (Minimalista; en Cálido 8.34 / 1.77) | ❌ en dark (el token se aclara para leerse sobre fondos oscuros del tema, no sirve sobre un verde fijo) |
 | `whatsapp-oscuro` / `superficie`, como componente UI (borde, si se necesitara) | ≥3:1 en las 4 | 3.96 / 4.70 / 3.96 / 4.20 | ✅ ≥3:1 (❌ si se usara como texto 4.5:1: falla en 3 de 4) |
 
-**Elegido**: fondo `bg-whatsapp`, label en `text-black` fijo — el único par
-de los candidatos que cumple 4.5:1 en las 4 combinaciones, porque ninguno de
-los dos lados depende del tema. `hover:bg-whatsapp-oscuro` mantiene el mismo
-negro (5.08:1).
-
-**Nota del logotipo** (decisión del dueño, 2026-07-14): el glifo
-`IconoWhatsApp` va **blanco** sobre el verde (`text-white` en el ícono, look
-clásico de la marca) — uso decorativo exento de par AA propio (ver "usos
-decorativos aprobados" abajo): es logotipo, no comunica información por sí
-solo; el nombre accesible y el contraste exigible los lleva el LABEL, que
-sigue en el par negro/verde aprobado arriba.
+**Elegido — EXCEPCIÓN DE MARCA, decisión del dueño (2026-07-14)**: fondo
+`bg-whatsapp` con glifo Y label en **blanco** (`text-white`), look oficial de
+la marca. El par blanco/`whatsapp` mide **1.98:1 — NO cumple AA** y el dueño
+lo asumió explícitamente ("es un tema de brand… perdemos 1 sola de contraste,
+es asumible") tras ver los números y las alternativas (negro 10.59:1, teal
+#075E54 7.67:1). Única excepción de contraste aprobada en toda la app: NO
+sienta precedente, NO se extiende a ningún otro componente ni estado, y
+cualquier review debe tratarla como decisión cerrada del dueño, no como
+hallazgo. Mitigación: el botón se identifica por el glifo icónico + verde de
+marca + `aria-label` descriptivo; el label es refuerzo, no la única señal.
+`hover:bg-whatsapp-oscuro` con blanco: 4.14:1 (misma excepción).
 
 **Usos decorativos aprobados** (sin requisito de par AA por no llevar texto ni
 comunicar información por sí solos — la información va por otra vía):

@@ -42,18 +42,16 @@ export interface BotonWhatsAppProps {
   className?: string;
 }
 
-// Identidad visual de marca (tarea WA-I, docs/06-ui-ux.md §7 "Marca
-// WhatsApp"): fondo `bg-whatsapp` (#25D366) con label en NEGRO fijo
-// (`text-black`, no un token semántico — igual criterio que `text-white` en
-// `Button` primaria: un literal de Tailwind, no un hex hardcodeado). Es el
-// ÚNICO par verificado que pasa AA (≥4.5:1 texto) en las 4 combinaciones
-// tema×estilo, porque ambos lados son colores FIJOS: ni el texto adaptativo
-// (`texto`, que en dark casi blanco) ni blanco sobre el verde (~2:1, el caso
-// que motivó esta tarea) cumplen. `hover:bg-whatsapp-oscuro` (#128C7E)
-// también pasa con el mismo negro (5.08:1) — ver ratios en docs/06 §7. El
-// GLIFO va aparte en blanco (exento como logotipo, ver el JSX de abajo).
+// Identidad visual de marca (tarea WA-I + decisión del dueño 2026-07-14,
+// docs/06-ui-ux.md §7 "Marca WhatsApp"): fondo `bg-whatsapp` (#25D366) con
+// glifo y label en BLANCO — el par blanco/verde mide 1.98:1 y NO cumple AA;
+// es la ÚNICA excepción de contraste de la app, asumida explícitamente por
+// el dueño como identidad de marca tras ver los números (las alternativas
+// AA —negro 10.59:1, teal #075E54 7.67:1— están documentadas en §7). No
+// extender este criterio a ningún otro componente: cualquier otro par nuevo
+// sigue saliendo de la tabla §7.
 const CLASE_BOTON =
-  'inline-flex min-h-[44px] items-center justify-center gap-2 rounded-control bg-whatsapp px-4 font-medium text-black hover:bg-whatsapp-oscuro focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2 focus-visible:ring-offset-superficie';
+  'inline-flex min-h-[44px] items-center justify-center gap-2 rounded-control bg-whatsapp px-4 font-medium text-white hover:bg-whatsapp-oscuro focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2 focus-visible:ring-offset-superficie';
 
 const CLASE_ITEM_SELECTOR =
   'flex min-h-[44px] w-full items-center rounded-control border border-borde bg-superficie px-4 text-left font-medium text-texto hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600';
@@ -168,11 +166,7 @@ export function BotonWhatsApp({
         aria-label={ariaLabel}
         className={`${CLASE_BOTON} ${className}`}
       >
-        {/* Glifo BLANCO (decisión del dueño 2026-07-14, look clásico de la
-            marca): logotipo exento de AA (docs/06 §7, "usos decorativos") —
-            el contraste exigible lo lleva el label, que sigue en el par
-            negro/verde aprobado (`text-black` de CLASE_BOTON). */}
-        <IconoWhatsApp className="h-5 w-5 text-white" />
+        <IconoWhatsApp className="h-5 w-5" />
         WhatsApp
       </button>
 
