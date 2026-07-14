@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { ProveedorTema, ProveedorToasts } from '@gestion/ui';
-import { money, type Categoria, type Producto } from '@gestion/core';
+import { money, type Categoria, type Compra, type Producto } from '@gestion/core';
 import { commitEnLotes, Precios, TAMANIO_LOTE_MASIVO } from './Precios';
 import { StockLayout } from '../componentes/stock/StockLayout';
 import { ProveedorHeader } from '../componentes/header/ContextoHeader';
@@ -70,17 +70,29 @@ interface EstadoColeccionFalso<T> {
 
 let estadoProductos: EstadoColeccionFalso<Producto> = { datos: [], cargando: false, error: null };
 let estadoCategorias: EstadoColeccionFalso<Categoria> = { datos: [], cargando: false, error: null };
+// COSTO-1: `ModalDesgloseCosto` suscribe a `compras` de forma LAZY (query
+// `null` mientras el modal está cerrado — `nombreColeccion` devuelve
+// `undefined` para `null` y cae al branch explícito de acá abajo, sin tocar
+// `estadoProductos`).
+let estadoCompras: EstadoColeccionFalso<Compra> = { datos: [], cargando: false, error: null };
 
-/** Mismo truco que Productos.test.tsx: distingue las dos `useCollection` por
- * el nombre de colección de la query real armada con `collection`/`query`. */
+/** Mismo truco que Productos.test.tsx: distingue las `useCollection` por el
+ * nombre de colección de la query real armada con `collection`/`query`.
+ * `null` (query desactivada, ver `useCollection` de `firebase-kit`) no tiene
+ * `_query` — se distingue ANTES de leer esa propiedad. */
 function nombreColeccion(query: unknown): string | undefined {
+  if (query === null) return undefined;
   const interna = (query as { _query?: { path?: { segments?: string[] } } })._query;
   return interna?.path?.segments?.[0];
 }
 
-mocks.useCollection.mockImplementation((query: unknown) =>
-  nombreColeccion(query) === 'categorias' ? estadoCategorias : estadoProductos,
-);
+mocks.useCollection.mockImplementation((query: unknown) => {
+  if (query === null) return { datos: [], cargando: false, error: null };
+  const nombre = nombreColeccion(query);
+  if (nombre === 'categorias') return estadoCategorias;
+  if (nombre === 'compras') return estadoCompras;
+  return estadoProductos;
+});
 
 function configurarCollection(overrides: { datos?: Producto[]; cargando?: boolean; error?: unknown }) {
   estadoProductos = {
@@ -92,6 +104,14 @@ function configurarCollection(overrides: { datos?: Producto[]; cargando?: boolea
 
 function configurarCategorias(overrides: { datos?: Categoria[] } = {}) {
   estadoCategorias = { datos: overrides.datos ?? [], cargando: false, error: null };
+}
+
+function configurarCompras(overrides: { datos?: Compra[]; cargando?: boolean; error?: unknown } = {}) {
+  estadoCompras = {
+    datos: overrides.datos ?? [],
+    cargando: overrides.cargando ?? false,
+    error: overrides.error ?? null,
+  };
 }
 
 function productoDe(over: Partial<Producto> & Pick<Producto, 'id'>): Producto {
@@ -133,6 +153,7 @@ describe('Precios', () => {
     mocks.useOnlineStatus.mockReturnValue(true);
     estadoProductos = { datos: [], cargando: false, error: null };
     estadoCategorias = { datos: [], cargando: false, error: null };
+    estadoCompras = { datos: [], cargando: false, error: null };
   });
 
   it('muestra el SelectorSeccion con "Precios" disponible', () => {
@@ -847,6 +868,64 @@ describe('Precios', () => {
       expect(
         screen.getByText('Costo por kg y precio por unidad no son comparables sin el peso de la pieza.'),
       ).toBeTruthy();
+    });
+  });
+
+  describe('COSTO-1: botón ⓘ "Ver desglose de costo"', () => {
+    // El ⓘ se renderiza dos veces en el DOM (fila desktop + fila compacta,
+    // ver comentario de `tabla()` arriba: `DataTable` con `filaCompacta`
+    // siempre monta ambas, la visibilidad la decide CSS) — se scopea a
+    // `tabla()` para asertar sobre UNA sola instancia, mismo criterio que el
+    // resto del archivo.
+
+    it('(a) NO aparece en un producto sin costo cargado', () => {
+      configurarCollection({
+        datos: [productoDe({ id: 'p1', nombre: 'Nuez nueva', costoPromedioCents: money(0) })],
+      });
+      renderizar();
+
+      expect(screen.queryByRole('button', { name: 'Ver desglose de costo de Nuez nueva' })).toBeNull();
+    });
+
+    it('(a)/(f) aparece con costo cargado, con el aria-label esperado y target ≥44px', () => {
+      configurarCollection({
+        datos: [productoDe({ id: 'p1', nombre: 'Queso Añejo', costoPromedioCents: money(30000) })],
+      });
+      renderizar();
+
+      const boton = tabla().getByRole('button', { name: 'Ver desglose de costo de Queso Añejo' });
+      expect(boton).toBeTruthy();
+      expect(boton.className).toContain('min-h-[44px]');
+      expect(boton.className).toContain('min-w-[44px]');
+    });
+
+    it('tocarlo abre el modal de desglose con el nombre del producto en el título', () => {
+      configurarCollection({
+        datos: [productoDe({ id: 'p1', nombre: 'Queso Añejo', costoPromedioCents: money(30000) })],
+      });
+      configurarCompras({ datos: [] });
+      renderizar();
+
+      fireEvent.click(tabla().getByRole('button', { name: 'Ver desglose de costo de Queso Añejo' }));
+
+      expect(screen.getByText('Desglose de costo · Queso Añejo')).toBeTruthy();
+      expect(screen.getByText('El costo actual no proviene de una compra registrada.')).toBeTruthy();
+    });
+
+    it('"Cerrar" cierra el <dialog> del desglose sin abrir el modal de edición de precio', () => {
+      configurarCollection({
+        datos: [productoDe({ id: 'p1', nombre: 'Queso Añejo', costoPromedioCents: money(30000) })],
+      });
+      configurarCompras({ datos: [] });
+      renderizar();
+
+      fireEvent.click(tabla().getByRole('button', { name: 'Ver desglose de costo de Queso Añejo' }));
+      const dialogo = screen.getByText('Desglose de costo · Queso Añejo').closest('dialog') as HTMLDialogElement;
+
+      fireEvent.click(screen.getByRole('button', { name: 'Cerrar' }));
+
+      expect(dialogo.open).toBe(false);
+      expect(screen.queryByText('Editar precio · Queso Añejo')).toBeNull();
     });
   });
 

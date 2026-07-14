@@ -106,3 +106,18 @@ export function IconoFiltros({ className = 'h-5 w-5' }: IconoProps) {
     </svg>
   );
 }
+
+/** Círculo con "i": botón ⓘ de "Ver desglose de costo" en Precios (COSTO-1,
+ * docs/03-compras-costos-precios.md). El punto de la "i" se rellena
+ * (`fill="currentColor"`, mismo criterio que los puntos del carrito de
+ * `IconoVenta`) porque un trazo tan chico se ve hueco/débil con el
+ * `strokeWidth` de `PROPS_BASE`. */
+export function IconoInfo({ className = 'h-5 w-5' }: IconoProps) {
+  return (
+    <svg {...PROPS_BASE} className={className}>
+      <circle cx="12" cy="12" r="9" />
+      <line x1="12" y1="11" x2="12" y2="16" />
+      <circle cx="12" cy="7.5" r="1" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
