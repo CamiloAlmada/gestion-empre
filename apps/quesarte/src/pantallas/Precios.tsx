@@ -36,10 +36,11 @@ import {
   unidadCosto,
 } from '../componentes/stock/margenes';
 import { formatearBps } from '../componentes/stock/CampoPorcentaje';
-import { IconoFiltros } from '../componentes/iconos';
+import { IconoFiltros, IconoInfo } from '../componentes/iconos';
 import { useHeader } from '../componentes/header/ContextoHeader';
 import { ModalPrecio, type DatosPrecioFormulario } from './ModalPrecio';
 import { ModalMargenMasivo } from './ModalMargenMasivo';
+import { ModalDesgloseCosto } from './ModalDesgloseCosto';
 
 const coleccionProductos = collection(db, 'productos').withConverter(productoConverter);
 const coleccionCategorias = collection(db, 'categorias').withConverter(categoriaConverter);
@@ -54,6 +55,33 @@ function textoPrecio(producto: Producto): string {
 function textoCosto(producto: Producto): string {
   if (producto.costoPromedioCents <= 0) return '—';
   return `${formatearMoney(producto.costoPromedioCents)}${unidadCosto(producto) === 'kg' ? ' /kg' : ' /u'}`;
+}
+
+interface BotonDesgloseCostoProps {
+  producto: Producto;
+  onAbrir: () => void;
+}
+
+/**
+ * Botón-icono ⓘ "Ver desglose de costo" (COSTO-1, doc 03): visible SOLO si
+ * el producto tiene costo cargado (`costoPromedioCents > 0` — decide acá
+ * mismo en vez de en cada llamador, para no duplicar la condición entre la
+ * fila desktop y la compacta). Target ≥44px (docs/06-ui-ux.md §5, checklist
+ * de accesibilidad), mismo patrón `min-h/min-w` que el botón de filtros
+ * extra de esta misma pantalla.
+ */
+function BotonDesgloseCosto({ producto, onAbrir }: BotonDesgloseCostoProps) {
+  if (producto.costoPromedioCents <= 0) return null;
+  return (
+    <button
+      type="button"
+      onClick={onAbrir}
+      aria-label={`Ver desglose de costo de ${producto.nombre}`}
+      className="inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-full text-texto-secundario transition-colors hover:text-texto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
+    >
+      <IconoInfo className="h-5 w-5" />
+    </button>
+  );
 }
 
 function textoMargenActual(producto: Producto): string {
@@ -185,6 +213,10 @@ export function Precios() {
   const [panelFiltrosAbierto, setPanelFiltrosAbierto] = useState(false);
   const [productoEnEdicion, setProductoEnEdicion] = useState<Producto | null>(null);
   const [guardando, setGuardando] = useState(false);
+  // "Ver desglose de costo" (COSTO-1, doc 03): estado independiente del de
+  // edición de precio — son dos modales distintos que pueden abrirse sobre
+  // el mismo producto en momentos distintos.
+  const [productoDesglose, setProductoDesglose] = useState<Producto | null>(null);
   const [confirmandoMasivo, setConfirmandoMasivo] = useState(false);
   const [aplicandoMasivo, setAplicandoMasivo] = useState(false);
   // "Ajustar margen" (WA-H/WA-H2): modal de porcentaje + confirmación
@@ -280,6 +312,14 @@ export function Precios() {
 
   function cerrarEdicion() {
     setProductoEnEdicion(null);
+  }
+
+  function abrirDesglose(producto: Producto) {
+    setProductoDesglose(producto);
+  }
+
+  function cerrarDesglose() {
+    setProductoDesglose(null);
   }
 
   function reintentar() {
@@ -430,7 +470,17 @@ export function Precios() {
         </div>
       ),
     },
-    { clave: 'costo', titulo: 'Costo', alinear: 'derecha', render: textoCosto },
+    {
+      clave: 'costo',
+      titulo: 'Costo',
+      alinear: 'derecha',
+      render: (p) => (
+        <div className="flex items-center justify-end gap-1">
+          <span>{textoCosto(p)}</span>
+          <BotonDesgloseCosto producto={p} onAbrir={() => abrirDesglose(p)} />
+        </div>
+      ),
+    },
     { clave: 'precio', titulo: 'Precio', alinear: 'derecha', render: textoPrecio },
     { clave: 'margenActual', titulo: 'Margen actual', alinear: 'derecha', render: textoMargenActual },
     { clave: 'margenObjetivo', titulo: 'Margen objetivo', alinear: 'derecha', render: textoMargenObjetivo },
@@ -446,29 +496,38 @@ export function Precios() {
     },
   ];
 
+  /** Fila compacta mobile: `<button>` de edición + ⓘ de desglose como
+   * hermanos (NUNCA anidados — dos elementos interactivos, uno dentro del
+   * otro, rompería semántica/accesibilidad; antes de COSTO-1 toda la fila
+   * era un único `<button>`, doc 03 obliga a partirla). El ⓘ, cuando está
+   * presente, queda FUERA del botón de edición para no agrandar su target
+   * táctil con una acción distinta. */
   function filaCompactaPrecio(p: Producto) {
     return (
-      <button
-        type="button"
-        onClick={() => abrirEdicion(p)}
-        aria-label={`Editar precio de ${p.nombre}`}
-        className="flex min-h-[56px] w-full items-center gap-2 p-4 text-left transition-colors hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
-      >
-        <div className="flex flex-1 flex-col gap-1">
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="font-medium text-texto">{p.nombre}</span>
-            <span className="tabular-nums font-semibold text-texto">{textoPrecio(p)}</span>
+      <div className="flex min-h-[56px] w-full items-center gap-1 p-2">
+        <button
+          type="button"
+          onClick={() => abrirEdicion(p)}
+          aria-label={`Editar precio de ${p.nombre}`}
+          className="flex flex-1 items-center gap-2 rounded-elemento p-2 text-left transition-colors hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
+        >
+          <div className="flex flex-1 flex-col gap-1">
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="font-medium text-texto">{p.nombre}</span>
+              <span className="tabular-nums font-semibold text-texto">{textoPrecio(p)}</span>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm text-texto-secundario">Costo: {textoCosto(p)}</span>
+              <span className="tabular-nums text-sm text-texto-secundario">Margen: {textoMargenActual(p)}</span>
+            </div>
+            {estaBajoObjetivo(p) && <BadgeStock variante="advertencia">Bajo objetivo</BadgeStock>}
           </div>
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-sm text-texto-secundario">Costo: {textoCosto(p)}</span>
-            <span className="tabular-nums text-sm text-texto-secundario">Margen: {textoMargenActual(p)}</span>
-          </div>
-          {estaBajoObjetivo(p) && <BadgeStock variante="advertencia">Bajo objetivo</BadgeStock>}
-        </div>
-        <span aria-hidden="true" className="text-texto-secundario">
-          ›
-        </span>
-      </button>
+          <span aria-hidden="true" className="text-texto-secundario">
+            ›
+          </span>
+        </button>
+        <BotonDesgloseCosto producto={p} onAbrir={() => abrirDesglose(p)} />
+      </div>
     );
   }
 
@@ -610,6 +669,12 @@ export function Precios() {
         guardando={guardando}
         onGuardar={handleGuardarPrecio}
         onCerrar={cerrarEdicion}
+      />
+
+      <ModalDesgloseCosto
+        abierto={productoDesglose !== null}
+        producto={productoDesglose}
+        onCerrar={cerrarDesglose}
       />
 
       <Modal
