@@ -129,6 +129,14 @@ margen actual, margen objetivo (si está definido). Interacciones:
   query compuesta nueva, su índice entra en `firestore.indexes.json` en la
   misma tarea (preferir reusar la query/índice del listado de Compras si ya
   cubre estado+fecha).
+  - **COSTO-2** (2026-07-14, pedido del dueño al ver COSTO-1): el MISMO
+    desglose se muestra además INLINE en el modal de edición de precio
+    (`ModalPrecio`), bajo la línea "Costo promedio": texto secundario
+    compacto con mercadería y gastos prorrateados /kg (o /u) de la última
+    compra confirmada, rotulado "última compra" (mismo etiquetado honesto).
+    Misma fuente y helpers que COSTO-1 (`desgloseCosto.ts`, query lazy solo
+    con el modal abierto); sin compra confirmada que incluya el producto, la
+    línea no aparece (el modal no agrega ruido). Cero escrituras.
 
 ### Ganancia real (Fase 3)
 
