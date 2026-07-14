@@ -359,6 +359,35 @@ para quedar en gamut sRGB (verificado sin clipping); el par más justo es el
 ring `primary-600`/superficie en dark (3.55:1). El par `borde`/`fondo` existe
 por el borde de la tab bar flotante.
 
+### Marca WhatsApp (verificado 2026-07-13, tarea WA-I, `scripts/contraste.mjs`)
+
+Tokens `--color-whatsapp` (#25D366) y `--color-whatsapp-oscuro` (#128C7E,
+hover) — fijos, NO redefinidos por modo ni por estilo (identidad de marca de
+un tercero, ver comentario en `packages/config/tailwind.css`). Por eso su
+ratio con cualquier par también fijo (blanco o negro) da **el mismo valor en
+las 4 combinaciones** — no es un error de medición, es la consecuencia de que
+ninguno de los dos lados depende del tema.
+
+| Uso | Par | Ratio (las 4 combinaciones) | AA |
+|---|---|---|---|
+| Label/ícono del botón WhatsApp (elegido) | `black` (texto/ícono) / `whatsapp` | 10.59:1 | ✅ ≥4.5:1 |
+| — hover | `black` / `whatsapp-oscuro` | 5.08:1 | ✅ ≥4.5:1 |
+| Descartado: blanco / `whatsapp-oscuro` | blanco/`whatsapp-oscuro` | 4.14:1 | ❌ <4.5:1 (texto normal) |
+| Descartado: blanco / `whatsapp` | blanco/`whatsapp` | 1.98:1 | ❌ (el caso que motivó la tarea) |
+| Descartado: `texto` (token adaptativo) / `whatsapp` | light 9.79:1, **dark 1.90:1** | ❌ en dark (el token se aclara para leerse sobre fondos oscuros del tema, no sirve sobre un verde fijo) |
+| `whatsapp-oscuro` / `superficie`, como componente UI (borde, si se necesitara) | ≥3:1 en las 4 | 3.96 / 4.70 / 3.96 / 4.20 | ✅ ≥3:1 (❌ si se usara como texto 4.5:1: falla en 3 de 4) |
+
+**Elegido**: fondo `bg-whatsapp`, label e ícono (`IconoWhatsApp`, `fill:
+currentColor`) en `text-black` fijo — el único par de los candidatos que
+cumple 4.5:1 en las 4 combinaciones, porque ninguno de los dos lados depende
+del tema. `hover:bg-whatsapp-oscuro` mantiene el mismo negro (5.08:1).
+
+**Nota del logotipo**: `IconoWhatsApp` (`packages/ui`) es un uso decorativo
+exento de par AA propio (ver "usos decorativos aprobados" abajo: podría
+pintarse blanco sobre el verde de marca como badge). En `BotonWhatsApp`
+hereda `currentColor` del label (negro), así que en la práctica usa el mismo
+par ya aprobado arriba.
+
 **Usos decorativos aprobados** (sin requisito de par AA por no llevar texto ni
 comunicar información por sí solos — la información va por otra vía):
 - Pill `primary-100` / `dark:primary-900/40` detrás del ícono del tab activo en
@@ -370,6 +399,10 @@ comunicar información por sí solos — la información va por otra vía):
   colapsa el carrito; el estado lo comunica `aria-expanded`, no el scrim. La
   hoja expandida además lleva sombra de elevación hacia arriba y esquinas
   superiores redondeadas para leerse como bottom sheet.
+- `IconoWhatsApp` (`packages/ui`, tarea WA-I): glifo monocromo
+  (`fill="currentColor"`), logotipo — el nombre accesible del control que lo
+  envuelve viene de su texto/`aria-label`, nunca del ícono. Ver sección
+  "Marca WhatsApp" arriba para el par usado en `BotonWhatsApp`.
 
 ## 8. Patrón de escrituras offline (estándar de proyecto)
 
