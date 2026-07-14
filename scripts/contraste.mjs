@@ -298,6 +298,7 @@ const PARES_DEFECTO = [
   { etiqueta: 'a-bis) blanco / whatsapp (#25D366)', fg: '#ffffff', bg: 'token:whatsapp', umbral: 4.5 },
   { etiqueta: 'b) texto (token) / whatsapp', fg: 'token:texto', bg: 'token:whatsapp', umbral: 4.5 },
   { etiqueta: 'b-bis) negro fijo / whatsapp', fg: '#000000', bg: 'token:whatsapp', umbral: 4.5 },
+  { etiqueta: 'elegido-hover) negro fijo / whatsapp-oscuro', fg: '#000000', bg: 'token:whatsapp-oscuro', umbral: 4.5 },
   { etiqueta: 'c) whatsapp (glifo/texto) / superficie — texto 4.5:1', fg: 'token:whatsapp', bg: 'token:superficie', umbral: 4.5 },
   { etiqueta: 'c) whatsapp (glifo/texto) / superficie — UI 3:1', fg: 'token:whatsapp', bg: 'token:superficie', umbral: 3 },
   { etiqueta: 'c) whatsapp-oscuro / superficie — texto 4.5:1', fg: 'token:whatsapp-oscuro', bg: 'token:superficie', umbral: 4.5 },

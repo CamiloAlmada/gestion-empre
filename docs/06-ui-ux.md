@@ -374,7 +374,7 @@ ninguno de los dos lados depende del tema.
 | — hover | `black` / `whatsapp-oscuro` | 5.08:1 | ✅ ≥4.5:1 |
 | Descartado: blanco / `whatsapp-oscuro` | blanco/`whatsapp-oscuro` | 4.14:1 | ❌ <4.5:1 (texto normal) |
 | Descartado: blanco / `whatsapp` | blanco/`whatsapp` | 1.98:1 | ❌ (el caso que motivó la tarea) |
-| Descartado: `texto` (token adaptativo) / `whatsapp` | light 9.79:1, **dark 1.90:1** | ❌ en dark (el token se aclara para leerse sobre fondos oscuros del tema, no sirve sobre un verde fijo) |
+| Descartado: `texto` (token adaptativo) / `whatsapp` | light 9.79:1, **dark 1.90:1** (Minimalista; en Cálido 8.34 / 1.77) | ❌ en dark (el token se aclara para leerse sobre fondos oscuros del tema, no sirve sobre un verde fijo) |
 | `whatsapp-oscuro` / `superficie`, como componente UI (borde, si se necesitara) | ≥3:1 en las 4 | 3.96 / 4.70 / 3.96 / 4.20 | ✅ ≥3:1 (❌ si se usara como texto 4.5:1: falla en 3 de 4) |
 
 **Elegido**: fondo `bg-whatsapp`, label e ícono (`IconoWhatsApp`, `fill:
