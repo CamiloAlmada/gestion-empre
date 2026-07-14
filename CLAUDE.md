@@ -60,11 +60,14 @@ pnpm turbo lint                       # lint de todo
 
 ## Estado actual
 
-Fases 0, 1 y 1.5 CERRADAS (Fase 1.5 el 2026-07-10, criterios verificados por el
-dueño en producción: https://quesarte-uy.web.app). Operativo: POS con FIFO +
-override + pieza entera + cobro offline + cliente opcional en el carrito, Stock
-(ingreso, ajustes, merma), Productos con categorías, Clientes (tab propio, ficha
-con stats), Proveedores (solo admin), Historial con anulación (cuelga de Venta),
-Usuarios por invitación, dos estilos de tema (Minimalista/Cálido). 895+ tests.
-EN CURSO: Fase 2 (compras, prorrateo de gastos, márgenes, doc 03) — leer las
-notas arrastradas al inicio de esa sección en `docs/04-plan-fases.md`.
+Fases 0, 1, 1.5 y 2 CERRADAS (Fase 2 el 2026-07-14, los 4 criterios validados
+por el dueño en producción: https://quesarte-uy.web.app). Operativo: POS con
+FIFO + override + pieza entera + cobro offline + cliente opcional, sección
+única Productos en el tab Stock (fusión UI-5: existencias + catálogo + alta;
+edición en el detalle, SIN precio — precios solo en la sección Precios),
+Compras con prorrateo de gastos y márgenes (doc 03), Clientes con WhatsApp
+por links wa.me e inactividad comercial (doc 08), Proveedores y Categorías
+(en Ajustes) solo admin, Historial con anulación (cuelga de Venta), Usuarios
+por invitación, dos estilos de tema (Minimalista/Cálido). 967 tests + 134 de
+reglas. PRÓXIMO: sesión de elicitación con Adrián (doc 10) → repriorización
+del roadmap (docs/10b); Fase 3 en cola. Entorno de demo: quesarte-uy-dev.

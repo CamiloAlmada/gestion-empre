@@ -234,14 +234,21 @@ Tareas:
    margen objetivo por producto.
 4. Alerta de margen post-compra con precios sugeridos y aplicación masiva.
 
-Estado (2026-07-10): IMPLEMENTADA COMPLETA — review senior integral con una
-devolución corregida (B1: crash de prorrateo sin ítems + ErrorBoundary de ruta
-como red general; M1: acciones de ficha de proveedor al cuerpo; M2: margen "—"
-para pieza+precio-por-unidad, unidades incomparables sin el peso). Los 4
-criterios verificados por el reviewer con sus tests; PENDIENTE la validación
-del dueño en producción. Incluyó además: tanda visual UI-3 (header fundido,
-CampoBusqueda, selector de sección de Stock, chips de filtro), reactivación de
-clientes/proveedores (RE-1) y code-splitting con vendor chunks (D0).
+Estado: **FASE 2 CERRADA (2026-07-14)** — los 4 criterios de aceptación
+validados por el dueño en producción, uno por uno. Historia: implementada
+completa el 2026-07-10 tras review senior integral con una devolución
+corregida (B1: crash de prorrateo sin ítems + ErrorBoundary de ruta como red
+general; M1: acciones de ficha de proveedor al cuerpo; M2: margen "—" para
+pieza+precio-por-unidad, unidades incomparables sin el peso). Incluyó además:
+tanda visual UI-3 (header fundido, CampoBusqueda, selector de sección de
+Stock, chips de filtro), reactivación de clientes/proveedores (RE-1) y
+code-splitting con vendor chunks (D0).
+
+Mejora pedida por el dueño al validar (2026-07-14, NUEVA tarea, no reabre la
+fase): el costo del producto se muestra como promedio sin desglose — agregar
+una "ⓘ" que muestre el desglose entre costo de mercadería y gastos
+prorrateados (combustible, etc.). Requiere análisis de modelo (el promedio
+agregado hoy no conserva la partición) — diseñar antes de implementar.
 
 Tanda UI-4 (2026-07-10, feedback del dueño sobre UI-3 en producción; contrato
 en docs/06 §2-§3): búsqueda a ancho completo en todas las pantallas de listado
