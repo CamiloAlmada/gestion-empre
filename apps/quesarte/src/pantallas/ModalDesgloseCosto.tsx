@@ -1,13 +1,8 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { collection, orderBy, query, where } from 'firebase/firestore';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Button, Modal } from '@gestion/ui';
 import { formatearMoney, type Producto } from '@gestion/core';
-import { compraConverter, useCollection, useOnlineStatus } from '@gestion/firebase-kit';
-import { db } from '../firebase';
 import { formatearFecha } from '../componentes/stock/resumen';
-import { desglosarCosto, ultimaCompraConProducto } from '../componentes/compras/desgloseCosto';
-
-const coleccionCompras = collection(db, 'compras').withConverter(compraConverter);
+import { useDesgloseUltimaCompra } from '../componentes/compras/useDesgloseUltimaCompra';
 
 export interface ModalDesgloseCostoProps {
   abierto: boolean;
@@ -43,34 +38,20 @@ export interface ModalDesgloseCostoProps {
  * compra" o "la caché está incompleta sin conexión". Se desambigua con
  * `useOnlineStatus` (no es una advertencia preventiva: solo aparece cuando
  * la búsqueda YA resolvió "no encontrado" estando offline).
+ *
+ * COSTO-2: toda la plomería de Firestore (query lazy, búsqueda client-side)
+ * vive en `useDesgloseUltimaCompra`, compartida con la línea inline de
+ * `ModalPrecio` — este componente solo decide CÓMO mostrarlo (modal
+ * detallado con estados de carga/error/vacío, vs. una línea compacta).
  */
 export function ModalDesgloseCosto({ abierto, producto, onCerrar }: ModalDesgloseCostoProps) {
-  const enLinea = useOnlineStatus();
-  const [intentoId, setIntentoId] = useState(0);
   const [productoMostrado, setProductoMostrado] = useState<Producto | null>(null);
 
   useEffect(() => {
     if (producto !== null) setProductoMostrado(producto);
   }, [producto]);
 
-  // Reintentar (más abajo) solo tiene sentido mientras el modal sigue
-  // abierto para el mismo producto; al reabrir para otro se resetea solo.
-  useEffect(() => {
-    setIntentoId(0);
-  }, [abierto, producto]);
-
-  const consultaCompras = useMemo(
-    () =>
-      abierto
-        ? query(coleccionCompras, where('estado', '==', 'confirmada'), orderBy('fecha', 'desc'))
-        : null,
-    [abierto, intentoId],
-  );
-  const { datos: compras, cargando, error } = useCollection(consultaCompras);
-
-  function reintentar() {
-    setIntentoId((n) => n + 1);
-  }
+  const { desglose, cargando, error, enLinea, reintentar } = useDesgloseUltimaCompra(productoMostrado, abierto);
 
   if (productoMostrado === null) {
     // Nunca se abrió todavía: el `<dialog>` no está `open`, nada visible que
@@ -81,9 +62,6 @@ export function ModalDesgloseCosto({ abierto, producto, onCerrar }: ModalDesglos
       </Modal>
     );
   }
-
-  const encontrado = ultimaCompraConProducto(compras, productoMostrado.id);
-  const desglose = encontrado !== null ? desglosarCosto(productoMostrado, encontrado.compra, encontrado.item) : null;
 
   let contenido: ReactNode;
   if (cargando) {

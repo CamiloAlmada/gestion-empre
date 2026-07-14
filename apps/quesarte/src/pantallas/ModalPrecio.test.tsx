@@ -1,8 +1,53 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { ProveedorTema } from '@gestion/ui';
-import { money, type Producto } from '@gestion/core';
+import { money, peso, type Compra, type Producto } from '@gestion/core';
 import { ModalPrecio, type DatosPrecioFormulario, type ModalPrecioProps } from './ModalPrecio';
+
+const mocks = vi.hoisted(() => ({ useCollection: vi.fn(), useOnlineStatus: vi.fn(() => true) }));
+
+// Mismo criterio que `ModalDesgloseCosto.test.tsx` (comparte el hook
+// `useDesgloseUltimaCompra`, COSTO-2): `firebase/firestore` y `../firebase`
+// van SIN mockear, solo `useCollection`/`useOnlineStatus`.
+vi.mock('@gestion/firebase-kit', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@gestion/firebase-kit')>();
+  return { ...actual, useCollection: mocks.useCollection, useOnlineStatus: mocks.useOnlineStatus };
+});
+
+interface EstadoColeccionFalso<T> {
+  datos: T[];
+  cargando: boolean;
+  error: unknown;
+}
+
+let estadoCompras: EstadoColeccionFalso<Compra> = { datos: [], cargando: false, error: null };
+
+mocks.useCollection.mockImplementation((query: unknown) =>
+  query === null ? { datos: [], cargando: false, error: null } : estadoCompras,
+);
+
+function configurarCompras(overrides: { datos?: Compra[]; cargando?: boolean; error?: unknown } = {}) {
+  estadoCompras = {
+    datos: overrides.datos ?? [],
+    cargando: overrides.cargando ?? false,
+    error: overrides.error ?? null,
+  };
+}
+
+function compraDe(over: Partial<Compra> & Pick<Compra, 'id'>): Compra {
+  return {
+    fecha: new Date(2026, 6, 1),
+    usuarioId: 'admin-1',
+    estado: 'confirmada',
+    proveedorNombre: 'Proveedor',
+    items: [],
+    gastos: [],
+    totalFacturaCents: money(0),
+    totalGastosCents: money(0),
+    totalRealCents: money(0),
+    ...over,
+  };
+}
 
 function productoDe(over: Partial<Producto> & Pick<Producto, 'id'>): Producto {
   return {
@@ -29,16 +74,33 @@ function renderizar(overrides: Partial<ModalPrecioProps> = {}) {
     onCerrar,
     ...overrides,
   };
-  render(
+  const resultado = render(
     <ProveedorTema>
       <ModalPrecio {...props} />
     </ProveedorTema>,
   );
-  return { onGuardar, onCerrar };
+  /** Re-renderiza la MISMA instancia con props nuevas — necesario para
+   * reproducir en tests la secuencia real "abrir A → cerrar → abrir B"
+   * sobre la instancia estable de `ModalPrecio` (nunca se desmonta, ver su
+   * JSDoc), en vez de montar una instancia nueva por test. */
+  function actualizar(nuevos: Partial<ModalPrecioProps>) {
+    Object.assign(props, nuevos);
+    resultado.rerender(
+      <ProveedorTema>
+        <ModalPrecio {...props} />
+      </ProveedorTema>,
+    );
+  }
+  return { onGuardar, onCerrar, actualizar };
 }
 
 describe('ModalPrecio', () => {
-  afterEach(cleanup);
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+    mocks.useOnlineStatus.mockReturnValue(true);
+    estadoCompras = { datos: [], cargando: false, error: null };
+  });
 
   it('título incluye el nombre del producto', () => {
     renderizar({ producto: productoDe({ id: 'p1', nombre: 'Queso Colonia' }) });
@@ -245,6 +307,195 @@ describe('ModalPrecio', () => {
       expect(screen.getByText('40,00 %')).toBeTruthy(); // margen actual
       const input = screen.getByLabelText('Margen objetivo (%)') as HTMLInputElement;
       expect(input.disabled).toBe(false);
+    });
+  });
+
+  describe('COSTO-2 (parte 1): línea inline "Última compra"', () => {
+    it('ítem al peso (/kg): fecha, proveedor, mercadería y gastos normalizados, sufijo /kg', () => {
+      configurarCompras({
+        datos: [
+          compraDe({
+            id: 'c1',
+            fecha: new Date(2026, 5, 15),
+            proveedorNombre: 'Lácteos del Sur',
+            items: [
+              {
+                productoId: 'p1',
+                nombreProducto: 'Queso Añejo',
+                gramos: peso(1500),
+                costoFacturaCents: money(30000),
+                gastoProrrateadoCents: money(3000),
+                costoRealCents: money(33000),
+                costoRealKgCents: money(22000),
+              },
+            ],
+          }),
+        ],
+      });
+      renderizar({ producto: productoDe({ id: 'p1', modoStock: 'granel' }) });
+
+      expect(
+        screen.getByText(
+          'Última compra (15/06/2026 · Lácteos del Sur): mercadería $ 200,00 · gastos $ 20,00 /kg',
+        ),
+      ).toBeTruthy();
+    });
+
+    it('ítem por unidad (/u): mercadería y gastos normalizados, sufijo /u', () => {
+      configurarCompras({
+        datos: [
+          compraDe({
+            id: 'c1',
+            fecha: new Date(2026, 5, 20),
+            proveedorNombre: 'Apiario Norte',
+            items: [
+              {
+                productoId: 'p2',
+                nombreProducto: 'Miel 500g',
+                unidades: 4,
+                costoFacturaCents: money(40000),
+                gastoProrrateadoCents: money(4000),
+                costoRealCents: money(44000),
+              },
+            ],
+          }),
+        ],
+      });
+      renderizar({
+        producto: productoDe({ id: 'p2', modoStock: 'unidad_simple', modoPrecio: 'por_unidad' }),
+      });
+
+      expect(
+        screen.getByText('Última compra (20/06/2026 · Apiario Norte): mercadería $ 100,00 · gastos $ 10,00 /u'),
+      ).toBeTruthy();
+    });
+
+    it('sin compra confirmada que incluya el producto: la línea NO aparece (nada de estados vacíos)', () => {
+      configurarCompras({ datos: [] });
+      renderizar({ producto: productoDe({ id: 'p1' }) });
+
+      expect(screen.queryByText(/Última compra/)).toBeNull();
+    });
+
+    it('un producto sin costo tampoco muestra la línea, aunque haya compras confirmadas de otros productos', () => {
+      configurarCompras({
+        datos: [
+          compraDe({
+            id: 'c1',
+            items: [{ productoId: 'p1', nombreProducto: 'Queso Añejo', costoFacturaCents: money(1000) }],
+          }),
+        ],
+      });
+      renderizar({ producto: productoDe({ id: 'p1', costoPromedioCents: money(0) }) });
+
+      // Sin costo, la búsqueda ni siquiera importa acá: el contrato pide que
+      // no aparezca ruido — y de hecho el producto de la compra no matchea.
+      expect(screen.queryByText(/Última compra/)).toBeNull();
+    });
+
+    it('con el modal cerrado, la query de compras queda desactivada (sin suscripción activa)', () => {
+      configurarCompras({ datos: [] });
+      renderizar({ abierto: false, producto: null });
+
+      for (const llamada of mocks.useCollection.mock.calls) {
+        expect(llamada[0]).toBeNull();
+      }
+    });
+  });
+
+  describe('COSTO-2 (parte 2): bug de corrupción de datos — el precio de un producto quedaba "clavado" en el de otro', () => {
+    function productoA(over: Partial<Producto> = {}): Producto {
+      // "Magro con sal" del reporte del dueño: el primer producto abierto
+      // tras recargar, cuyo precio ($370) quedaba pegado en todos los
+      // siguientes.
+      return productoDe({
+        id: 'A',
+        nombre: 'Magro con sal',
+        modoStock: 'granel',
+        costoPromedioCents: money(30000),
+        precioVentaCents: money(37000),
+        ...over,
+      });
+    }
+
+    function productoB(over: Partial<Producto> = {}): Producto {
+      // "Chacarero" de la captura real: costo $627,86/kg, precio real $730,00.
+      return productoDe({
+        id: 'B',
+        nombre: 'Chacarero',
+        modoStock: 'granel',
+        costoPromedioCents: money(62786),
+        precioVentaCents: money(73000),
+        ...over,
+      });
+    }
+
+    it('abrir A con foco en el precio → cerrar → abrir B: el input y el margen mostrados pertenecen TODOS a B', () => {
+      const { actualizar } = renderizar({ producto: productoA(), abierto: true });
+
+      // Simula el autofoco nativo de `dialog.showModal()` sobre el primer
+      // campo enfocable del diálogo (el input de precio) — jsdom no lo
+      // implementa (ver `test-setup.ts`), así que se dispara a mano; el
+      // efecto sobre el `enfocadoRef` interno de `MoneyInput` es el mismo
+      // que en un navegador real.
+      fireEvent.focus(screen.getByLabelText('Precio de venta por kg'));
+
+      // `Precios.tsx` pasa `abierto:false, producto:null` en el mismo
+      // render al cerrar (ver JSDoc de `productoMostrado`).
+      actualizar({ abierto: false, producto: null });
+      actualizar({ abierto: true, producto: productoB() });
+
+      expect(screen.getByText('Editar precio · Chacarero')).toBeTruthy();
+      expect(screen.getByText('Costo promedio: $ 627,86 por kg')).toBeTruthy();
+      // Antes del fix: quedaba en "370,00" (el precio de A).
+      expect((screen.getByLabelText('Precio de venta por kg') as HTMLInputElement).value).toBe('730,00');
+      // Margen real de B (costo $627,86, precio $730,00) ≈ 13,99 % — mismo
+      // número que la captura del dueño, ahora coherente con el input.
+      expect(screen.getByText('13,99 %')).toBeTruthy();
+    });
+
+    it('editar el precio en A (sin guardar), cancelar y abrir B: no arrastra el texto tipeado en A', () => {
+      const { actualizar, onCerrar } = renderizar({ producto: productoA(), abierto: true });
+
+      const input = screen.getByLabelText('Precio de venta por kg');
+      fireEvent.focus(input);
+      fireEvent.change(input, { target: { value: '999,00' } });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+      expect(onCerrar).toHaveBeenCalledTimes(1);
+
+      actualizar({ abierto: false, producto: null });
+      actualizar({ abierto: true, producto: productoB() });
+
+      expect((screen.getByLabelText('Precio de venta por kg') as HTMLInputElement).value).toBe('730,00');
+    });
+
+    it('reabrir el MISMO producto tras un tipeo sin guardar: vuelve a mostrar el precio persistido, no el tipeo descartado', () => {
+      const a = productoA();
+      const { actualizar } = renderizar({ producto: a, abierto: true });
+
+      const input = screen.getByLabelText('Precio de venta por kg');
+      fireEvent.focus(input);
+      fireEvent.change(input, { target: { value: '999,00' } });
+
+      actualizar({ abierto: false, producto: null });
+      actualizar({ abierto: true, producto: a });
+
+      expect((screen.getByLabelText('Precio de venta por kg') as HTMLInputElement).value).toBe('370,00');
+    });
+
+    it('guardar en B nunca escribe el precio de A (severidad: corrupción de datos)', () => {
+      const { actualizar, onGuardar } = renderizar({ producto: productoA(), abierto: true });
+
+      fireEvent.focus(screen.getByLabelText('Precio de venta por kg'));
+      actualizar({ abierto: false, producto: null });
+      actualizar({ abierto: true, producto: productoB() });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+      expect(onGuardar).toHaveBeenCalledTimes(1);
+      const [datos] = onGuardar.mock.calls[0] as [DatosPrecioFormulario];
+      expect(datos.precioVentaCents).toBe(money(73000)); // el de B — NUNCA money(37000), el de A
     });
   });
 });

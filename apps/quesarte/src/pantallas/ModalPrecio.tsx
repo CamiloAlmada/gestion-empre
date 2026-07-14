@@ -16,6 +16,8 @@ import {
   normalizarPorcentaje,
   textoPorcentajeDesdeBps,
 } from '../componentes/stock/CampoPorcentaje';
+import { formatearFecha } from '../componentes/stock/resumen';
+import { useDesgloseUltimaCompra } from '../componentes/compras/useDesgloseUltimaCompra';
 
 /** Datos validados que salen del formulario hacia `Precios.tsx`. `undefined`
  * en `margenObjetivoBps` significa "borrar el campo" (mismo criterio que
@@ -73,6 +75,36 @@ interface Errores {
  * además el editor de margen objetivo queda deshabilitado con una nota
  * corta (no tiene sentido cargar un objetivo que nunca va a poder sugerir
  * un precio sin el peso de la pieza de por medio).
+ *
+ * COSTO-2 (doc 03): bajo "Costo promedio", una línea "Última compra" con el
+ * mismo desglose que `ModalDesgloseCosto` (COSTO-1), vía el hook compartido
+ * `useDesgloseUltimaCompra` — sin compra confirmada que incluya el producto,
+ * la línea no aparece (nada de estados vacíos acá, ver JSDoc del hook).
+ *
+ * **Fix de corrupción de datos** (COSTO-2, reporte del dueño en producción:
+ * el precio de un producto quedaba "clavado" en el de otro, y GUARDAR con
+ * ese estado escribía el precio equivocado): `key={aperturaId}` en
+ * `MoneyInput` de más abajo. Causa raíz — `MoneyInput` (`@gestion/ui`)
+ * guarda su propio buffer de texto y solo lo resincroniza con la prop
+ * `value` mientras el input NO está enfocado (para no pisarle el tipeo en
+ * vivo al usuario, ver su JSDoc). Como este modal es UNA sola instancia
+ * estable que nunca se desmonta (mismo patrón documentado arriba), su
+ * `<input>` tampoco se desmonta entre un producto y otro. En un navegador
+ * real, `dialog.showModal()` (que dispara el efecto de `Modal` al abrir)
+ * autoenfoca el primer elemento enfocable del diálogo — que es justo el
+ * `<input>` de precio, el primer campo del formulario — dejando su
+ * `enfocadoRef` interno en `true` ANTES de que el efecto de acá abajo llegue
+ * a pisar `precio` con el del producto nuevo. Con el buffer de `MoneyInput`
+ * bloqueado por ese ref, el texto mostrado queda pegado al del producto con
+ * el que se enfocó la primera vez — el margen en vivo de MÁS ABAJO, en
+ * cambio, lee el estado `precio` de ESTE componente (que sí se actualiza
+ * bien), por eso el margen mostrado no coincidía con el precio mostrado
+ * (exactamente la captura del dueño). `aperturaId` se incrementa en el
+ * mismo efecto que ya resetea `precio` en cada apertura genuina (mismo
+ * producto o distinto): al cambiar la `key`, React desmonta el `MoneyInput`
+ * viejo (con su buffer y su `enfocadoRef` atascados) y monta uno nuevo desde
+ * cero, ya inicializado con el `precio` correcto — sin depender de la
+ * carrera entre el foco nativo del diálogo y este efecto.
  */
 export function ModalPrecio({ abierto, producto, guardando, onGuardar, onCerrar }: ModalPrecioProps) {
   const [precio, setPrecio] = useState<Money | null>(null);
@@ -87,6 +119,10 @@ export function ModalPrecio({ abierto, producto, guardando, onGuardar, onCerrar 
   // se sigue mostrando el último mientras el modal termina de cerrarse, en
   // vez de forzar un estado "vacío" que nunca llega a verse.
   const [productoMostrado, setProductoMostrado] = useState<Producto | null>(null);
+  // Se incrementa en cada apertura genuina (ver el efecto de abajo) — `key`
+  // de `MoneyInput` más abajo, para forzar su remontaje y evitar el bug de
+  // corrupción de datos documentado en el JSDoc de arriba.
+  const [aperturaId, setAperturaId] = useState(0);
 
   useEffect(() => {
     if (producto !== null) setProductoMostrado(producto);
@@ -99,7 +135,10 @@ export function ModalPrecio({ abierto, producto, guardando, onGuardar, onCerrar 
       producto.margenObjetivoBps !== undefined ? textoPorcentajeDesdeBps(producto.margenObjetivoBps) : '',
     );
     setErrores({});
+    setAperturaId((n) => n + 1);
   }, [abierto, producto]);
+
+  const { desglose: desgloseUltimaCompra } = useDesgloseUltimaCompra(productoMostrado, abierto);
 
   if (productoMostrado === null) {
     // Nunca se abrió todavía: el `<dialog>` no está `open`, no hay nada
@@ -182,7 +221,22 @@ export function ModalPrecio({ abierto, producto, guardando, onGuardar, onCerrar 
           Costo promedio: {tieneCosto ? `${formatearMoney(costoCents)} ${etiquetaUnidadCosto}` : '—'}
         </p>
 
+        {/* COSTO-2: mismo desglose que el ⓘ de Precios (`ModalDesgloseCosto`),
+            en línea y compacto — sin compra confirmada que incluya el
+            producto, `desgloseUltimaCompra` es `null` y esta línea no se
+            renderiza (doc 03: "el modal no agrega ruido"). */}
+        {desgloseUltimaCompra !== null && (
+          // Un único string armado antes del JSX (no varios `{expr}` sueltos
+          // dentro del `<p>`): queda como UN solo nodo de texto, más simple
+          // de testear con `getByText` y sin nodos de texto partidos por
+          // interpolación (mismo criterio ya aplicado en `ModalDesgloseCosto`).
+          <p className="text-sm text-texto-secundario">
+            {`Última compra (${formatearFecha(desgloseUltimaCompra.fecha)} · ${desgloseUltimaCompra.proveedorNombre}): mercadería ${formatearMoney(desgloseUltimaCompra.mercaderiaCents)} · gastos ${formatearMoney(desgloseUltimaCompra.gastosCents)}${desgloseUltimaCompra.unidad === 'kg' ? ' /kg' : ' /u'}`}
+          </p>
+        )}
+
         <MoneyInput
+          key={aperturaId}
           label={`Precio de venta ${etiquetaUnidadPrecio}`}
           value={precio}
           onChange={setPrecio}
