@@ -113,6 +113,22 @@ margen actual, margen objetivo (si está definido). Interacciones:
 - Al confirmarse una compra que cambia el costo promedio, generar una **alerta de
   margen**: lista de productos cuyo margen quedó por debajo del objetivo, con el
   precio sugerido para restaurarlo, y acción "aplicar" individual o masiva.
+- **Desglose del costo — ⓘ de última compra** (COSTO-1, 2026-07-14, pedido
+  del dueño al validar Fase 2; decidió la variante "última compra" sobre
+  partir el promedio en acumuladores): junto al costo del producto, un
+  botón-icono ⓘ (`aria-label` descriptivo) abre un modal de SOLO LECTURA con
+  el desglose de la ÚLTIMA compra confirmada que incluyó el producto:
+  mercadería (`costoFacturaCents` normalizado a /kg o /u), gastos de viaje
+  prorrateados (`gastoProrrateadoCents` ídem), costo real resultante, fecha
+  y proveedor. Rotulado honesto: es el desglose de ESA compra — el costo
+  promedio vigente puede mezclar compras anteriores y stock previo, y el
+  modal lo aclara en una línea. Sin ⓘ (o modal con estado vacío diseñado)
+  para productos sin compras confirmadas. Los datos salen de los ítems de
+  compra ya persistidos e inmutables: CERO cambio de modelo. Regla de
+  índices vigente: si la consulta de "última compra confirmada" necesita una
+  query compuesta nueva, su índice entra en `firestore.indexes.json` en la
+  misma tarea (preferir reusar la query/índice del listado de Compras si ya
+  cubre estado+fecha).
 
 ### Ganancia real (Fase 3)
 
