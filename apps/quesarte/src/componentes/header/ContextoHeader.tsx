@@ -7,9 +7,17 @@ import {
   type ReactNode,
 } from 'react';
 
-/** Link de "volver" a la izquierda del header (breadcrumb de un solo nivel,
- * docs/06-ui-ux.md §2): `etiqueta` es el nombre del padre ("Stock",
- * "Ajustes"), `a` la ruta destino. */
+/** Botón de "volver" a la izquierda del header (docs/06-ui-ux.md §2). Desde
+ * NAV-2c (2026-07-14) el `‹` es consciente del historial: con una entrada
+ * previa DENTRO de la app, `Shell` hace `navigate(-1)` (vuelve a la pantalla
+ * real de la que se vino, no a un destino fijo); `a` queda como el destino
+ * de FALLBACK para cuando no hay historial propio al que volver (entrada
+ * directa por URL, deep link, PWA recién abierta) — sigue siendo
+ * obligatorio donde hoy existe, el fallback no puede quedar sin destino.
+ * `etiqueta` (nombre del padre, "Stock", "Ajustes") ya no alimenta el
+ * `aria-label` (pasó a ser "Volver" a secas: el destino real puede variar) —
+ * se mantiene en el tipo por compatibilidad con los ~10 call sites
+ * existentes y como documentación de a qué pantalla cae el fallback. */
 export interface VolverA {
   etiqueta: string;
   a: string;
