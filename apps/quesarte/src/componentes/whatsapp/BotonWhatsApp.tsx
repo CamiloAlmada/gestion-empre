@@ -9,7 +9,7 @@ import {
   type PlantillaWhatsApp,
 } from '@gestion/core';
 import { configuracionConverter, plantillasWhatsAppConverter, useDoc } from '@gestion/firebase-kit';
-import { Modal } from '@gestion/ui';
+import { IconoWhatsApp, Modal } from '@gestion/ui';
 
 export interface BotonWhatsAppProps {
   /** Teléfono tal como lo tipeó el usuario (display), si lo hay. */
@@ -42,8 +42,17 @@ export interface BotonWhatsAppProps {
   className?: string;
 }
 
+// Identidad visual de marca (tarea WA-I, docs/06-ui-ux.md §7 "Marca
+// WhatsApp"): fondo `bg-whatsapp` (#25D366) con label/ícono en NEGRO fijo
+// (`text-black`, no un token semántico — igual criterio que `text-white` en
+// `Button` primaria: un literal de Tailwind, no un hex hardcodeado). Es el
+// ÚNICO par verificado que pasa AA (≥4.5:1 texto) en las 4 combinaciones
+// tema×estilo, porque ambos lados son colores FIJOS: ni el texto adaptativo
+// (`texto`, que en dark casi blanco) ni blanco sobre el verde (~2:1, el caso
+// que motivó esta tarea) cumplen. `hover:bg-whatsapp-oscuro` (#128C7E)
+// también pasa con el mismo negro (5.08:1) — ver ratios en docs/06 §7.
 const CLASE_BOTON =
-  'inline-flex min-h-[44px] items-center justify-center gap-2 rounded-control bg-primary-600 px-4 font-medium text-white hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2 focus-visible:ring-offset-superficie';
+  'inline-flex min-h-[44px] items-center justify-center gap-2 rounded-control bg-whatsapp px-4 font-medium text-black hover:bg-whatsapp-oscuro focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2 focus-visible:ring-offset-superficie';
 
 const CLASE_ITEM_SELECTOR =
   'flex min-h-[44px] w-full items-center rounded-control border border-borde bg-superficie px-4 text-left font-medium text-texto hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600';
@@ -158,6 +167,7 @@ export function BotonWhatsApp({
         aria-label={ariaLabel}
         className={`${CLASE_BOTON} ${className}`}
       >
+        <IconoWhatsApp className="h-5 w-5" />
         WhatsApp
       </button>
 

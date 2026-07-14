@@ -73,6 +73,18 @@
   --color-neutral-800: oklch(0.25 0.01 75);
   --color-neutral-900: oklch(0.16 0.008 75);
   --color-neutral-950: oklch(0.1 0.006 75);
+
+  /* Colores de MARCA de WhatsApp (tarea WA-I, docs/06-ui-ux.md §4 y §7):
+     a diferencia de los tokens semánticos de más abajo, estos NO siguen el
+     patrón de pares "-light"/"-dark" ni se redefinen en
+     `[data-estilo='calido']` — son la identidad visual de un tercero
+     (Meta/WhatsApp), fijada por su brand kit, y no tiene sentido que
+     cambien con el tema de la app. Se definen UNA sola vez acá para tener
+     las utilidades `bg-whatsapp`, `text-whatsapp-oscuro`, etc., y que
+     ningún componente necesite hardcodear el hex. Pares de contraste
+     verificados en docs/06-ui-ux.md §7 (sección "Marca WhatsApp"). */
+  --color-whatsapp: #25d366;
+  --color-whatsapp-oscuro: #128c7e;
 }
 
 /* ---------------------------------------------------------------------

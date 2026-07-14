@@ -27,3 +27,4 @@ export { PesoInput, type PesoInputProps, type UnidadPeso } from './PesoInput';
 export { SearchSelect, type SearchSelectProps, type OpcionSearchSelect } from './SearchSelect';
 export { DataTable, type DataTableProps, type ColumnaDataTable } from './DataTable';
 export { StatCard, type StatCardProps } from './StatCard';
+export { IconoWhatsApp, type IconoWhatsAppProps } from './IconoWhatsApp';
