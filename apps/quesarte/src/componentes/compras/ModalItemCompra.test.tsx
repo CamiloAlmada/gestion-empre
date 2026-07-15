@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { money, peso, type Producto } from '@gestion/core';
 import { ModalItemCompra } from './ModalItemCompra';
@@ -123,5 +123,67 @@ describe('ModalItemCompra', () => {
     expect((screen.getByLabelText('Peso comprado') as HTMLInputElement).value).toBe('3');
     expect((screen.getByLabelText('Costo de factura (total del ítem)') as HTMLInputElement).value).toBe('900,00');
     expect(screen.getByRole('button', { name: 'Guardar' })).toBeTruthy();
+  });
+
+  // AUDIT-1 (docs/03): variante del bug de COSTO-2 en un modal que NO es
+  // instancia estable (`ModalItemCompra` desmonta por completo al cerrar,
+  // `if (producto === null) return null`) — acá la carrera es dentro del
+  // MISMO mount: el `<dialog>` se abre y autoenfoca su primer campo ANTES de
+  // que el efecto de arriba entregue `itemExistente`. jsdom NO implementa el
+  // autofoco nativo de `showModal()` (ver test-setup.ts) — se reemplaza acá
+  // por una versión fiel a la spec (enfoca el primer elemento enfocable del
+  // diálogo) para reproducir el mismo comportamiento que un navegador real.
+  describe('AUDIT-1: autofoco nativo de showModal() vs. precarga de itemExistente', () => {
+    const showModalOriginal = HTMLDialogElement.prototype.showModal;
+
+    function primerFocuseable(dialog: HTMLDialogElement): HTMLElement | null {
+      return dialog.querySelector('input, button, select, textarea, [tabindex]');
+    }
+
+    beforeAll(() => {
+      HTMLDialogElement.prototype.showModal = function showModal(this: HTMLDialogElement) {
+        this.setAttribute('open', '');
+        primerFocuseable(this)?.focus();
+      };
+    });
+
+    afterAll(() => {
+      HTMLDialogElement.prototype.showModal = showModalOriginal;
+    });
+
+    it('unidad_simple: CantidadInput es el primer campo del formulario (sin botones por delante) — con autofoco real, edición precarga igual', () => {
+      const itemExistente: ItemCompraForm = {
+        productoId: 'p1',
+        nombreProducto: 'Queso Colonia',
+        modoStock: 'unidad_simple',
+        unidades: 7,
+        costoFacturaCents: money(90000),
+      };
+      renderizar({ producto: productoDe({ modoStock: 'unidad_simple' }), itemExistente });
+
+      // Antes del fix (sin `key={aperturaId}`), el autofoco nativo en
+      // CantidadInput trababa su resincronización: este campo quedaba VACÍO
+      // en vez de mostrar "7".
+      expect((screen.getByLabelText('Unidades compradas') as HTMLInputElement).value).toBe('7');
+    });
+
+    it('granel: PesoInput antepone sus botones g/kg — el autofoco cae ahí, nunca en el input de texto (ya protegido sin el fix)', () => {
+      const itemExistente: ItemCompraForm = {
+        productoId: 'p1',
+        nombreProducto: 'Queso Colonia',
+        modoStock: 'granel',
+        gramos: peso(3000),
+        costoFacturaCents: money(90000),
+      };
+      renderizar({ producto: productoDe({ modoStock: 'granel' }), itemExistente });
+
+      expect((screen.getByLabelText('Peso comprado') as HTMLInputElement).value).toBe('3');
+    });
+
+    it('unidad_simple, alta (sin itemExistente): con autofoco real, no revienta y el campo arranca vacío', () => {
+      renderizar({ producto: productoDe({ modoStock: 'unidad_simple' }), itemExistente: null });
+
+      expect((screen.getByLabelText('Unidades compradas') as HTMLInputElement).value).toBe('');
+    });
   });
 });
