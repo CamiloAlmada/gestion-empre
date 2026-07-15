@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { Firestore } from 'firebase/firestore';
 import { money, peso, type Producto } from '@gestion/core';
@@ -121,5 +121,91 @@ describe('ModalSumarStock - unidad_simple', () => {
 
     expect(await screen.findByText('No se pudo sumar el stock: revisá la cantidad ingresada.')).toBeTruthy();
     expect(onCerrar).not.toHaveBeenCalled();
+  });
+
+  // AUDIT-1 (docs/03): `ModalSumarStock` es instancia ESTABLE (nunca se
+  // desmonta, `DetalleProductoPantalla.tsx` la renderiza incondicionalmente,
+  // `abierto` solo alterna un booleano). En `unidad_simple`, `CantidadInput`
+  // es el primer campo SIN nada por delante que absorba el autofoco nativo
+  // de `dialog.showModal()`. jsdom no lo implementa (ver test-setup.ts): se
+  // reemplaza acá por una versión fiel a la spec para reproducir el mismo
+  // comportamiento que un navegador real.
+  describe('AUDIT-1: autofoco nativo de showModal() vs. reset del formulario al reabrir', () => {
+    const showModalOriginal = HTMLDialogElement.prototype.showModal;
+
+    function primerFocuseable(dialog: HTMLDialogElement): HTMLElement | null {
+      return dialog.querySelector('input, button, select, textarea, [tabindex]');
+    }
+
+    beforeAll(() => {
+      HTMLDialogElement.prototype.showModal = function showModal(this: HTMLDialogElement) {
+        this.setAttribute('open', '');
+        primerFocuseable(this)?.focus();
+      };
+    });
+
+    afterAll(() => {
+      HTMLDialogElement.prototype.showModal = showModalOriginal;
+    });
+
+    it('unidad_simple: escribir sin confirmar, cerrar y reabrir — el campo vuelve a mostrar vacío (antes del fix quedaba con el texto viejo)', () => {
+      const onCerrar = vi.fn();
+      const { rerender } = render(
+        <ProveedorToasts>
+          <ModalSumarStock abierto onCerrar={onCerrar} db={dbFalsa} producto={productoUnidad()} usuarioId="admin-1" />
+        </ProveedorToasts>,
+      );
+
+      fireEvent.change(screen.getByLabelText('Cantidad a sumar'), { target: { value: '50' } });
+
+      rerender(
+        <ProveedorToasts>
+          <ModalSumarStock
+            abierto={false}
+            onCerrar={onCerrar}
+            db={dbFalsa}
+            producto={productoUnidad()}
+            usuarioId="admin-1"
+          />
+        </ProveedorToasts>,
+      );
+      rerender(
+        <ProveedorToasts>
+          <ModalSumarStock abierto onCerrar={onCerrar} db={dbFalsa} producto={productoUnidad()} usuarioId="admin-1" />
+        </ProveedorToasts>,
+      );
+
+      expect((screen.getByLabelText('Cantidad a sumar') as HTMLInputElement).value).toBe('');
+    });
+
+    it('granel: PesoInput antepone sus botones g/kg — el autofoco cae ahí, el campo se resetea normalmente (ya protegido sin el fix)', () => {
+      const onCerrar = vi.fn();
+      const { rerender } = render(
+        <ProveedorToasts>
+          <ModalSumarStock abierto onCerrar={onCerrar} db={dbFalsa} producto={productoGranel()} usuarioId="admin-1" />
+        </ProveedorToasts>,
+      );
+
+      fireEvent.change(screen.getByLabelText('Cantidad a sumar'), { target: { value: '1,5' } });
+
+      rerender(
+        <ProveedorToasts>
+          <ModalSumarStock
+            abierto={false}
+            onCerrar={onCerrar}
+            db={dbFalsa}
+            producto={productoGranel()}
+            usuarioId="admin-1"
+          />
+        </ProveedorToasts>,
+      );
+      rerender(
+        <ProveedorToasts>
+          <ModalSumarStock abierto onCerrar={onCerrar} db={dbFalsa} producto={productoGranel()} usuarioId="admin-1" />
+        </ProveedorToasts>,
+      );
+
+      expect((screen.getByLabelText('Cantidad a sumar') as HTMLInputElement).value).toBe('');
+    });
   });
 });

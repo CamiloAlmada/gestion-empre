@@ -52,6 +52,26 @@ function parsearFechaLocal(valor: string): Date {
  *
  * `costoFacturaCents` es el costo de FACTURA del ítem completo (no por
  * unidad/kg — doc 03): un `MoneyInput` común a los tres modos.
+ *
+ * **Fix de la misma clase de bug que COSTO-2** (AUDIT-1, docs/03): este modal
+ * MONTA de cero en cada apertura (`if (producto === null) return null` más
+ * abajo — a diferencia de `ModalPrecio`, acá no hay instancia estable), pero
+ * ese primer render ocurre ANTES de que el efecto de acá arriba precargue
+ * `itemExistente` — hay un commit intermedio con los valores default (`null`)
+ * mientras el `<dialog>` ya se abrió y autoenfocó su primer campo. Cuando ese
+ * primer campo es un input bufferizado "desnudo" (`CantidadInput`, rama
+ * `unidad_simple` — SIN un grupo de botones por delante que absorba el
+ * autofoco, a diferencia de `PesoInput`, que SIEMPRE antepone sus propios
+ * botones g/kg y por eso nunca es vulnerable a esto), su guard interno
+ * (`enfocadoRef`, ver JSDoc de `CantidadInput`) queda trabado ANTES de que
+ * el efecto de acá arriba entregue el valor real — el campo queda VACÍO al
+ * editar un ítem existente en vez de mostrar la cantidad ya cargada
+ * (confirmado con un `showModal()` fiel a la spec en
+ * `ModalItemCompra.test.tsx`). Mismo fix mecánico que `ModalPrecio`:
+ * `aperturaId` se incrementa en este mismo efecto y se usa como `key` de los
+ * tres inputs bufferizados (`PesoInput`/`CantidadInput`/`MoneyInput`, ver el
+ * JSX) — fuerza su remontaje en cada apertura real, sin depender de cuál
+ * quede primero en el DOM ni de la carrera contra el autofoco nativo.
  */
 export function ModalItemCompra({ abierto, onCerrar, producto, itemExistente, onConfirmar }: ModalItemCompraProps) {
   const [gramos, setGramos] = useState<Peso | null>(null);
@@ -63,6 +83,7 @@ export function ModalItemCompra({ abierto, onCerrar, producto, itemExistente, on
   const [errorUnidades, setErrorUnidades] = useState<string | undefined>(undefined);
   const [errorPiezas, setErrorPiezas] = useState<string | undefined>(undefined);
   const [errorCosto, setErrorCosto] = useState<string | undefined>(undefined);
+  const [aperturaId, setAperturaId] = useState(0);
 
   useEffect(() => {
     if (!abierto || producto === null) return;
@@ -80,6 +101,7 @@ export function ModalItemCompra({ abierto, onCerrar, producto, itemExistente, on
     setErrorUnidades(undefined);
     setErrorPiezas(undefined);
     setErrorCosto(undefined);
+    setAperturaId((n) => n + 1);
   }, [abierto, producto, itemExistente]);
 
   if (producto === null) return null;
@@ -241,6 +263,7 @@ export function ModalItemCompra({ abierto, onCerrar, producto, itemExistente, on
                     )}
                   </div>
                   <PesoInput
+                    key={`${fila.clave}-${aperturaId}`}
                     label="Peso"
                     value={fila.peso}
                     onChange={(valor) => actualizarPesoFila(fila.clave, valor)}
@@ -283,13 +306,28 @@ export function ModalItemCompra({ abierto, onCerrar, producto, itemExistente, on
           </div>
         )}
 
-        {esGranel && <PesoInput label="Peso comprado" value={gramos} onChange={setGramos} error={errorGramos} />}
+        {esGranel && (
+          <PesoInput
+            key={`gramos-${aperturaId}`}
+            label="Peso comprado"
+            value={gramos}
+            onChange={setGramos}
+            error={errorGramos}
+          />
+        )}
 
         {!esPieza && !esGranel && (
-          <CantidadInput label="Unidades compradas" value={unidades} onChange={setUnidades} error={errorUnidades} />
+          <CantidadInput
+            key={`unidades-${aperturaId}`}
+            label="Unidades compradas"
+            value={unidades}
+            onChange={setUnidades}
+            error={errorUnidades}
+          />
         )}
 
         <MoneyInput
+          key={`costo-${aperturaId}`}
           label="Costo de factura (total del ítem)"
           value={costoFacturaCents}
           onChange={setCostoFacturaCents}
