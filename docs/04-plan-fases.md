@@ -354,6 +354,27 @@ proveedores del doc 07 (la parte ya en producción queda como está). El doc 09
 §A sigue EN PAUSA. La sesión de elicitación (doc 10 §8) reordena el roadmap
 post-demo, incluida Fase 3.
 
+## Tareas COSTO-2 + AUDIT-1 — IMPLEMENTADAS (2026-07-14)
+
+COSTO-2: desglose de última compra inline en `ModalPrecio` (hook compartido
+`useDesgloseUltimaCompra` con `ModalDesgloseCosto`) + **fix de bug real de
+producción** reportado por el dueño: el precio del primer producto abierto
+quedaba clavado en el input para todos los siguientes (carrera entre el
+autofoco nativo de `dialog.showModal()` y el buffer de `MoneyInput`, que no
+resincroniza mientras está enfocado). AUDIT-1: auditoría de la clase completa
+de bug en TODOS los modales — 2 vulnerables más corregidos (`ModalItemCompra`
+y `ModalSumarStock`, variante `unidad_simple` con el input desnudo al
+autofoco); matriz completa de veredictos; patrón `key={aperturaId}`
+documentado como estándar en docs/06 §5. 1023 tests.
+
+Deuda/decisiones: fix sistémico en packages/ui DIFERIDO a propósito (dos
+opciones evaluadas — Modal enfocando el propio dialog, o guard de buffer por
+"tipeo desde el foco" — ambas cambian superficie global; todas las
+instancias actuales están auditadas y cubiertas con el patrón local).
+`SearchSelect` comparte el patrón de buffer y hoy no vive en ningún modal —
+riesgo LATENTE si algún día se monta dentro de uno (la key es obligatoria,
+docs/06 §5).
+
 ## Tanda NAV-2 + tarea COSTO-1 — IMPLEMENTADAS (2026-07-14)
 
 NAV-2 (pedidos del dueño al validar): detalle de venta migrado a ruta real

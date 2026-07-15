@@ -281,6 +281,16 @@ tech lead; no se ignora en silencio.
 - [ ] Toasts: `role="status"` (info) / `role="alert"` (error). Errores de
       formulario asociados con `aria-describedby`.
 - [ ] Modales: focus trap, cierre con Escape, foco devuelto al disparador.
+- [ ] **Inputs bufferizados en modales** (patrón COSTO-2/AUDIT-1, 2026-07-14):
+      todo input con buffer propio que no resincroniza mientras está enfocado
+      (`MoneyInput`, `PesoInput`, `CantidadInput`, `SearchSelect`) dentro de
+      un `Modal` lleva `key={aperturaId}` (contador incrementado en el efecto
+      de reset de cada apertura) — el autofoco nativo de `dialog.showModal()`
+      puede enfocarlo ANTES de que React cargue los datos nuevos y dejar el
+      texto clavado en el valor anterior (bug real de producción). Un grupo
+      de botones segmentados delante del input lo protege, pero no confiar
+      en eso: la key es obligatoria. Fix sistémico en packages/ui: diferido
+      a propósito (todas las instancias actuales auditadas y cubiertas).
 - [ ] `inputMode="decimal"`/`"numeric"` en peso y dinero (teclado correcto en móvil).
 - [ ] Nada comunicado solo por color (icono o texto acompaña).
 - [ ] `prefers-reduced-motion` y `prefers-reduced-transparency` respetados.
