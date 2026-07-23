@@ -265,6 +265,27 @@ tech lead; no se ignora en silencio.
   `superficie-translucida`, `texto`, `texto-secundario`, `borde`, `exito`,
   `peligro`, `advertencia`, y la escala `primary` (ámbar/miel). Prohibido
   hardcodear grises/azules de Tailwind en componentes nuevos.
+- **Colores del negocio** (tanda TM, 2026-07-23, decidido con el dueño):
+  tercer eje, DEL NEGOCIO (no del usuario) — el admin elige en Ajustes →
+  Apariencia el **matiz de marca** (slider 0-359, grados enteros) y el
+  **tinte de fondo** (`neutro`/`cálido`/`frío`), o un preset de la galería
+  (un preset ES un par matiz+tinte; no se persiste id de preset). Un motor
+  en `packages/core` (`generarPaleta`) deriva TODA la paleta en OKLCH con
+  **AA garantizado por construcción** (anclaje por luminancia WCAG, ver §7)
+  y la app la aplica pisando los pares crudos de Capa 1 vía
+  `<style id="tema-negocio">` + atributo `data-tema-negocio` en `<html>` —
+  compone con Modo (sigue personal) y con Estilo (que solo aporta forma).
+  Persistencia: doc `configuracion/tema` = `{version, matiz, tinte}` (solo
+  la semilla; la paleta se regenera determinista en cada cliente), escritura
+  solo admin, lectura de todo usuario activo; cache localStorage
+  `'temaNegocio'` con el CSS generado + hex de theme-color para el anti-FOUC
+  (primer arranque sin cache: un flash de tema base, aceptado). Editor con
+  **preview en vivo sobre toda la app** (Guardar/Descartar; descartar,
+  navegar o desmontar SIEMPRE restaura el persistido), "Volver a los colores
+  originales" (borra el doc) y panel de transparencia "Contraste verificado
+  (AA)" con los ratios del reporte del motor. Éxito/peligro/advertencia no
+  se personalizan (semántica universal); los pares de marca WhatsApp quedan
+  fuera del motor.
 - Color primario de marca: **ámbar/miel** (OKLCH, hue ~75-85). El par
   aprobado de cada combinación de contraste se documenta en §7.
 
@@ -412,6 +433,21 @@ cualquier review debe tratarla como decisión cerrada del dueño, no como
 hallazgo. Mitigación: el botón se identifica por el glifo icónico + verde de
 marca + `aria-label` descriptivo; el label es refuerzo, no la única señal.
 `hover:bg-whatsapp-oscuro` con blanco: 4.14:1 (misma excepción).
+
+### Paleta personalizada (tanda TM, 2026-07-23 — motor `generarPaleta`)
+
+Con "Colores del negocio" activo (§4), la tabla efectiva de esta sección es
+`PARES_AA` (`packages/core/src/contrasteAa.ts`): la UNIÓN de las tablas
+Minimalista y Cálido de arriba (incluido el par `borde`/`fondo` ≥3:1 de la
+tab bar flotante, que se exige siempre porque la base puede ser Cálida),
+excluidos los pares de marca WhatsApp (fijos, fuera del motor). La garantía
+no es por revisión manual sino **por construcción + verificación
+exhaustiva**: el motor ancla la luminancia WCAG de cada token a la del
+Minimalista verificado y el matiz está cuantizado a grados enteros, así que
+el espacio de paletas posibles es finito (360 matices × 3 tintes = 1080) y
+un test de `packages/core` las genera TODAS en CI verificando cada par —
+si una sola fallara, el build no sale. Un par nuevo en la UI se agrega a
+`PARES_AA` (no solo a esta tabla) para quedar cubierto por ese test.
 
 **Usos decorativos aprobados** (sin requisito de par AA por no llevar texto ni
 comunicar información por sí solos — la información va por otra vía):
