@@ -11,6 +11,22 @@ export {
   type EstadoTema,
   type ProveedorTemaProps,
 } from './ProveedorTema';
+export {
+  aplicarTemaNegocio,
+  limpiarTemaNegocio,
+  escribirCacheTemaNegocio,
+  borrarCacheTemaNegocio,
+  type TinteFondo,
+  type TemaPersonalizado,
+  type TokensGenerados,
+  type CacheTemaNegocio,
+} from './temaNegocio';
+export {
+  ProveedorTemaNegocio,
+  useTemaNegocio,
+  type ProveedorTemaNegocioProps,
+  type EstadoTemaNegocio,
+} from './ProveedorTemaNegocio';
 export { BarraPestanas, type BarraPestanasProps, type ItemBarraPestanas } from './BarraPestanas';
 export { Chip, type ChipProps } from './Chip';
 export { ChipsFiltro, type ChipsFiltroProps } from './ChipsFiltro';
