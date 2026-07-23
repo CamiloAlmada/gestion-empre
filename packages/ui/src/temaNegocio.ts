@@ -6,34 +6,13 @@
  * `generarPaleta` de `@gestion/core` (tarea paralela) — y la aplicamos al
  * documento. Este módulo es puro DOM: no sabe de Firestore ni de cómo se
  * generaron los tokens, solo cómo inyectarlos.
- *
- * TODO(merge TM): reemplazar estos tipos por el import real de @gestion/core
- * una vez que la tarea del motor esté mergeada.
  */
+import type { TemaPersonalizado, TinteFondo, TokensGenerados } from '@gestion/core';
 
-/** Tinte de fondo elegido por el admin (matiz de marca + tinte componen la
- * semilla persistida; ver docs/06-ui-ux.md §4). */
-export type TinteFondo = 'neutro' | 'calido' | 'frio';
-
-/** Semilla persistida en `configuracion/tema`: la paleta completa se
- * regenera determinista a partir de esto en cada cliente. */
-export interface TemaPersonalizado {
-  version: 1;
-  matiz: number;
-  tinte: TinteFondo;
-}
-
-/** Salida completa del motor: los 27 pares crudos (`--fondo-light`, etc.) +
- * la escala `--color-primary-*`, listos para volcar tal cual a un bloque
- * CSS, más el hex de `theme-color` para el meta tag (tarea posterior) y el
- * reporte de contraste (no se consume acá). */
-export interface TokensGenerados {
-  version: 1;
-  tema: TemaPersonalizado;
-  variables: Record<string, string>;
-  themeColor: { light: string; dark: string };
-  reporte: unknown;
-}
+// Re-export de conveniencia para consumidores de ui que ya los importaban de
+// acá (consolidación post-merge de la Wave 1: los tipos canónicos viven en
+// @gestion/core/src/tema.ts y paleta.ts — la fuente es una sola).
+export type { TemaPersonalizado, TinteFondo, TokensGenerados };
 
 /** Shape exacto de lo que se persiste en `localStorage['temaNegocio']`: el
  * bloque CSS ya serializado (mismo string que se inyecta en el `<style>`,

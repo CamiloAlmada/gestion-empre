@@ -6,61 +6,14 @@ import {
   type WithFieldValue,
 } from 'firebase/firestore';
 
-/**
- * Tinte de fondo elegible para el tema del negocio (doc 06 §4, tanda TM).
- *
- * // TODO(merge TM): reemplazar por import de @gestion/core (tema.ts) — otra
- * // tarea de la misma tanda declara `TemaPersonalizado`/`esTemaValido` ahí; este
- * // converter los declara localmente mientras tanto para no bloquearse. El
- * // tech lead consolida el import al mergear (mismo shape, no renombrar).
- */
-export type TintePersonalizado = 'neutro' | 'calido' | 'frio';
+import { esTemaValido, type TemaPersonalizado, type TinteFondo } from '@gestion/core';
 
-/**
- * Forma exacta (y única) del documento `configuracion/tema`: la semilla que el
- * admin fija en Ajustes → Apariencia (doc 06 §4). `matiz` es el hue de marca en
- * grados enteros `[0, 360)`; `tinte` el eje de fondo. La paleta completa NO se
- * persiste: se regenera determinista en cada cliente con `generarPaleta` (core).
- *
- * // TODO(merge TM): reemplazar por import de @gestion/core (tema.ts).
- */
-export interface TemaPersonalizado {
-  version: 1;
-  matiz: number;
-  tinte: TintePersonalizado;
-}
-
-const TINTES_VALIDOS: readonly TintePersonalizado[] = ['neutro', 'calido', 'frio'];
-const CLAVES_VALIDAS = new Set(['version', 'matiz', 'tinte']);
-
-/**
- * Type guard de `TemaPersonalizado`: exige EXACTAMENTE las 3 claves del shape
- * (ni de menos ni de más — un doc con una clave ajena es tan inválido como uno
- * al que le falta una), `version === 1`, `matiz` número finito entero en
- * `[0, 360)` y `tinte` en el enum. Usado por el converter para decidir
- * `fromFirestore` y, en espejo, por `guardarTemaNegocio` para el fail-fast local.
- *
- * // TODO(merge TM): reemplazar por import de @gestion/core (tema.ts).
- */
-export function esTemaValido(valor: unknown): valor is TemaPersonalizado {
-  if (typeof valor !== 'object' || valor === null || Array.isArray(valor)) return false;
-  const claves = Object.keys(valor);
-  if (claves.length !== CLAVES_VALIDAS.size || !claves.every((clave) => CLAVES_VALIDAS.has(clave))) {
-    return false;
-  }
-  const datos = valor as Record<string, unknown>;
-  if (datos.version !== 1) return false;
-  if (
-    typeof datos.matiz !== 'number' ||
-    !Number.isFinite(datos.matiz) ||
-    !Number.isInteger(datos.matiz) ||
-    datos.matiz < 0 ||
-    datos.matiz >= 360
-  ) {
-    return false;
-  }
-  return TINTES_VALIDOS.includes(datos.tinte as TintePersonalizado);
-}
+// Consolidación post-merge de la Wave 1 (tech lead): los tipos y el guard
+// canónicos viven en @gestion/core (tema.ts) — este converter los importa en
+// vez de duplicarlos. `esTemaValido` de core valida el MISMO shape estricto
+// (3 claves exactas, version 1, matiz entero [0,360), tinte del enum).
+export type { TemaPersonalizado, TinteFondo };
+export { esTemaValido };
 
 /**
  * Mapea `configuracion/tema` ↔ `TemaPersonalizado` (doc 06 §4, tanda TM).

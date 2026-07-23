@@ -2,7 +2,7 @@ import { deleteDoc, doc, setDoc, type Firestore } from 'firebase/firestore';
 import {
   temaNegocioConverter,
   type TemaPersonalizado,
-  type TintePersonalizado,
+  type TinteFondo,
 } from './converters/temaNegocio';
 import { ConfiguracionInvalidaError } from './errores';
 
@@ -28,10 +28,10 @@ export interface DatosTemaNegocio {
   /** Matiz de marca, grados enteros en `[0, 360)`. */
   matiz: number;
   /** Tinte de fondo. */
-  tinte: TintePersonalizado;
+  tinte: TinteFondo;
 }
 
-const TINTES_VALIDOS: readonly TintePersonalizado[] = ['neutro', 'calido', 'frio'];
+const TINTES_VALIDOS: readonly TinteFondo[] = ['neutro', 'calido', 'frio'];
 
 function exigirMatiz(valor: unknown): number {
   if (typeof valor !== 'number' || !Number.isFinite(valor) || !Number.isInteger(valor)) {
@@ -43,13 +43,13 @@ function exigirMatiz(valor: unknown): number {
   return valor;
 }
 
-function exigirTinte(valor: unknown): TintePersonalizado {
-  if (!TINTES_VALIDOS.includes(valor as TintePersonalizado)) {
+function exigirTinte(valor: unknown): TinteFondo {
+  if (!TINTES_VALIDOS.includes(valor as TinteFondo)) {
     throw new ConfiguracionInvalidaError(
       `El tinte debe ser uno de ${TINTES_VALIDOS.join(', ')}.`,
     );
   }
-  return valor as TintePersonalizado;
+  return valor as TinteFondo;
 }
 
 /**

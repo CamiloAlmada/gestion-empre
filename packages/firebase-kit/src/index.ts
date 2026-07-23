@@ -15,7 +15,7 @@ export {
   temaNegocioConverter,
   esTemaValido,
   type TemaPersonalizado,
-  type TintePersonalizado,
+  type TinteFondo,
 } from './converters/temaNegocio';
 export { categoriaConverter } from './converters/categoria';
 export { clienteConverter } from './converters/cliente';
