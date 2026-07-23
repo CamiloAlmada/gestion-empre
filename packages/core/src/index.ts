@@ -80,3 +80,43 @@ export {
   type ResultadoInactividad,
   clasificarInactividad,
 } from './fidelizacion.js';
+export {
+  type RgbLineal,
+  type ResultadoClamp,
+  parseHex,
+  componenteSrgbALineal,
+  componenteLinealASrgb,
+  hexASrgbLineal,
+  parseOklch,
+  oklchASrgbLineal,
+  dentroDeGamut,
+  clampGamut,
+  luminanciaRelativa,
+  ratioContraste,
+  oklchAHex,
+  maxChromaEnGamut,
+  serializarOklch,
+} from './color.js';
+export {
+  type TinteFondo,
+  type TemaPersonalizado,
+  type PresetTema,
+  normalizarTema,
+  esTemaValido,
+  PRESETS_TEMA,
+} from './tema.js';
+export {
+  type NombreVariable,
+  type ReferenciaColor,
+  type Modo,
+  type ParAA,
+  type ResultadoPar,
+  type ReporteContraste,
+  PARES_AA,
+  verificarPares,
+} from './contrasteAa.js';
+export {
+  type TokensGenerados,
+  ErrorPaletaInvalida,
+  generarPaleta,
+} from './paleta.js';
