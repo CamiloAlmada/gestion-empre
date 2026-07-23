@@ -11,6 +11,12 @@ export { ventaConverter } from './converters/venta';
 export { movimientoConverter } from './converters/movimiento';
 export { configuracionConverter } from './converters/configuracion';
 export { plantillasWhatsAppConverter } from './converters/plantillasWhatsApp';
+export {
+  temaNegocioConverter,
+  esTemaValido,
+  type TemaPersonalizado,
+  type TintePersonalizado,
+} from './converters/temaNegocio';
 export { categoriaConverter } from './converters/categoria';
 export { clienteConverter } from './converters/cliente';
 export { proveedorConverter } from './converters/proveedor';
@@ -59,6 +65,11 @@ export {
   guardarPlantillasWhatsApp,
   type DatosConfiguracionGeneral,
 } from './configuracion';
+export {
+  guardarTemaNegocio,
+  borrarTemaNegocio,
+  type DatosTemaNegocio,
+} from './temaNegocio';
 export { invitarUsuario, type EntradaInvitacion } from './invitaciones';
 export {
   crearCategoria,

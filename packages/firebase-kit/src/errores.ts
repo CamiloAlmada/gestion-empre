@@ -152,18 +152,20 @@ export class ProveedorInvalidoError extends ErrorProveedor {
 }
 
 /**
- * Errores de la configuración del negocio (`configuracion.ts`): edición de la
- * config general y de las plantillas de WhatsApp (doc 08), ambas solo-admin en
- * Ajustes. Validación previa local (fail fast en español antes de tocar Firestore)
+ * Errores de la configuración del negocio (`configuracion.ts`, `temaNegocio.ts`):
+ * edición de la config general, de las plantillas de WhatsApp (doc 08) y del tema
+ * visual del negocio (doc 06 §4, tanda TM), todas solo-admin en Ajustes.
+ * Validación previa local (fail fast en español antes de tocar Firestore)
  * como el resto de las familias; las reglas son el backstop en el servidor.
  */
 export abstract class ErrorConfiguracion extends Error {}
 
 /**
  * La configuración a guardar es inválida: código de país que no es 1-4 dígitos,
- * nombre de negocio vacío o demasiado largo, o una lista de plantillas de WhatsApp
+ * nombre de negocio vacío o demasiado largo, una lista de plantillas de WhatsApp
  * mal formada (demasiadas, ids duplicados, contexto fuera de la unión, o campos
- * fuera de rango). El mensaje dice cuál.
+ * fuera de rango), o un tema de negocio con `matiz`/`tinte` fuera de rango. El
+ * mensaje dice cuál.
  */
 export class ConfiguracionInvalidaError extends ErrorConfiguracion {
   constructor(message: string) {
