@@ -1,27 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { generarPaleta, type TokensGenerados } from '@gestion/core';
 import {
   aplicarTemaNegocio,
   borrarCacheTemaNegocio,
   escribirCacheTemaNegocio,
   limpiarTemaNegocio,
   type CacheTemaNegocio,
-  type TokensGenerados,
 } from './temaNegocio';
 
-function crearTokens(overrides: Partial<TokensGenerados> = {}): TokensGenerados {
-  return {
-    version: 1,
-    tema: { version: 1, matiz: 200, tinte: 'neutro' },
-    variables: {
-      '--fondo-light': 'oklch(0.98 0.01 200)',
-      '--fondo-dark': 'oklch(0.15 0.01 200)',
-      '--color-primary-500': 'oklch(0.65 0.12 200)',
-    },
-    themeColor: { light: '#fafafa', dark: '#111111' },
-    reporte: {},
-    ...overrides,
-  };
-}
+// Tokens REALES del motor (no maquetas a mano): esto además ejercita el
+// shape completo que produce generarPaleta (27 variables + reporte de AA),
+// no una versión parcial que el tipo del contrato ya no permite construir.
+const TOKENS_MIEL: TokensGenerados = generarPaleta({ version: 1, matiz: 78, tinte: 'neutro' });
+const TOKENS_MAR: TokensGenerados = generarPaleta({ version: 1, matiz: 200, tinte: 'frio' });
 
 function limpiarDom(): void {
   document.getElementById('tema-negocio')?.remove();
@@ -40,36 +31,41 @@ describe('temaNegocio', () => {
   });
 
   describe('aplicarTemaNegocio', () => {
-    it('crea el <style id="tema-negocio"> en <head> con el CSS y el atributo en <html>', () => {
-      aplicarTemaNegocio(crearTokens());
+    it('crea el <style id="tema-negocio"> en <head> con las 27 variables y el atributo en <html>', () => {
+      aplicarTemaNegocio(TOKENS_MIEL);
 
       const style = document.getElementById('tema-negocio');
       expect(style).not.toBeNull();
       expect(style?.tagName).toBe('STYLE');
       expect(style?.parentElement).toBe(document.head);
-      expect(style?.textContent).toBe(
-        ":root[data-tema-negocio] {\n  --fondo-light: oklch(0.98 0.01 200);\n  --fondo-dark: oklch(0.15 0.01 200);\n  --color-primary-500: oklch(0.65 0.12 200);\n}",
-      );
+
+      const css = style?.textContent ?? '';
+      expect(css.startsWith(':root[data-tema-negocio] {\n')).toBe(true);
+      expect(css.endsWith('\n}')).toBe(true);
+      const nombres = Object.entries(TOKENS_MIEL.variables);
+      expect(nombres).toHaveLength(27);
+      for (const [nombre, valor] of nombres) {
+        expect(css).toContain(`  ${nombre}: ${valor};`);
+      }
       expect(document.documentElement.hasAttribute('data-tema-negocio')).toBe(true);
     });
 
-    it('al reaplicar reemplaza el contenido sin duplicar el <style>', () => {
-      aplicarTemaNegocio(crearTokens());
-      aplicarTemaNegocio(
-        crearTokens({ variables: { '--fondo-light': 'oklch(0.5 0.2 40)' } }),
-      );
+    it('al reaplicar con otro tema reemplaza el contenido sin duplicar el <style>', () => {
+      aplicarTemaNegocio(TOKENS_MIEL);
+      aplicarTemaNegocio(TOKENS_MAR);
 
       const styles = document.head.querySelectorAll('#tema-negocio');
       expect(styles).toHaveLength(1);
-      expect(styles[0]?.textContent).toBe(
-        ':root[data-tema-negocio] {\n  --fondo-light: oklch(0.5 0.2 40);\n}',
-      );
+      const css = styles[0]?.textContent ?? '';
+      expect(css).toContain(`  --fondo-light: ${TOKENS_MAR.variables['--fondo-light']};`);
+      expect(css).not.toContain(TOKENS_MIEL.variables['--fondo-light']);
+      expect(css).not.toContain(TOKENS_MIEL.variables['--color-primary-500']);
     });
   });
 
   describe('limpiarTemaNegocio', () => {
     it('quita el atributo de <html> y vacía el <style> sin quitarlo del head', () => {
-      aplicarTemaNegocio(crearTokens());
+      aplicarTemaNegocio(TOKENS_MIEL);
 
       limpiarTemaNegocio();
 
@@ -86,23 +82,22 @@ describe('temaNegocio', () => {
   });
 
   describe('cache de localStorage', () => {
-    it('escribirCacheTemaNegocio guarda { v: 1, css, themeColor } con el mismo CSS que se inyecta', () => {
-      const tokens = crearTokens();
+    it('escribirCacheTemaNegocio guarda { v: 1, css, themeColor }, con el MISMO css que aplicarTemaNegocio inyecta', () => {
+      aplicarTemaNegocio(TOKENS_MIEL);
+      const cssInyectado = document.getElementById('tema-negocio')?.textContent;
 
-      escribirCacheTemaNegocio(tokens);
+      escribirCacheTemaNegocio(TOKENS_MIEL);
 
       const crudo = window.localStorage.getItem('temaNegocio');
       expect(crudo).not.toBeNull();
       const parseado = JSON.parse(crudo ?? '') as CacheTemaNegocio;
-      expect(parseado).toEqual({
-        v: 1,
-        css: ':root[data-tema-negocio] {\n  --fondo-light: oklch(0.98 0.01 200);\n  --fondo-dark: oklch(0.15 0.01 200);\n  --color-primary-500: oklch(0.65 0.12 200);\n}',
-        themeColor: { light: '#fafafa', dark: '#111111' },
-      });
+      expect(parseado.v).toBe(1);
+      expect(parseado.css).toBe(cssInyectado);
+      expect(parseado.themeColor).toEqual(TOKENS_MIEL.themeColor);
     });
 
     it('borrarCacheTemaNegocio elimina la clave', () => {
-      escribirCacheTemaNegocio(crearTokens());
+      escribirCacheTemaNegocio(TOKENS_MIEL);
       expect(window.localStorage.getItem('temaNegocio')).not.toBeNull();
 
       borrarCacheTemaNegocio();
@@ -115,7 +110,7 @@ describe('temaNegocio', () => {
         throw new Error('localStorage no disponible');
       });
 
-      expect(() => escribirCacheTemaNegocio(crearTokens())).not.toThrow();
+      expect(() => escribirCacheTemaNegocio(TOKENS_MIEL)).not.toThrow();
 
       setItemSpy.mockRestore();
     });
