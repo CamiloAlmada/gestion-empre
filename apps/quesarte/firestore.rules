@@ -198,15 +198,19 @@ service cloud.firestore {
     // tema del negocio, exactamente { version, matiz, tinte } — las 3 obligatorias.
     // A diferencia de `general`, acá NO hay merge parcial: el kit reescribe el doc
     // entero (o lo borra en "Restablecer"), así que `hasAll` sobre las 3 claves es
-    // correcto. `matiz` es un grado de tono en [0, 360) (el editor lo cuantiza a
-    // entero, pero se acepta float por robustez); `tinte` es la unión cerrada de los
+    // correcto. `matiz` es un grado de tono ENTERO en [0, 360): la regla es el
+    // backstop de la cuantización client-side, no una comodidad. La garantía AA del
+    // motor (`generarPaleta`, §7) está verificada exhaustivamente SOLO sobre el
+    // espacio finito de matices enteros (360 × 3 tintes); un float persistido por un
+    // cliente buggy generaría una paleta fuera del espacio probado, así que se rechaza
+    // a nivel de reglas (server-side es la verdad). `tinte` es la unión cerrada de los
     // tres fondos. Aplica SOLO a create/update: el delete no trae `request.resource`.
     function temaValido() {
       let d = request.resource.data;
       return d.keys().hasOnly(['version', 'matiz', 'tinte'])
         && d.keys().hasAll(['version', 'matiz', 'tinte'])
         && d.version == 1
-        && (d.matiz is int || d.matiz is float)
+        && d.matiz is int
         && d.matiz >= 0
         && d.matiz < 360
         && d.tinte in ['neutro', 'calido', 'frio'];

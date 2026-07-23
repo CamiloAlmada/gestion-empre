@@ -1121,6 +1121,15 @@ describe('configuracion/tema (doc 06 §4, tanda TM, semilla del tema del negocio
     );
   });
 
+  // La regla exige matiz ENTERO: es el backstop de la cuantización client-side. El
+  // motor `generarPaleta` (§7) verifica AA exhaustivamente solo sobre matices enteros
+  // (espacio finito 360 × 3), así que un float queda fuera del espacio probado.
+  it('admin NO escribe matiz float (no entero)', async () => {
+    await assertFails(
+      setDoc(doc(db(ADMIN), 'configuracion', 'tema'), temaSemilla({ matiz: 78.5 })),
+    );
+  });
+
   it('admin NO escribe tinte fuera de la unión', async () => {
     await assertFails(
       setDoc(doc(db(ADMIN), 'configuracion', 'tema'), temaSemilla({ tinte: 'pastel' })),
