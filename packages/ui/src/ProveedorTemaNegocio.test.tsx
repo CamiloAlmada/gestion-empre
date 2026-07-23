@@ -2,18 +2,14 @@ import { StrictMode } from 'react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render, renderHook, screen } from '@testing-library/react';
+import { generarPaleta, type TokensGenerados } from '@gestion/core';
 import { ProveedorTemaNegocio, useTemaNegocio, type EstadoTemaNegocio } from './ProveedorTemaNegocio';
-import type { TokensGenerados } from './temaNegocio';
 
-function crearTokens(matiz: number): TokensGenerados {
-  return {
-    version: 1,
-    tema: { version: 1, matiz, tinte: 'neutro' },
-    variables: { '--fondo-light': `oklch(0.9 0.05 ${matiz})` },
-    themeColor: { light: '#eeeeee', dark: '#111111' },
-    reporte: {},
-  };
-}
+// Tokens REALES del motor (no maquetas a mano) — dos matices distintos para
+// los tests que necesitan diferenciar "el tema anterior" de "el nuevo".
+const TOKENS_MIEL: TokensGenerados = generarPaleta({ version: 1, matiz: 78, tinte: 'neutro' });
+const TOKENS_LAVANDA: TokensGenerados = generarPaleta({ version: 1, matiz: 300, tinte: 'frio' });
+const TOKENS_MAR: TokensGenerados = generarPaleta({ version: 1, matiz: 245, tinte: 'frio' });
 
 function envolver(tokens: TokensGenerados | null) {
   return function Envoltorio({ children }: { children: ReactNode }) {
@@ -48,20 +44,18 @@ describe('ProveedorTemaNegocio / useTemaNegocio', () => {
   });
 
   it('con tokens !== null, aplica el CSS/atributo y escribe el cache', () => {
-    const tokens = crearTokens(200);
-
-    renderHook(() => useTemaNegocio(), { wrapper: envolver(tokens) });
+    renderHook(() => useTemaNegocio(), { wrapper: envolver(TOKENS_MIEL) });
 
     expect(document.documentElement.hasAttribute('data-tema-negocio')).toBe(true);
     expect(document.getElementById('tema-negocio')?.textContent).toContain(
-      'oklch(0.9 0.05 200)',
+      TOKENS_MIEL.variables['--fondo-light'],
     );
     const cache = JSON.parse(window.localStorage.getItem('temaNegocio') ?? '{}') as {
       v: number;
       css: string;
     };
     expect(cache.v).toBe(1);
-    expect(cache.css).toContain('oklch(0.9 0.05 200)');
+    expect(cache.css).toContain(TOKENS_MIEL.variables['--fondo-light']);
   });
 
   it('con tokens null, limpia el documento y no deja cache', () => {
@@ -73,7 +67,7 @@ describe('ProveedorTemaNegocio / useTemaNegocio', () => {
 
   it('al desmontar, limpia el documento (no deja el atributo pisado)', () => {
     const { unmount } = renderHook(() => useTemaNegocio(), {
-      wrapper: envolver(crearTokens(200)),
+      wrapper: envolver(TOKENS_MIEL),
     });
     expect(document.documentElement.hasAttribute('data-tema-negocio')).toBe(true);
 
@@ -89,64 +83,64 @@ describe('ProveedorTemaNegocio / useTemaNegocio', () => {
     };
 
     const { rerender } = render(
-      <ProveedorTemaNegocio tokens={crearTokens(200)}>
+      <ProveedorTemaNegocio tokens={TOKENS_MIEL}>
         <Sonda onEstado={onEstado} />
       </ProveedorTemaNegocio>,
     );
     expect(document.getElementById('tema-negocio')?.textContent).toContain(
-      'oklch(0.9 0.05 200)',
+      TOKENS_MIEL.variables['--fondo-light'],
     );
 
     rerender(
-      <ProveedorTemaNegocio tokens={crearTokens(50)}>
+      <ProveedorTemaNegocio tokens={TOKENS_LAVANDA}>
         <Sonda onEstado={onEstado} />
       </ProveedorTemaNegocio>,
     );
 
-    expect(document.getElementById('tema-negocio')?.textContent).toContain('oklch(0.9 0.05 50)');
-    expect((estado as EstadoTemaNegocio | null)?.tokens?.tema.matiz).toBe(50);
+    expect(document.getElementById('tema-negocio')?.textContent).toContain(
+      TOKENS_LAVANDA.variables['--fondo-light'],
+    );
+    expect((estado as EstadoTemaNegocio | null)?.tokens?.tema.matiz).toBe(300);
     const cache = JSON.parse(window.localStorage.getItem('temaNegocio') ?? '{}') as {
       css: string;
     };
-    expect(cache.css).toContain('oklch(0.9 0.05 50)');
-    expect(cache.css).not.toContain('oklch(0.9 0.05 200)');
+    expect(cache.css).toContain(TOKENS_LAVANDA.variables['--fondo-light']);
+    expect(cache.css).not.toContain(TOKENS_MIEL.variables['--fondo-light']);
   });
 
   it('previsualizar aplica el draft al documento sin tocar el cache persistido', () => {
-    const persistidos = crearTokens(200);
-    const { result } = renderHook(() => useTemaNegocio(), { wrapper: envolver(persistidos) });
+    const { result } = renderHook(() => useTemaNegocio(), { wrapper: envolver(TOKENS_MIEL) });
 
     act(() => {
-      result.current.previsualizar(crearTokens(300));
+      result.current.previsualizar(TOKENS_MAR);
     });
 
     expect(document.getElementById('tema-negocio')?.textContent).toContain(
-      'oklch(0.9 0.05 300)',
+      TOKENS_MAR.variables['--fondo-light'],
     );
-    expect(result.current.tokens?.tema.matiz).toBe(300);
+    expect(result.current.tokens?.tema.matiz).toBe(245);
     const cache = JSON.parse(window.localStorage.getItem('temaNegocio') ?? '{}') as {
       css: string;
     };
-    expect(cache.css).toContain('oklch(0.9 0.05 200)');
-    expect(cache.css).not.toContain('oklch(0.9 0.05 300)');
+    expect(cache.css).toContain(TOKENS_MIEL.variables['--fondo-light']);
+    expect(cache.css).not.toContain(TOKENS_MAR.variables['--fondo-light']);
   });
 
   it('restaurar descarta el preview y vuelve a reflejar la prop vigente', () => {
-    const persistidos = crearTokens(200);
-    const { result } = renderHook(() => useTemaNegocio(), { wrapper: envolver(persistidos) });
+    const { result } = renderHook(() => useTemaNegocio(), { wrapper: envolver(TOKENS_MIEL) });
 
     act(() => {
-      result.current.previsualizar(crearTokens(300));
+      result.current.previsualizar(TOKENS_MAR);
     });
-    expect(result.current.tokens?.tema.matiz).toBe(300);
+    expect(result.current.tokens?.tema.matiz).toBe(245);
 
     act(() => {
       result.current.restaurar();
     });
 
-    expect(result.current.tokens?.tema.matiz).toBe(200);
+    expect(result.current.tokens?.tema.matiz).toBe(78);
     expect(document.getElementById('tema-negocio')?.textContent).toContain(
-      'oklch(0.9 0.05 200)',
+      TOKENS_MIEL.variables['--fondo-light'],
     );
   });
 
@@ -154,7 +148,7 @@ describe('ProveedorTemaNegocio / useTemaNegocio', () => {
     const { result } = renderHook(() => useTemaNegocio(), { wrapper: envolver(null) });
 
     act(() => {
-      result.current.previsualizar(crearTokens(300));
+      result.current.previsualizar(TOKENS_MAR);
     });
     expect(document.documentElement.hasAttribute('data-tema-negocio')).toBe(true);
 
@@ -167,11 +161,9 @@ describe('ProveedorTemaNegocio / useTemaNegocio', () => {
   });
 
   it('sobrevive al montaje doble de StrictMode sin duplicar el <style> ni romper', () => {
-    const tokens = crearTokens(200);
-
     render(
       <StrictMode>
-        <ProveedorTemaNegocio tokens={tokens}>
+        <ProveedorTemaNegocio tokens={TOKENS_MIEL}>
           <div>hijo</div>
         </ProveedorTemaNegocio>
       </StrictMode>,
