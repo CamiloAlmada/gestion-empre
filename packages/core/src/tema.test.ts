@@ -53,6 +53,13 @@ describe('esTemaValido (type guard para datos crudos de Firestore)', () => {
   it('rechaza tinte desconocido', () => {
     expect(esTemaValido({ version: 1, matiz: 78, tinte: 'violeta' })).toBe(false);
   });
+
+  it('rechaza claves extra (shape estricto: ni de más ni de menos)', () => {
+    // Espejo del hasOnly server-side: un doc con claves ajenas es corrupto.
+    expect(esTemaValido({ version: 1, matiz: 200, tinte: 'neutro', extra: true })).toBe(false);
+    expect(esTemaValido({ version: 1, matiz: 200, tinte: 'neutro', id: 'miel' })).toBe(false);
+    expect(esTemaValido([1, 2, 3])).toBe(false);
+  });
 });
 
 describe('PRESETS_TEMA', () => {

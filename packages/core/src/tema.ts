@@ -40,14 +40,29 @@ export function normalizarTema(tema: { matiz: number; tinte: TinteFondo }): Tema
   return { version: 1, matiz, tinte: tema.tinte };
 }
 
+/** Claves EXACTAS de la semilla persistida. El shape estricto (ni una clave de
+ * más) es parte del contrato de la tanda. */
+const CLAVES_TEMA: readonly string[] = ['version', 'matiz', 'tinte'];
+
 /**
- * Type guard para datos crudos (Firestore, localStorage): valida forma Y
- * rangos. Un documento con matiz no entero, fuera de [0,359] o tinte
- * desconocido NO es un `TemaPersonalizado` (la UI cae al tema base).
+ * Type guard para datos crudos (Firestore, localStorage): valida SHAPE ESTRICTO
+ * Y rangos. Un documento con matiz no entero, fuera de [0,359], tinte
+ * desconocido, con claves faltantes O con claves de más NO es un
+ * `TemaPersonalizado` (la UI cae al tema base; el converter tolerante lo mapea
+ * a `null`, no lo acepta).
+ *
+ * El shape estricto —exactamente `{version, matiz, tinte}`— es contrato, no
+ * paranoia: es el espejo client-side del `hasOnly('version', 'matiz', 'tinte')`
+ * que imponen las reglas de Firestore server-side. Un doc con claves ajenas es
+ * un dato corrupto/de otra versión, no una semilla válida.
  */
 export function esTemaValido(x: unknown): x is TemaPersonalizado {
   if (typeof x !== 'object' || x === null) return false;
   const o = x as Record<string, unknown>;
+  const claves = Object.keys(o);
+  if (claves.length !== CLAVES_TEMA.length || !claves.every((k) => CLAVES_TEMA.includes(k))) {
+    return false;
+  }
   return (
     o['version'] === 1 &&
     typeof o['matiz'] === 'number' &&
