@@ -128,6 +128,15 @@ export interface ResultadoPar {
 export interface ReporteContraste {
   readonly resultados: readonly ResultadoPar[];
   readonly todosPasan: boolean;
+  /**
+   * Rondas de reparación que aplicó `generarPaleta` para alcanzar AA. DEBE ser
+   * 0 en toda paleta válida —el test exhaustivo lo exige en las 1080—: el AA es
+   * por construcción (anclaje de Y), no por el lazo de reparación. Un valor > 0
+   * significa que una receta o un par nuevo degradó esa garantía y hay que
+   * reajustar las anclas, no dejar que el lazo lo tape. `verificarPares`
+   * (verificación pura, no repara) siempre devuelve 0.
+   */
+  readonly reparaciones: number;
 }
 
 /** Resuelve una referencia (variable o blanco) a su string y a sRGB lineal. */
@@ -160,5 +169,5 @@ export function verificarPares(variables: Record<NombreVariable, string>): Repor
       pasa: ratio >= par.umbral,
     };
   });
-  return { resultados, todosPasan: resultados.every((r) => r.pasa) };
+  return { resultados, todosPasan: resultados.every((r) => r.pasa), reparaciones: 0 };
 }

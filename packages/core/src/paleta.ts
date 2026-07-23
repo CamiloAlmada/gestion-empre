@@ -72,8 +72,15 @@ const Y_ANCLA_NEUTRO: Record<`${TokenNeutro}-${Modo}`, number> = {
   'texto-dark': 0.9554269, // neutral-50   oklch(0.985 0.004 75)
   'texto-secundario-light': 0.0793497, // neutral-600  oklch(0.43 0.012 75)
   'texto-secundario-dark': 0.2742813, // neutral-400  oklch(0.65 0.012 75)
-  'borde-light': 0.2742813, // neutral-400  oklch(0.65 0.012 75)
-  'borde-dark': 0.1486439, // neutral-500  oklch(0.53 0.012 75)
+  // borde-light NO usa el ancla Minimalista pura (neutral-400 ⇒ Y 0.2742813):
+  // ese valor da borde/fondo light = 2.92:1, bajo el ≥3:1 que PARES_AA hereda
+  // de la tab bar flotante Cálida. El ancla es la de la UNIÓN de tablas §7:
+  // la Y más CLARA que deja borde/fondo light ≥ 3.05 (margen chico sobre el
+  // umbral) tras la serialización, en los tres tintes — mismo criterio con que
+  // Cálido oscureció su borde-light. Así el AA queda por construcción y la
+  // reparación no se dispara (el CI exige reparaciones === 0).
+  'borde-light': 0.2604,
+  'borde-dark': 0.1486439, // neutral-500  oklch(0.53 0.012 75) — borde/fondo dark = 3.89:1, sin ajuste
 };
 
 type EscalonPrimary = 50 | 100 | 200 | 300 | 400 | 500 | 600 | 700 | 800 | 900 | 950;
@@ -280,14 +287,12 @@ function ladoMovible(ref: ReferenciaColor, generados: Map<NombreVariable, TokenG
  * (orden fijo de `PARES_AA`; se mueve solo el lado no-hub, alejando su Y del
  * hub ×/÷1.02 y re-bisecando; máx 10 rondas) → si no converge, `throw`.
  *
- * NOTA DE DISEÑO (reportada al tech lead, tanda TM): con las Y ancladas al
- * Minimalista el par `borde`/`fondo` en LIGHT da 2.92:1 — el Minimalista nunca
- * necesitó ese par (su tab bar no flota); Cálido sí, y por eso oscureció su
- * borde. Como `PARES_AA` exige `borde`/`fondo` ≥3:1 SIEMPRE (la base puede ser
- * Cálida), la reparación NO es vestigial: corre ~2 rondas en TODA paleta para
- * oscurecer `--borde-light`. Es determinista y converge, pero conviene decidir
- * si se congela un ancla de borde más oscura (como hizo Cálido) para que el
- * "por construcción" no dependa del lazo de reparación.
+ * El AA es POR CONSTRUCCIÓN: con las Y ancladas al conjunto verificado (unión
+ * de las tablas §7, ver `Y_ANCLA_NEUTRO['borde-light']`), los 34 pares pasan a
+ * la primera y el lazo de reparación es CÓDIGO MUERTO. Se conserva como último
+ * fusible y el reporte expone `reparaciones`: el test exhaustivo exige que sea
+ * 0 en las 1080, de modo que si una receta o un par nuevo reactivara el lazo,
+ * el build rompe y obliga a reajustar anclas en vez de degradar en silencio.
  */
 export function generarPaleta(tema: TemaPersonalizado): TokensGenerados {
   const temaNorm = normalizarTema(tema);
@@ -295,8 +300,10 @@ export function generarPaleta(tema: TemaPersonalizado): TokensGenerados {
 
   let variables = serializarTodo(generados);
   let reporte = verificarPares(variables);
+  let reparaciones = 0;
 
-  for (let ronda = 0; ronda < MAX_RONDAS_REPARACION && !reporte.todosPasan; ronda++) {
+  while (!reporte.todosPasan && reparaciones < MAX_RONDAS_REPARACION) {
+    reparaciones++;
     for (let i = 0; i < reporte.resultados.length; i++) {
       const resultado = reporte.resultados[i];
       const par = PARES_AA[i];
@@ -320,7 +327,8 @@ export function generarPaleta(tema: TemaPersonalizado): TokensGenerados {
     reporte = verificarPares(variables);
   }
 
-  if (!reporte.todosPasan) throw new ErrorPaletaInvalida(reporte);
+  const reporteFinal: ReporteContraste = { ...reporte, reparaciones };
+  if (!reporteFinal.todosPasan) throw new ErrorPaletaInvalida(reporteFinal);
 
   const fondoLight = generados.get('--fondo-light');
   const fondoDark = generados.get('--fondo-dark');
@@ -334,6 +342,6 @@ export function generarPaleta(tema: TemaPersonalizado): TokensGenerados {
       light: oklchAHex(fondoLight.L, fondoLight.C, fondoLight.H),
       dark: oklchAHex(fondoDark.L, fondoDark.C, fondoDark.H),
     },
-    reporte,
+    reporte: reporteFinal,
   };
 }

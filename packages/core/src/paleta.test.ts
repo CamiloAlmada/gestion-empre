@@ -20,6 +20,9 @@ describe('EL TEOREMA: AA por construcción en las 1080 paletas', () => {
       for (const tinte of TINTES) {
         const tokens = generarPaleta({ version: 1, matiz, tinte });
         expect(tokens.reporte.todosPasan).toBe(true);
+        // Contrato endurecido: el AA es POR CONSTRUCCIÓN, no por reparación. Si
+        // una receta o un par nuevo reactivara el lazo, esto rompe el build.
+        expect(tokens.reporte.reparaciones).toBe(0);
         generadas++;
       }
     }
@@ -33,9 +36,11 @@ describe('EL TEOREMA: AA por construcción en las 1080 paletas', () => {
 describe('regresión §7: Miel (78, neutro) reproduce los ratios Minimalista', () => {
   const miel = generarPaleta({ version: 1, matiz: 78, tinte: 'neutro' });
 
-  // Ratios de la tabla Minimalista de docs/06 §7, tolerancia ±0.15. La
-  // reparación oscurece --borde-light (ver nota de diseño en paleta.ts), lo que
-  // sube borde/superficie de 3.10 a ~3.2 — dentro de tolerancia.
+  // Ratios de la tabla Minimalista de docs/06 §7, tolerancia ±0.15. EXCEPCIÓN:
+  // los pares de `borde` dan más alto que el §7 estático porque el ancla de
+  // borde-light es la de la UNIÓN de tablas (oscurecida para que borde/fondo
+  // light ≥ 3.05, ver Y_ANCLA_NEUTRO en paleta.ts), no la Minimalista pura:
+  // borde/superficie sube de 3.10 a ~3.24 y borde/fondo pasa de 2.92 a ~3.05.
   const esperados: Record<string, number> = {
     'texto/fondo-light': 17.53,
     'texto/superficie-light': 18.59,
@@ -45,7 +50,8 @@ describe('regresión §7: Miel (78, neutro) reproduce los ratios Minimalista', (
     'boton-primario-hover-light': 6.92,
     'error/superficie-light': 5.15,
     'boton-peligro-light': 5.38,
-    'borde-input/superficie-light': 3.1,
+    'borde-input/superficie-light': 3.24, // §7: 3.10 (ancla de borde oscurecida)
+    'borde/fondo-light': 3.05, // §7 Cálido: 3.23; acá por construcción ≥ 3.05
     'ring/superficie-light': 4.53,
     'ring/fondo-light': 4.27,
     'exito/superficie-light': 5.89,
@@ -97,7 +103,7 @@ describe('snapshots de receta por preset', () => {
           "--advertencia-dark": "oklch(0.7 0.16 55)",
           "--advertencia-light": "oklch(0.5 0.11 55)",
           "--borde-dark": "oklch(0.53 0.012 75)",
-          "--borde-light": "oklch(0.6414 0.01 75)",
+          "--borde-light": "oklch(0.6388 0.01 75)",
           "--color-primary-100": "oklch(0.95 0.04 78)",
           "--color-primary-200": "oklch(0.89 0.09 78)",
           "--color-primary-300": "oklch(0.82 0.15 78)",
@@ -141,7 +147,7 @@ describe('snapshots de receta por preset', () => {
           "--advertencia-dark": "oklch(0.7 0.16 55)",
           "--advertencia-light": "oklch(0.5 0.11 55)",
           "--borde-dark": "oklch(0.5327 0.042 55)",
-          "--borde-light": "oklch(0.6416 0.055 85)",
+          "--borde-light": "oklch(0.639 0.055 85)",
           "--color-primary-100": "oklch(0.9511 0.0264 52)",
           "--color-primary-200": "oklch(0.8922 0.0611 52)",
           "--color-primary-300": "oklch(0.8233 0.1061 52)",
@@ -185,7 +191,7 @@ describe('snapshots de receta por preset', () => {
           "--advertencia-dark": "oklch(0.7 0.16 55)",
           "--advertencia-light": "oklch(0.5 0.11 55)",
           "--borde-dark": "oklch(0.53 0.012 75)",
-          "--borde-light": "oklch(0.6414 0.01 75)",
+          "--borde-light": "oklch(0.6388 0.01 75)",
           "--color-primary-100": "oklch(0.9457 0.04 130)",
           "--color-primary-200": "oklch(0.8801 0.09 130)",
           "--color-primary-300": "oklch(0.8031 0.15 130)",
@@ -229,7 +235,7 @@ describe('snapshots de receta por preset', () => {
           "--advertencia-dark": "oklch(0.7 0.16 55)",
           "--advertencia-light": "oklch(0.5 0.11 55)",
           "--borde-dark": "oklch(0.5288 0.038 250)",
-          "--borde-light": "oklch(0.6406 0.042 255)",
+          "--borde-light": "oklch(0.6381 0.042 255)",
           "--color-primary-100": "oklch(0.9482 0.0252 245)",
           "--color-primary-200": "oklch(0.8857 0.0569 245)",
           "--color-primary-300": "oklch(0.8121 0.0962 245)",
@@ -273,7 +279,7 @@ describe('snapshots de receta por preset', () => {
           "--advertencia-dark": "oklch(0.7 0.16 55)",
           "--advertencia-light": "oklch(0.5 0.11 55)",
           "--borde-dark": "oklch(0.5288 0.038 250)",
-          "--borde-light": "oklch(0.6406 0.042 255)",
+          "--borde-light": "oklch(0.6381 0.042 255)",
           "--color-primary-100": "oklch(0.9512 0.0258 300)",
           "--color-primary-200": "oklch(0.8925 0.0583 300)",
           "--color-primary-300": "oklch(0.8235 0.0986 300)",
@@ -317,7 +323,7 @@ describe('snapshots de receta por preset', () => {
           "--advertencia-dark": "oklch(0.7 0.16 55)",
           "--advertencia-light": "oklch(0.5 0.11 55)",
           "--borde-dark": "oklch(0.5288 0.038 250)",
-          "--borde-light": "oklch(0.6406 0.042 255)",
+          "--borde-light": "oklch(0.6381 0.042 255)",
           "--color-primary-100": "oklch(0.9454 0.04 215)",
           "--color-primary-200": "oklch(0.8795 0.09 215)",
           "--color-primary-300": "oklch(0.8031 0.1348 215)",
