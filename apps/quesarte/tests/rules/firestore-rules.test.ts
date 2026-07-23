@@ -88,6 +88,12 @@ function plantillasWaDoc(plantillas: unknown[] = [plantillaWa()]) {
   return { plantillas };
 }
 
+// Semilla del tema del negocio (doc 06 §4, tanda TM): shape estricto de 3 claves.
+// `sobre` permite romper el shape (clave de más, tipo o rango inválido).
+function temaSemilla(sobre: Record<string, unknown> = {}) {
+  return { version: 1, matiz: 200, tinte: 'calido', ...sobre };
+}
+
 // Compra mínima con el `estado` dado (doc 03). Los efectos no importan a las
 // reglas, que solo miran el `estado` y su transición.
 function compraSeed(estado: 'borrador' | 'confirmada') {
@@ -213,6 +219,8 @@ beforeEach(async () => {
       nombreNegocio: 'Quesarte',
       umbralPiezaAgotadaGramos: 50,
     });
+    // Tema del negocio ya persistido (doc 06 §4): habilita probar delete/update.
+    await setDoc(doc(seed, 'configuracion', 'tema'), temaSemilla());
   });
 });
 
@@ -1042,6 +1050,107 @@ describe('configuracion/plantillasWhatsApp (doc 08, solo admin, shape estricto)'
   it('admin NO escribe si plantillas no es lista', async () => {
     await assertFails(
       setDoc(doc(db(ADMIN), 'configuracion', 'plantillasWhatsApp'), { plantillas: 'nop' }),
+    );
+  });
+});
+
+describe('configuracion/tema (doc 06 §4, tanda TM, semilla del tema del negocio)', () => {
+  it('admin crea un tema válido', async () => {
+    await assertSucceeds(
+      setDoc(doc(db(ADMIN), 'configuracion', 'tema'), temaSemilla({ matiz: 42, tinte: 'neutro' })),
+    );
+  });
+
+  it('admin actualiza un tema existente con valores válidos', async () => {
+    await assertSucceeds(
+      setDoc(doc(db(ADMIN), 'configuracion', 'tema'), temaSemilla({ matiz: 0, tinte: 'frio' })),
+    );
+  });
+
+  it('admin acepta matiz 359 (borde superior incluido)', async () => {
+    await assertSucceeds(
+      setDoc(doc(db(ADMIN), 'configuracion', 'tema'), temaSemilla({ matiz: 359 })),
+    );
+  });
+
+  it('admin borra el tema (Restablecer = borrar el doc)', async () => {
+    await assertSucceeds(deleteDoc(doc(db(ADMIN), 'configuracion', 'tema')));
+  });
+
+  it('vendedor SÍ lee el tema (usuario activo)', async () => {
+    await assertSucceeds(getDoc(doc(db(VENDEDOR), 'configuracion', 'tema')));
+  });
+
+  it('vendedor NO crea el tema', async () => {
+    await assertFails(setDoc(doc(db(VENDEDOR), 'configuracion', 'tema'), temaSemilla()));
+  });
+
+  it('vendedor NO actualiza el tema', async () => {
+    await assertFails(
+      updateDoc(doc(db(VENDEDOR), 'configuracion', 'tema'), { matiz: 10 }),
+    );
+  });
+
+  it('vendedor NO borra el tema', async () => {
+    await assertFails(deleteDoc(doc(db(VENDEDOR), 'configuracion', 'tema')));
+  });
+
+  it('no autenticado NO escribe el tema', async () => {
+    await assertFails(setDoc(doc(db(), 'configuracion', 'tema'), temaSemilla()));
+  });
+
+  it('usuario inactivo NO escribe el tema', async () => {
+    await assertFails(setDoc(doc(db(INACTIVO), 'configuracion', 'tema'), temaSemilla()));
+  });
+
+  it('admin NO escribe matiz -1 (fuera de rango inferior)', async () => {
+    await assertFails(
+      setDoc(doc(db(ADMIN), 'configuracion', 'tema'), temaSemilla({ matiz: -1 })),
+    );
+  });
+
+  it('admin NO escribe matiz 360 (fuera de rango superior)', async () => {
+    await assertFails(
+      setDoc(doc(db(ADMIN), 'configuracion', 'tema'), temaSemilla({ matiz: 360 })),
+    );
+  });
+
+  it('admin NO escribe matiz como string', async () => {
+    await assertFails(
+      setDoc(doc(db(ADMIN), 'configuracion', 'tema'), temaSemilla({ matiz: '200' })),
+    );
+  });
+
+  // La regla exige matiz ENTERO: es el backstop de la cuantización client-side. El
+  // motor `generarPaleta` (§7) verifica AA exhaustivamente solo sobre matices enteros
+  // (espacio finito 360 × 3), así que un float queda fuera del espacio probado.
+  it('admin NO escribe matiz float (no entero)', async () => {
+    await assertFails(
+      setDoc(doc(db(ADMIN), 'configuracion', 'tema'), temaSemilla({ matiz: 78.5 })),
+    );
+  });
+
+  it('admin NO escribe tinte fuera de la unión', async () => {
+    await assertFails(
+      setDoc(doc(db(ADMIN), 'configuracion', 'tema'), temaSemilla({ tinte: 'pastel' })),
+    );
+  });
+
+  it('admin NO escribe version 2', async () => {
+    await assertFails(
+      setDoc(doc(db(ADMIN), 'configuracion', 'tema'), temaSemilla({ version: 2 })),
+    );
+  });
+
+  it('admin NO escribe una clave de más', async () => {
+    await assertFails(
+      setDoc(doc(db(ADMIN), 'configuracion', 'tema'), temaSemilla({ extra: 'x' })),
+    );
+  });
+
+  it('admin NO escribe si falta una clave (matiz ausente)', async () => {
+    await assertFails(
+      setDoc(doc(db(ADMIN), 'configuracion', 'tema'), { version: 1, tinte: 'neutro' }),
     );
   });
 });

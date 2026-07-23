@@ -194,6 +194,28 @@ service cloud.firestore {
             || (d.codigoPaisDefault is string && d.codigoPaisDefault.matches('^[0-9]{1,4}$')));
     }
 
+    // Shape estricto de `configuracion/tema` (doc 06 §4, tanda TM): la SEMILLA del
+    // tema del negocio, exactamente { version, matiz, tinte } — las 3 obligatorias.
+    // A diferencia de `general`, acá NO hay merge parcial: el kit reescribe el doc
+    // entero (o lo borra en "Restablecer"), así que `hasAll` sobre las 3 claves es
+    // correcto. `matiz` es un grado de tono ENTERO en [0, 360): la regla es el
+    // backstop de la cuantización client-side, no una comodidad. La garantía AA del
+    // motor (`generarPaleta`, §7) está verificada exhaustivamente SOLO sobre el
+    // espacio finito de matices enteros (360 × 3 tintes); un float persistido por un
+    // cliente buggy generaría una paleta fuera del espacio probado, así que se rechaza
+    // a nivel de reglas (server-side es la verdad). `tinte` es la unión cerrada de los
+    // tres fondos. Aplica SOLO a create/update: el delete no trae `request.resource`.
+    function temaValido() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['version', 'matiz', 'tinte'])
+        && d.keys().hasAll(['version', 'matiz', 'tinte'])
+        && d.version == 1
+        && d.matiz is int
+        && d.matiz >= 0
+        && d.matiz < 360
+        && d.tinte in ['neutro', 'calido', 'frio'];
+    }
+
     // Shape de UNA plantilla de WhatsApp (doc 08): exactamente
     // { id, nombre, texto, contexto in ['venta','cliente','inactivo'] }, strings
     // acotados. Se aplica al primer elemento de la lista (ver `plantillasWhatsAppValidas`).
@@ -379,6 +401,12 @@ service cloud.firestore {
       // final: agregar una clave nueva de config = extender la lista de
       // `configuracionGeneralValida`.
       allow write: if esAdmin() && id == 'general' && configuracionGeneralValida();
+      // `tema` (doc 06 §4, tanda TM): la semilla del tema del negocio. Se separa el
+      // create/update del delete porque "Restablecer" = BORRAR el doc, y en un delete
+      // NO hay `request.resource.data`: llamar `temaValido()` ahí rompería. Create y
+      // update comparten la validación de shape estricto; el delete solo exige admin.
+      allow create, update: if esAdmin() && id == 'tema' && temaValido();
+      allow delete: if esAdmin() && id == 'tema';
       // Cualquier otro doc de `configuracion` (id desconocido) cae en el deny por
       // defecto: no hay más documentos de config en uso.
     }
