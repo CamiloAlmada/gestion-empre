@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 import { Button, useTema, type Estilo, type Tema } from '@gestion/ui';
 import { useAuth } from '@gestion/firebase-kit';
 import { useHeader } from '../componentes/header/ContextoHeader';
+import { SeccionColoresNegocio } from '../componentes/ajustes/SeccionColoresNegocio';
 import { SeccionNegocio } from '../componentes/ajustes/SeccionNegocio';
 import { SeccionPlantillasWhatsApp } from '../componentes/ajustes/SeccionPlantillasWhatsApp';
 
@@ -134,6 +135,15 @@ export function Ajustes() {
       <Seccion titulo="Apariencia">
         <SelectorTema />
         <SelectorEstilo />
+        {/* Colores del negocio (tercer eje, docs/06-ui-ux.md §4, tanda TM):
+            solo admin — a diferencia de Modo/Estilo (preferencia personal de
+            cada usuario), esto es una config del NEGOCIO que ven todos. */}
+        {perfil?.rol === 'admin' && (
+          <>
+            <hr className="border-borde" />
+            <SeccionColoresNegocio />
+          </>
+        )}
       </Seccion>
 
       <Seccion titulo="Cuenta">

@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router';
 import { ProveedorAuth } from '@gestion/firebase-kit';
 import { ProveedorTema, ProveedorToasts } from '@gestion/ui';
 import { App } from './App';
+import { SincronizadorTemaNegocio } from './componentes/SincronizadorTemaNegocio';
 import { auth, db } from './firebase';
 import './index.css';
 
@@ -18,7 +19,9 @@ createRoot(contenedor).render(
       <BrowserRouter>
         <ProveedorAuth auth={auth} db={db}>
           <ProveedorToasts>
-            <App />
+            <SincronizadorTemaNegocio>
+              <App />
+            </SincronizadorTemaNegocio>
           </ProveedorToasts>
         </ProveedorAuth>
       </BrowserRouter>

@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
-import { useTema, type Estilo, type Tema } from '@gestion/ui';
+import { useTema, useTemaNegocio, type Estilo, type Tema } from '@gestion/ui';
 
-type ModoEfectivo = 'light' | 'dark';
+export type ModoEfectivo = 'light' | 'dark';
 
 /**
  * Mapa de las 4 combinaciones (estilo × modo efectivo) → color hex para
@@ -40,7 +40,10 @@ export const MAPA_THEME_COLOR: Record<Estilo, Record<ModoEfectivo, string>> = {
   },
 };
 
-function resolverModoEfectivo(tema: Tema, prefiereOscuro: boolean): ModoEfectivo {
+/** Exportada para reutilizar el mismo criterio "modo efectivo" fuera de acá
+ * (p. ej. `SeccionColoresNegocio.tsx`, que necesita saber si mostrar la
+ * galería de presets en su variante light o dark). Pura, sin side effects. */
+export function resolverModoEfectivo(tema: Tema, prefiereOscuro: boolean): ModoEfectivo {
   if (tema === 'system') {
     return prefiereOscuro ? 'dark' : 'light';
   }
@@ -55,12 +58,20 @@ function resolverModoEfectivo(tema: Tema, prefiereOscuro: boolean): ModoEfectivo
  * renderiza nada — se monta una sola vez en `App.tsx`, fuera de las rutas,
  * para que aplique también en `/login` (docs/06-ui-ux.md §4).
  *
+ * "Colores del negocio" (tercer eje, tanda TM) tiene PRIORIDAD sobre el mapa
+ * estático: si hay tokens EFECTIVOS (`useTemaNegocio().tokens` — incluye el
+ * preview en vivo del editor de Ajustes, no solo lo persistido), se usa el
+ * `themeColor` de ESE modo; `MAPA_THEME_COLOR` queda como fallback para
+ * cuando el negocio no tiene tema propio (`tokens === null`).
+ *
  * El valor inicial (antes de que React monte) lo fija el script anti-FOUC
- * de `index.html` con el mismo mapa, duplicado a propósito — mismo patrón
- * que la lectura de `tema`/`estilo` guardados (ver ProveedorTema.tsx).
+ * de `index.html` con el mismo criterio (cache de `temaNegocio` primero, el
+ * mapa estático como fallback), duplicado a propósito — mismo patrón que la
+ * lectura de `tema`/`estilo` guardados (ver ProveedorTema.tsx).
  */
 export function MetaThemeColor() {
   const { tema, estilo } = useTema();
+  const { tokens } = useTemaNegocio();
 
   useEffect(() => {
     const media = window.matchMedia('(prefers-color-scheme: dark)');
@@ -68,7 +79,8 @@ export function MetaThemeColor() {
     function aplicar() {
       const modo = resolverModoEfectivo(tema, media.matches);
       const meta = document.querySelector('meta[name="theme-color"]');
-      meta?.setAttribute('content', MAPA_THEME_COLOR[estilo][modo]);
+      const color = tokens?.themeColor[modo] ?? MAPA_THEME_COLOR[estilo][modo];
+      meta?.setAttribute('content', color);
     }
 
     aplicar();
@@ -78,7 +90,7 @@ export function MetaThemeColor() {
     }
     media.addEventListener('change', aplicar);
     return () => media.removeEventListener('change', aplicar);
-  }, [tema, estilo]);
+  }, [tema, estilo, tokens]);
 
   return null;
 }

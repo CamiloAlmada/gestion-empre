@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { ProveedorTema, useTema } from '@gestion/ui';
+import { generarPaleta } from '@gestion/core';
+import { ProveedorTema, ProveedorTemaNegocio, useTema, useTemaNegocio } from '@gestion/ui';
 import { MAPA_THEME_COLOR, MetaThemeColor } from './MetaThemeColor';
 
 /**
@@ -39,11 +40,18 @@ function instalarMatchMediaFalso(matchesInicial: boolean) {
   };
 }
 
+/** Semilla de "Colores del negocio" usada por los tests que ejercitan la
+ * cascada `tokens?.themeColor` — cualquier semilla válida alcanza, no hace
+ * falta un preset real. */
+const SEMILLA_TEMA_NEGOCIO = { version: 1 as const, matiz: 200, tinte: 'frio' as const };
+
 /** Arnés de prueba: monta `MetaThemeColor` (no renderiza nada propio) junto
- * a botones que ejercitan `useTema()` para cambiar tema/estilo en vivo,
- * igual que haría la pantalla de Ajustes. */
+ * a botones que ejercitan `useTema()` para cambiar tema/estilo en vivo (como
+ * haría la pantalla de Ajustes) y `useTemaNegocio()` para simular el preview
+ * en vivo del editor de "Colores del negocio" (SeccionColoresNegocio). */
 function Arnes() {
   const { setTema, setEstilo } = useTema();
+  const { previsualizar, restaurar } = useTemaNegocio();
   return (
     <>
       <MetaThemeColor />
@@ -52,12 +60,20 @@ function Arnes() {
       <button onClick={() => setTema('system')}>tema system</button>
       <button onClick={() => setEstilo('minimalista')}>estilo minimalista</button>
       <button onClick={() => setEstilo('calido')}>estilo calido</button>
+      <button onClick={() => previsualizar(generarPaleta(SEMILLA_TEMA_NEGOCIO))}>
+        previsualizar tema negocio
+      </button>
+      <button onClick={() => restaurar()}>restaurar tema negocio</button>
     </>
   );
 }
 
 function envolver({ children }: { children: ReactNode }) {
-  return <ProveedorTema>{children}</ProveedorTema>;
+  return (
+    <ProveedorTema>
+      <ProveedorTemaNegocio tokens={null}>{children}</ProveedorTemaNegocio>
+    </ProveedorTema>
+  );
 }
 
 function leerContentMeta(): string | null {
@@ -160,5 +176,41 @@ describe('MetaThemeColor', () => {
     instalarMatchMediaFalso(false);
 
     expect(() => render(<Arnes />, { wrapper: envolver })).not.toThrow();
+  });
+
+  it('con tokens de negocio (preview del editor de Ajustes), usa SU hex en vez del mapa estático', () => {
+    instalarMatchMediaFalso(false);
+    const esperado = generarPaleta(SEMILLA_TEMA_NEGOCIO);
+
+    render(<Arnes />, { wrapper: envolver });
+    expect(leerContentMeta()).toBe(MAPA_THEME_COLOR.minimalista.light);
+
+    fireEvent.click(screen.getByRole('button', { name: 'previsualizar tema negocio' }));
+
+    expect(leerContentMeta()).toBe(esperado.themeColor.light);
+  });
+
+  it('con tokens de negocio, sigue el modo efectivo (dark) y usa el hex de ESE modo', () => {
+    instalarMatchMediaFalso(false);
+    const esperado = generarPaleta(SEMILLA_TEMA_NEGOCIO);
+
+    render(<Arnes />, { wrapper: envolver });
+    fireEvent.click(screen.getByRole('button', { name: 'previsualizar tema negocio' }));
+    fireEvent.click(screen.getByRole('button', { name: 'tema dark' }));
+
+    expect(leerContentMeta()).toBe(esperado.themeColor.dark);
+  });
+
+  it('sin tokens de negocio (o tras restaurar), vuelve a caer al mapa estático', () => {
+    instalarMatchMediaFalso(false);
+    const esperado = generarPaleta(SEMILLA_TEMA_NEGOCIO);
+
+    render(<Arnes />, { wrapper: envolver });
+    fireEvent.click(screen.getByRole('button', { name: 'previsualizar tema negocio' }));
+    expect(leerContentMeta()).toBe(esperado.themeColor.light);
+
+    fireEvent.click(screen.getByRole('button', { name: 'restaurar tema negocio' }));
+
+    expect(leerContentMeta()).toBe(MAPA_THEME_COLOR.minimalista.light);
   });
 });

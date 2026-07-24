@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
-import { ProveedorTema, ProveedorToasts } from '@gestion/ui';
+import { ProveedorTema, ProveedorTemaNegocio, ProveedorToasts } from '@gestion/ui';
 import { App } from './App';
 
 const mocks = vi.hoisted(() => ({
@@ -162,14 +162,21 @@ function configurarAuth(rol: 'admin' | 'vendedor') {
 // igual que la composición real de main.tsx (fuera de <App>). ProveedorTema
 // también se agrega acá (TH-D): App ahora monta <MetaThemeColor /> siempre
 // (fuera de las rutas, ver App.tsx), que llama a useTema() y por lo tanto
-// necesita el provider — mismo orden que main.tsx.
+// necesita el provider — mismo orden que main.tsx. ProveedorTemaNegocio
+// (tanda TM): MetaThemeColor también llama a useTemaNegocio() ahora, así que
+// necesita este provider en el árbol — acá con `tokens={null}` directo (sin
+// SincronizadorTemaNegocio, que vive en main.tsx, no en App.tsx): este suite
+// solo prueba ruteo, no la sincronización con Firestore (ver
+// SincronizadorTemaNegocio.test.tsx).
 function renderizarEn(ruta: string) {
   return render(
     <MemoryRouter initialEntries={[ruta]}>
       <ProveedorTema>
-        <ProveedorToasts>
-          <App />
-        </ProveedorToasts>
+        <ProveedorTemaNegocio tokens={null}>
+          <ProveedorToasts>
+            <App />
+          </ProveedorToasts>
+        </ProveedorTemaNegocio>
       </ProveedorTema>
     </MemoryRouter>,
   );
