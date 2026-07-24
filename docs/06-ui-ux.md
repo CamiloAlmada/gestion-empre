@@ -2,7 +2,7 @@
 
 Toda tarea de UI (packages/ui y pantallas de apps) se revisa contra este
 documento. Si una pauta no se puede cumplir en un caso concreto, se reporta al
-tech lead; no se ignora en silencio.
+orquestador; no se ignora en silencio.
 
 ## 1. Principios
 

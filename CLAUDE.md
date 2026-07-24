@@ -10,8 +10,67 @@ Cada app se buildea y deploya de forma **independiente**, contra su **propio pro
 Firebase**. NO es multitenant: se comparte código vía packages internos, no datos ni
 infraestructura.
 
+## Cómo se trabaja en este repo (orquestación)
+
+La sesión principal de Claude Code (Opus 5) es el **orquestador**, no el
+implementador. Su trabajo es: descomponer, delegar, verificar lo que vuelve,
+reintentar con mejor brief, y mantener el plan vivo en `docs/PLAN-ACTIVO.md`
+—en el repo, nunca solo en el contexto de la sesión—.
+
+El orquestador **no implementa**, salvo cambios triviales de una línea (un typo,
+un import, el valor de una constante). Todo lo demás se delega.
+
+### Equipo de agentes (`.claude/agents/`)
+
+| Agente | Modelo | Para qué |
+| --- | --- | --- |
+| `advisor` | Fable 5 | Decisiones de arquitectura. Solo lectura, no escribe código. |
+| `senior` | Opus 5 | Lógica de negocio delicada, seguridad, concurrencia, migraciones de datos. |
+| `semisenior` | Sonnet 5 | El grueso: features estándar, pantallas, hooks, endpoints, tests de integración. |
+| `trainee` | Haiku 4.5 | Mecánico: renames, correr tests, grepear logs, boilerplate, formateo, imports. |
+
+### Cuándo se invoca a `advisor`
+
+SOLO en estos cuatro casos —no es un revisor de rutina—:
+
+1. Diseño del plan inicial de una feature grande.
+2. Review de arquitectura **antes** de escribir código.
+3. Desempate cuando dos agentes devuelven soluciones contradictorias.
+4. Post-mortem de un bug que ya falló 2+ intentos de arreglo.
+
+### Reglas de delegación
+
+1. **Brief autosuficiente.** El subagente arranca con contexto vacío y no ve
+   nada de la conversación del orquestador. Todo prompt de delegación incluye:
+   - **Objetivo**: qué hay que lograr y por qué.
+   - **Archivos relevantes**: rutas concretas —dónde leer, dónde escribir, qué
+     patrón existente copiar—.
+   - **Restricciones**: reglas de oro que aplican, qué NO tocar, límite de alcance.
+   - **Criterio de aceptación**: definition of done verificable, punto por punto,
+     incluyendo el comando que tiene que quedar en verde.
+   - **Formato de salida**: el bloque estructurado de abajo.
+2. Antes de delegar la implementación de algo no trivial, consultar a `advisor`.
+3. **Dos fallas en la misma tarea → no reintentar con el mismo prompt.** Escalar
+   a `advisor` con el historial del fallo: qué se pidió, qué devolvió el agente,
+   qué falló exactamente.
+4. El orquestador **verifica lo que vuelve**: nunca da por buena la respuesta de
+   un agente sin comprobar el diff y el resultado de los comandos.
+5. Después de cada tanda, actualizar `docs/PLAN-ACTIVO.md` (hecho / en curso /
+   bloqueado / decisiones tomadas).
+
+### Formato de salida de todo subagente
+
+```
+## Qué cambió
+## Archivos tocados
+## Qué falta
+## Qué asumí
+## Verificación
+```
+
 ## Documentación de referencia (leer antes de implementar)
 
+- `docs/PLAN-ACTIVO.md` — plan de trabajo en curso; lo mantiene el orquestador
 - `docs/01-arquitectura.md` — estructura del monorepo, stack, CI/CD, Firebase
 - `docs/02-dominio-quesarte.md` — modelo de dominio y colecciones Firestore de la quesería
 - `docs/03-compras-costos-precios.md` — módulo de compras, prorrateo de gastos, márgenes

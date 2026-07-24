@@ -102,4 +102,4 @@ URL-encoding correcto de emojis, saltos de línea `%0A` y caracteres especiales)
 - [ ] Las plantillas son editables en Ajustes (solo admin) y los cambios se
       reflejan sin redeploy.
 - [ ] No existe ningún código de envío automático/masivo (revisión de
-      senior-dev sobre este punto).
+      senior sobre este punto).
