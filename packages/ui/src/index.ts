@@ -44,3 +44,12 @@ export { SearchSelect, type SearchSelectProps, type OpcionSearchSelect } from '.
 export { DataTable, type DataTableProps, type ColumnaDataTable } from './DataTable';
 export { StatCard, type StatCardProps } from './StatCard';
 export { IconoWhatsApp, type IconoWhatsAppProps } from './IconoWhatsApp';
+export {
+  GrupoSegmentado,
+  type GrupoSegmentadoProps,
+  type OpcionGrupoSegmentado,
+} from './GrupoSegmentado';
+export { SelectorTinte, type SelectorTinteProps } from './SelectorTinte';
+export { SliderMatiz, type SliderMatizProps } from './SliderMatiz';
+export { GaleriaPresetsTema, type GaleriaPresetsTemaProps } from './GaleriaPresetsTema';
+export { ReporteContrasteAa, type ReporteContrasteAaProps } from './ReporteContrasteAa';
