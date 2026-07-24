@@ -22,6 +22,12 @@
       // modo "system"/sin nada guardado no se fija data-theme (rige
       // `prefers-color-scheme` vía CSS); en estilo "minimalista"/sin nada
       // guardado tampoco se fija data-estilo.
+      //
+      // Extensión "Colores del negocio" (tercer eje, tanda TM): mismo
+      // criterio, con el cache `localStorage['temaNegocio']` que escribe
+      // `escribirCacheTemaNegocio` (packages/ui/src/temaNegocio.ts) — snippet
+      // canónico documentado en packages/config/anti-fouc-tema-negocio.md
+      // para portarlo a la próxima app.
       try {
         var temaGuardado = window.localStorage.getItem('tema');
         if (temaGuardado === 'light' || temaGuardado === 'dark') {
@@ -51,9 +57,40 @@
               ? 'dark'
               : 'light';
 
+        // BEGIN anti-fouc-tema-negocio (snippet canónico, ver
+        // packages/config/anti-fouc-tema-negocio.md — copiar tal cual a la
+        // próxima app, requiere `modoEfectivo` ya calculado arriba).
+        var colorTemaNegocio = null;
+        var cacheTemaNegocio = window.localStorage.getItem('temaNegocio');
+        if (cacheTemaNegocio) {
+          var datosTemaNegocio = JSON.parse(cacheTemaNegocio);
+          if (
+            datosTemaNegocio &&
+            datosTemaNegocio.v === 1 &&
+            typeof datosTemaNegocio.css === 'string' &&
+            datosTemaNegocio.css.indexOf(':root[data-tema-negocio]') === 0 &&
+            datosTemaNegocio.css.indexOf('</style') === -1
+          ) {
+            var styleTemaNegocio = document.createElement('style');
+            styleTemaNegocio.id = 'tema-negocio';
+            styleTemaNegocio.textContent = datosTemaNegocio.css;
+            document.head.appendChild(styleTemaNegocio);
+            document.documentElement.setAttribute('data-tema-negocio', '');
+
+            var hexTemaNegocio = datosTemaNegocio.themeColor && datosTemaNegocio.themeColor[modoEfectivo];
+            if (typeof hexTemaNegocio === 'string' && /^#[0-9a-f]{6}$/i.test(hexTemaNegocio)) {
+              colorTemaNegocio = hexTemaNegocio;
+            }
+          }
+        }
+        // END anti-fouc-tema-negocio
+
         var metaThemeColor = document.querySelector('meta[name="theme-color"]');
         if (metaThemeColor) {
-          metaThemeColor.setAttribute('content', MAPA_THEME_COLOR[estiloEfectivo][modoEfectivo]);
+          metaThemeColor.setAttribute(
+            'content',
+            colorTemaNegocio || MAPA_THEME_COLOR[estiloEfectivo][modoEfectivo],
+          );
         }
       } catch (error) {
         // localStorage/matchMedia no disponible (modo privado, contexto

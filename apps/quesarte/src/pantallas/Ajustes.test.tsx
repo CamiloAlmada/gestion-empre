@@ -25,6 +25,14 @@ vi.mock('../componentes/ajustes/SeccionNegocio', () => ({
 vi.mock('../componentes/ajustes/SeccionPlantillasWhatsApp', () => ({
   SeccionPlantillasWhatsApp: () => <div data-testid="seccion-plantillas-whatsapp" />,
 }));
+// Mismo criterio que SeccionNegocio/SeccionPlantillasWhatsApp arriba:
+// `SeccionColoresNegocio` (tanda TM) tiene su propia suite
+// (`componentes/ajustes/SeccionColoresNegocio.test.tsx`) con el mock de
+// Firestore/`useTemaNegocio` que necesita — acá solo importa el GATEO por
+// rol dentro de "Apariencia".
+vi.mock('../componentes/ajustes/SeccionColoresNegocio', () => ({
+  SeccionColoresNegocio: () => <div data-testid="seccion-colores-negocio" />,
+}));
 
 function configurarAuth(overrides: Partial<ReturnType<typeof authPorDefecto>> = {}) {
   const valor = { ...authPorDefecto(), ...overrides };
@@ -218,5 +226,21 @@ describe('Ajustes', () => {
     expect(screen.getByText('Plantillas de WhatsApp')).toBeTruthy();
     expect(screen.getByTestId('seccion-negocio')).toBeTruthy();
     expect(screen.getByTestId('seccion-plantillas-whatsapp')).toBeTruthy();
+  });
+
+  it('vendedor no ve "Colores del negocio" dentro de Apariencia (tanda TM: config del negocio, no personal)', () => {
+    configurarAuth();
+
+    renderizar();
+
+    expect(screen.queryByTestId('seccion-colores-negocio')).toBeNull();
+  });
+
+  it('admin ve "Colores del negocio" dentro de Apariencia (tanda TM)', () => {
+    configurarAuth({ perfil: { ...authPorDefecto().perfil, rol: 'admin' } });
+
+    renderizar();
+
+    expect(screen.getByTestId('seccion-colores-negocio')).toBeTruthy();
   });
 });
