@@ -26,6 +26,9 @@ export type {
   EstadoVenta,
   TipoMovimiento,
   Rol,
+  FuenteCosteo,
+  OrigenCosteo,
+  CosteoItem,
   Categoria,
   Producto,
   Pieza,
@@ -46,6 +49,16 @@ export type {
   Compra,
 } from './tipos.js';
 export { type ItemCobrable, calcularSubtotal } from './precio.js';
+export {
+  type MagnitudCosteada,
+  type EntradaCosteo,
+  type ClaseCosteo,
+  type ConCosteo,
+  VERSION_COSTEO,
+  congelarCosteo,
+  clasificarCosteo,
+  costoCongeladoDe,
+} from './costeo.js';
 export { type PiezaElegida, elegirPieza } from './fifo.js';
 export {
   type MetodoProrrateo,
@@ -56,6 +69,7 @@ export {
 export {
   calcularCostoRealCents,
   calcularCostoRealKgCents,
+  calcularCostoRealUnitCents,
   nuevoCostoPromedio,
 } from './costos.js';
 export {

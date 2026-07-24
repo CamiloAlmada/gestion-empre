@@ -88,6 +88,33 @@ total, medio de pago (`efectivo` | `debito` | `credito` | `transferencia`),
 estado (`completada` | `anulada`). La anulación NO borra: genera movimientos
 inversos y marca estado.
 
+**Costo congelado por ítem (`costeo`, Fase 3 / tarea A1).** El costo de un
+producto cambia con cada compra: leerlo después de vender da un número
+equivocado, así que cada ítem congela el suyo al vender, en un mapa opcional y
+versionado:
+
+```
+costeo?: {
+  v: 1,                                   // ausencia del mapa = versión 0 (ítems pre-congelado)
+  fuente: 'pieza'|'promedio'|'sin_costo', // pieza.costoKgCents | producto.costoPromedioCents | sin base
+  origen: 'venta'|'backfill',             // dato real vs reconstruido (ortogonal a `fuente`)
+  costoUnitCents?,                        // por kg o por unidad, igual que precioUnitCents
+  costoItemCents?,                        // total del ítem, YA redondeado con la MISMA regla que subtotalCents
+  compraId?                               // procedencia (copiado de pieza.compraId)
+}
+```
+
+Reglas duras (implementadas en `packages/core/src/costeo.ts`):
+- Sin base de costo (0 o ausente) ⇒ `fuente: 'sin_costo'` y **sin montos**.
+  Congelar un costo 0 declararía 100 % de ganancia: una mentira indetectable.
+- `costoItemCents` sale de `calcularSubtotal`, la misma función que produce
+  `subtotalCents` ⇒ `ganancia = subtotalCents − costoItemCents` es reproducible.
+- La rama "¿existe `costeo`?" vive SOLO en el converter y en `clasificarCosteo`
+  (`'real' | 'estimado' | 'sin_dato' | 'legado'`). Ninguna pantalla ni agregación
+  vuelve a preguntar por `costeo === undefined`.
+- El congelado es aritmética síncrona sobre datos que el POS ya tiene en memoria:
+  **cero lecturas nuevas** en el camino de venta (offline-first).
+
 **Escritura atómica**: registrar la venta + descontar piezas/stock + crear
 movimientos debe hacerse en una transacción o batch de Firestore.
 
@@ -115,7 +142,8 @@ piezas/{id}                → { productoId, pesoInicialGramos, pesoRestanteGram
                                fechaVencimiento?, estado }
 ventas/{id}                → { numero, fecha, usuarioId, items: [ {productoId, piezaId?,
                                gramos?, unidades?, precioUnitCents, subtotalCents,
-                               nombreProducto} ], totalCents, medioPago, estado }
+                               nombreProducto, costeo?} ], totalCents, medioPago, estado,
+                               clienteId?, clienteNombre? }
 compras/{id}               → ver docs/03
 movimientos/{id}           → { tipo, productoId, piezaId?, deltaGramos?, deltaUnidades?,
                                origenTipo, origenId, usuarioId, fecha, nota? }

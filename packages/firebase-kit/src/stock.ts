@@ -7,7 +7,9 @@ import {
   type Firestore,
 } from 'firebase/firestore';
 import {
+  congelarCosteo,
   peso,
+  type CosteoItem,
   type EstadoPieza,
   type MovimientoStock,
   type Peso,
@@ -59,6 +61,8 @@ interface EfectoAjuste {
   stockUpdate: UpdateStock;
   deltaGramos?: Peso;
   deltaUnidades?: number;
+  /** Costo congelado del ajuste (tarea A1b), ver `congelarCosteo`. */
+  costeo: CosteoItem;
 }
 
 /**
@@ -69,6 +73,12 @@ interface EfectoAjuste {
  * No hay documento de origen separado para los ajustes: el propio movimiento ES
  * el registro del ajuste, por eso `origenTipo: 'ajuste'` y `origenId` apunta a su
  * propio id.
+ *
+ * El movimiento congela además su COSTO (`costeo`, tarea A1b, ver
+ * `congelarCosteo` en core): base = costo real de la pieza si el ajuste es a
+ * nivel de pieza, o costo promedio vigente del producto si es granel/unidad.
+ * Aritmética síncrona sobre datos ya en memoria (`producto`/`pieza` que el
+ * caller ya tiene en pantalla): cero lecturas nuevas de Firestore.
  *
  * @throws {AjusteInvalidoError} si el signo del delta no corresponde al `tipo`,
  *   falta el delta correcto para el `modoStock`, o falta la pieza.
@@ -95,6 +105,7 @@ export async function ajustarStock(db: Firestore, entrada: EntradaAjuste): Promi
     usuarioId: entrada.usuarioId,
     fecha: ahora,
     nota: entrada.nota,
+    costeo: efecto.costeo,
   };
   batch.set(movRef, movimiento);
 
@@ -117,6 +128,11 @@ function resolverEfectoAjuste(entrada: EntradaAjuste): EfectoAjuste {
         refId: producto.id,
         stockUpdate: { stockUnidades: increment(delta) },
         deltaUnidades: delta,
+        // Granel/unidad: base = costo promedio vigente del producto.
+        costeo: congelarCosteo({
+          costoPromedioCents: producto.costoPromedioCents,
+          magnitud: { medida: 'unidades', unidades: Math.abs(delta) },
+        }),
       };
     }
 
@@ -130,6 +146,11 @@ function resolverEfectoAjuste(entrada: EntradaAjuste): EfectoAjuste {
         refId: producto.id,
         stockUpdate: { stockGranelGramos: increment(delta) },
         deltaGramos: peso(delta),
+        // Granel/unidad: base = costo promedio vigente del producto.
+        costeo: congelarCosteo({
+          costoPromedioCents: producto.costoPromedioCents,
+          magnitud: { medida: 'peso', gramos: peso(Math.abs(delta)) },
+        }),
       };
     }
 
@@ -150,6 +171,11 @@ function resolverEfectoAjuste(entrada: EntradaAjuste): EfectoAjuste {
         refId: pieza.id,
         stockUpdate,
         deltaGramos: peso(delta),
+        // El movimiento afecta una pieza concreta: base = su costo real.
+        costeo: congelarCosteo({
+          pieza,
+          magnitud: { medida: 'peso', gramos: peso(Math.abs(delta)) },
+        }),
       };
     }
   }
@@ -255,7 +281,8 @@ export interface EntradaIngresoPiezas {
  *
  * El costo de cada pieza se hereda de `producto.costoPromedioCents`, que en Fase 1
  * puede ser `money(0)`. En Fase 2 el ingreso por compra (`docs/03`) fija el costo
- * real por kg de la mercadería y reemplaza esta herencia.
+ * real por kg de la mercadería y reemplaza esta herencia. El movimiento congela
+ * ese mismo costo (`costeo`, tarea A1b) con la pieza recién creada como base.
  *
  * @throws {IngresoInvalidoError} si el producto no va por piezas, la lista está
  *   vacía, algún `pesoInicialGramos` no es positivo, o una `fechaVencimiento` es
@@ -299,6 +326,12 @@ export async function ingresarPiezas(
       origenId: movRef.id,
       usuarioId,
       fecha: ahora,
+      // El movimiento afecta la pieza recién creada: base = su costo real (que en
+      // este ingreso manual hereda el promedio del producto, ver nota arriba).
+      costeo: congelarCosteo({
+        pieza,
+        magnitud: { medida: 'peso', gramos: declarada.pesoInicialGramos },
+      }),
     };
     batch.set(movRef, movimiento);
 

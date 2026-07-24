@@ -79,7 +79,14 @@ const PROD_UNIDAD = producto({
 });
 const PROD_FRAC = producto({ id: 'prod-frac', modoStock: 'fraccionado_por_pieza' });
 const PROD_ENTERA = producto({ id: 'prod-entera', modoStock: 'pieza_entera' });
-const PZ_FRAC = pieza({ id: 'pz-frac', productoId: 'prod-frac', pesoRestanteGramos: peso(4000) });
+// `compraId` presente: es el caso real (las piezas nacen de una compra) y es lo
+// que el costeo congelado copia al ítem de venta.
+const PZ_FRAC = pieza({
+  id: 'pz-frac',
+  productoId: 'prod-frac',
+  pesoRestanteGramos: peso(4000),
+  compraId: 'compra-7',
+});
 const PZ_ENTERA = pieza({ id: 'pz-entera', productoId: 'prod-entera', pesoRestanteGramos: peso(1500) });
 
 function ventaGranel(): EntradaVenta {
@@ -173,6 +180,7 @@ beforeEach(async () => {
       pesoInicialGramos: 5000,
       pesoRestanteGramos: 4000,
       costoKgCents: 30000,
+      compraId: 'compra-7',
       fechaIngreso: Date.now(),
       estado: 'disponible',
     });
@@ -254,6 +262,98 @@ describe('registrarVenta pasa las reglas como vendedor (4 modoStock)', () => {
     const snap = await getDoc(doc(db(ADMIN), 'piezas', 'pz-entera'));
     expect(snap.data()?.pesoRestanteGramos).toBe(0);
     expect(snap.data()?.estado).toBe('agotada');
+  });
+});
+
+describe('el costo congelado pasa las reglas y queda persistido en la venta', () => {
+  // El create de `ventas` valida `items is list` y nada del shape interno, así que
+  // el mapa `costeo` NO exigió tocar `firestore.rules`. Estos tests son la
+  // evidencia: el vendedor escribe el mapa y el doc queda con el costo adentro.
+  async function itemsPersistidos(ventaId: string): Promise<Record<string, unknown>[]> {
+    const snap = await getDoc(doc(db(ADMIN), 'ventas', ventaId));
+    return snap.data()?.items as Record<string, unknown>[];
+  }
+
+  it('por pieza: el vendedor persiste costo real, unitario y compra de origen', async () => {
+    const entrada: EntradaVenta = {
+      usuarioId: VENDEDOR,
+      medioPago: 'efectivo',
+      items: [
+        {
+          producto: PROD_FRAC,
+          pieza: PZ_FRAC,
+          gramos: peso(350),
+          precioUnitCents: money(45000),
+          subtotalCents: money(15750),
+        },
+      ],
+      totalCents: money(15750),
+    };
+    const { ventaId } = await assertSucceeds(registrarVenta(db(VENDEDOR), entrada));
+
+    const items = await itemsPersistidos(ventaId);
+    expect(items[0]?.costeo).toEqual({
+      v: 1,
+      fuente: 'pieza',
+      origen: 'venta',
+      costoUnitCents: 30000,
+      costoItemCents: 10500,
+      compraId: 'compra-7',
+    });
+  });
+
+  it('producto sin base de costo: persiste sin_costo, sin montos', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'productos', 'prod-sin-costo'), {
+        nombre: 'Regalo',
+        categoria: 'frutos_secos',
+        modoPrecio: 'por_kg',
+        modoStock: 'granel',
+        precioVentaCents: 45000,
+        costoPromedioCents: 0,
+        stockGranelGramos: 10000,
+        activo: true,
+        actualizadoEn: Date.now(),
+      });
+    });
+    const entrada: EntradaVenta = {
+      usuarioId: VENDEDOR,
+      medioPago: 'efectivo',
+      items: [
+        {
+          producto: producto({
+            id: 'prod-sin-costo',
+            modoStock: 'granel',
+            costoPromedioCents: money(0),
+            stockGranelGramos: peso(10000),
+          }),
+          gramos: peso(100),
+          precioUnitCents: money(45000),
+          subtotalCents: money(4500),
+        },
+      ],
+      totalCents: money(4500),
+    };
+    const { ventaId } = await assertSucceeds(registrarVenta(db(VENDEDOR), entrada));
+
+    const items = await itemsPersistidos(ventaId);
+    expect(items[0]?.costeo).toEqual({ v: 1, fuente: 'sin_costo', origen: 'venta' });
+  });
+
+  it('la anulación de una venta con costeo sigue pasando (solo cambia estado)', async () => {
+    const { ventaId } = await registrarVenta(db(VENDEDOR), ventaGranel());
+    const snap = await getDoc(doc(db(ADMIN), 'ventas', ventaId).withConverter(ventaConverter));
+    const venta = snap.data();
+    if (venta === undefined) throw new Error('la venta recién registrada no se encontró');
+    expect(venta.items[0]?.costeo?.fuente).toBe('promedio');
+
+    await assertSucceeds(anularVenta(db(ADMIN), venta, ADMIN));
+
+    const anulada = await getDoc(doc(db(ADMIN), 'ventas', ventaId));
+    expect(anulada.data()?.estado).toBe('anulada');
+    // El costo congelado sobrevive intacto a la anulación.
+    const items = await itemsPersistidos(ventaId);
+    expect(items[0]?.costeo).toMatchObject({ fuente: 'promedio', costoItemCents: 3000 });
   });
 });
 

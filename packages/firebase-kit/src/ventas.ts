@@ -7,6 +7,7 @@ import {
   type Firestore,
 } from 'firebase/firestore';
 import {
+  congelarCosteo,
   peso,
   sumarMoney,
   type EstadoPieza,
@@ -128,10 +129,14 @@ interface EfectoVenta {
  * En un solo `writeBatch`:
  * - Crea `ventas/{id}` (`estado: 'completada'`, `numero` = `Date.now()`, `fecha`).
  *   Si viene `cliente`, denormaliza `clienteId` + `clienteNombre` en la venta.
+ *   Cada ítem congela además su COSTO (`costeo`, ver `congelarCosteo` en core):
+ *   el costo de un producto cambia con cada compra, así que leerlo después de
+ *   vender daría un número equivocado y la ganancia real sería incalculable.
  * - Por ítem, según `modoStock`, decrementa con `increment()` el peso de la pieza
  *   / el stock granel / las unidades (y marca la pieza `agotada` en `pieza_entera`).
  * - Crea un `movimientos/{id}` tipo `venta` por ítem (delta negativo,
- *   `origenTipo: 'venta'`, `origenId` = id de la venta).
+ *   `origenTipo: 'venta'`, `origenId` = id de la venta), que REUTILIZA el
+ *   `costeo` ya congelado en el ítem (tarea A1b): mismo dato, sin recalcular.
  * - Si viene `cliente`, actualiza `clientes/{id}.stats` en el MISMO batch con
  *   `increment(1)` en `cantidadVentas`, `increment(totalCents)` en
  *   `totalHistoricoCents` y la fecha en `ultimaCompra` (y `primeraCompra` si el
@@ -220,6 +225,9 @@ export async function registrarVenta(
       origenId: ventaRef.id,
       usuarioId,
       fecha: ahora,
+      // Reutiliza el costeo YA congelado en el ítem (misma línea, mismo instante):
+      // no se vuelve a congelar, para no divergir del costo que quedó en la venta.
+      costeo: efecto.itemVenta.costeo,
     };
     batch.set(movRef, movimiento);
   }
@@ -241,7 +249,10 @@ export async function registrarVenta(
  *   FIFO (correcto tanto si venía de `fraccionado_por_pieza` como de
  *   `pieza_entera`, que la había dejado `agotada`).
  * - Crea un `movimientos/{id}` tipo `devolucion` por ítem (delta positivo,
- *   `origenTipo: 'venta'`, `origenId` = id de la venta).
+ *   `origenTipo: 'venta'`, `origenId` = id de la venta), que REUTILIZA el
+ *   `costeo` original del ítem vendido (tarea A1b): lo que vuelve al stock
+ *   costaba exactamente eso; `venta` ya viene en memoria por parámetro, cero
+ *   lecturas nuevas.
  * - Si la venta tenía `clienteId`, revierte los contadores de `clientes/{id}.stats`
  *   en el MISMO batch: `increment(-1)` en `cantidadVentas` y `increment(-totalCents)`
  *   en `totalHistoricoCents`. NO rebobina `primeraCompra`/`ultimaCompra`: son cache
@@ -291,6 +302,10 @@ export async function anularVenta(db: Firestore, venta: Venta, usuarioId: string
       origenId: venta.id,
       usuarioId,
       fecha: ahora,
+      // Reutiliza el costeo original del ítem vendido: lo que vuelve al stock
+      // costaba exactamente eso, no se recalcula (la venta ya viene en memoria,
+      // pasada por parámetro; cero lecturas nuevas).
+      costeo: item.costeo,
     };
     batch.set(movRef, movimiento);
   }
@@ -300,7 +315,17 @@ export async function anularVenta(db: Firestore, venta: Venta, usuarioId: string
 
 // ── Resolución de efectos por ítem ──────────────────────────────────────────
 
-/** Resuelve y valida el efecto de stock + movimiento de un ítem de venta. */
+/**
+ * Resuelve y valida el efecto de stock + movimiento de un ítem de venta, y
+ * CONGELA su costo.
+ *
+ * El congelado es aritmética síncrona sobre datos que el ítem ya trae (`producto`
+ * y `pieza` completos, resueltos por la pantalla): **no agrega ninguna lectura**
+ * de Firestore, así que el camino offline del POS queda intacto. La base es
+ * `pieza.costoKgCents` en los modos por pieza y `producto.costoPromedioCents` en
+ * granel/unidad; sin base de costo, `congelarCosteo` devuelve `sin_costo` sin
+ * montos (ver `costeo.ts`).
+ */
 function resolverEfectoVenta(item: ItemEntradaVenta): EfectoVenta {
   const { producto, pieza, precioUnitCents, subtotalCents } = item;
   const base = {
@@ -320,7 +345,12 @@ function resolverEfectoVenta(item: ItemEntradaVenta): EfectoVenta {
         );
       }
       return {
-        itemVenta: { ...base, piezaId: p.id, gramos },
+        itemVenta: {
+          ...base,
+          piezaId: p.id,
+          gramos,
+          costeo: congelarCosteo({ pieza: p, magnitud: { medida: 'peso', gramos } }),
+        },
         coleccion: 'piezas',
         refId: p.id,
         stockUpdate: { pesoRestanteGramos: increment(-gramos) },
@@ -336,7 +366,12 @@ function resolverEfectoVenta(item: ItemEntradaVenta): EfectoVenta {
         throw new StockInsuficienteError(`La pieza ${p.id} no tiene peso restante para vender.`);
       }
       return {
-        itemVenta: { ...base, piezaId: p.id, gramos },
+        itemVenta: {
+          ...base,
+          piezaId: p.id,
+          gramos,
+          costeo: congelarCosteo({ pieza: p, magnitud: { medida: 'peso', gramos } }),
+        },
         coleccion: 'piezas',
         refId: p.id,
         stockUpdate: { pesoRestanteGramos: increment(-gramos), estado: 'agotada' },
@@ -356,7 +391,14 @@ function resolverEfectoVenta(item: ItemEntradaVenta): EfectoVenta {
         );
       }
       return {
-        itemVenta: { ...base, gramos },
+        itemVenta: {
+          ...base,
+          gramos,
+          costeo: congelarCosteo({
+            costoPromedioCents: producto.costoPromedioCents,
+            magnitud: { medida: 'peso', gramos },
+          }),
+        },
         coleccion: 'productos',
         refId: producto.id,
         stockUpdate: { stockGranelGramos: increment(-gramos) },
@@ -376,7 +418,14 @@ function resolverEfectoVenta(item: ItemEntradaVenta): EfectoVenta {
         );
       }
       return {
-        itemVenta: { ...base, unidades },
+        itemVenta: {
+          ...base,
+          unidades,
+          costeo: congelarCosteo({
+            costoPromedioCents: producto.costoPromedioCents,
+            magnitud: { medida: 'unidades', unidades },
+          }),
+        },
         coleccion: 'productos',
         refId: producto.id,
         stockUpdate: { stockUnidades: increment(-unidades) },

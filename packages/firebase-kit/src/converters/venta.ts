@@ -7,13 +7,27 @@ import {
   type WithFieldValue,
 } from 'firebase/firestore';
 import {
+  VERSION_COSTEO,
   money,
   peso,
+  type CosteoItem,
   type EstadoVenta,
+  type FuenteCosteo,
   type ItemVenta,
   type MedioPago,
+  type OrigenCosteo,
   type Venta,
 } from '@gestion/core';
+
+/** Forma del mapa de costeo embebido tal como vive en Firestore (ver `CosteoItem`). */
+interface CosteoItemDoc {
+  v: number;
+  fuente: FuenteCosteo;
+  origen: OrigenCosteo;
+  costoUnitCents?: number;
+  costoItemCents?: number;
+  compraId?: string;
+}
 
 /** Forma de un ítem embebido de venta tal como vive en Firestore (ver `ItemVenta`). */
 interface ItemVentaDoc {
@@ -24,6 +38,7 @@ interface ItemVentaDoc {
   unidades?: number;
   precioUnitCents: number;
   subtotalCents: number;
+  costeo?: CosteoItemDoc;
 }
 
 /**
@@ -43,6 +58,34 @@ interface VentaDoc {
   clienteNombre?: string;
 }
 
+function costeoADoc(costeo: CosteoItem): CosteoItemDoc {
+  const doc: CosteoItemDoc = { v: costeo.v, fuente: costeo.fuente, origen: costeo.origen };
+  // Los montos NO van cuando no hay base de costo (`fuente: 'sin_costo'`):
+  // persistir un 0 declararía 100 % de ganancia. Nunca `null`: ausentes.
+  if (costeo.costoUnitCents !== undefined) doc.costoUnitCents = costeo.costoUnitCents;
+  if (costeo.costoItemCents !== undefined) doc.costoItemCents = costeo.costoItemCents;
+  if (costeo.compraId !== undefined) doc.compraId = costeo.compraId;
+  return doc;
+}
+
+/**
+ * Reconstruye el mapa de costeo. Devuelve `undefined` (⇒ `clasificarCosteo` dice
+ * `'legado'`) cuando el ítem no lo trae o cuando trae una versión que esta build
+ * no sabe interpretar: degradar a "no sé" es honesto y no rompe el historial;
+ * inventar un monto, no.
+ */
+function costeoDeDoc(doc: CosteoItemDoc | undefined): CosteoItem | undefined {
+  if (doc === undefined || doc.v !== VERSION_COSTEO) return undefined;
+  return {
+    v: VERSION_COSTEO,
+    fuente: doc.fuente,
+    origen: doc.origen,
+    costoUnitCents: doc.costoUnitCents !== undefined ? money(doc.costoUnitCents) : undefined,
+    costoItemCents: doc.costoItemCents !== undefined ? money(doc.costoItemCents) : undefined,
+    compraId: doc.compraId,
+  };
+}
+
 function itemADoc(item: ItemVenta): ItemVentaDoc {
   const { productoId, nombreProducto, piezaId, gramos, unidades, precioUnitCents, subtotalCents } =
     item;
@@ -55,6 +98,7 @@ function itemADoc(item: ItemVenta): ItemVentaDoc {
   if (piezaId !== undefined) doc.piezaId = piezaId;
   if (gramos !== undefined) doc.gramos = gramos;
   if (unidades !== undefined) doc.unidades = unidades;
+  if (item.costeo !== undefined) doc.costeo = costeoADoc(item.costeo);
   return doc;
 }
 
@@ -67,6 +111,7 @@ function itemDeDoc(doc: ItemVentaDoc): ItemVenta {
     unidades: doc.unidades,
     precioUnitCents: money(doc.precioUnitCents),
     subtotalCents: money(doc.subtotalCents),
+    costeo: costeoDeDoc(doc.costeo),
   };
 }
 
@@ -84,6 +129,10 @@ function itemDeDoc(doc: ItemVentaDoc): ItemVenta {
  * - `clienteId`/`clienteNombre` (doc 07) son opcionales: la venta anónima no los
  *   trae. Ausentes en Firestore ↔ `undefined` en dominio; si están `undefined`
  *   al escribir, se omiten del doc (nunca `null`).
+ * - `items[].costeo` (Fase 3) es opcional y versionado: las ventas escritas antes
+ *   del congelado NO lo traen y deben seguir leyéndose sin error — su ausencia es
+ *   la "versión 0". Este converter, junto con `clasificarCosteo` de core, es el
+ *   ÚNICO lugar autorizado a preguntar si el mapa existe.
  */
 export const ventaConverter: FirestoreDataConverter<Venta> = {
   toFirestore(venta: WithFieldValue<Venta>): DocumentData {

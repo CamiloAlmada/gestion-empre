@@ -234,6 +234,86 @@ describe('ajustarStock', () => {
     };
     await expect(ajustarStock(db, entrada)).rejects.toThrow(AjusteInvalidoError);
   });
+
+  // Congelado de costo (tarea A1b): el movimiento lleva su propio `costeo`,
+  // resuelto con la MISMA base que `ventas.ts` para el `modoStock` equivalente.
+  describe('congelado de costo (costeo)', () => {
+    it('granel: base = costoPromedioCents del producto, magnitud en positivo', async () => {
+      const entrada: EntradaAjuste = {
+        usuarioId: 'admin-1',
+        tipo: 'ajuste_negativo',
+        producto: producto({ modoStock: 'granel', stockGranelGramos: peso(1000), costoPromedioCents: money(500) }),
+        deltaGramos: peso(-300),
+      };
+      await ajustarStock(db, entrada);
+
+      const [, movDoc] = mocks.batch.set.mock.calls[0] as [RefFalsa, Record<string, unknown>];
+      expect(movDoc.costeo).toEqual({
+        v: 1,
+        fuente: 'promedio',
+        origen: 'venta',
+        costoUnitCents: 500,
+        costoItemCents: 150,
+      });
+    });
+
+    it('unidad_simple: base = costoPromedioCents del producto', async () => {
+      const entrada: EntradaAjuste = {
+        usuarioId: 'admin-1',
+        tipo: 'ajuste_negativo',
+        producto: producto({
+          modoPrecio: 'por_unidad',
+          modoStock: 'unidad_simple',
+          stockUnidades: 5,
+          costoPromedioCents: money(700),
+        }),
+        deltaUnidades: -3,
+      };
+      await ajustarStock(db, entrada);
+
+      const [, movDoc] = mocks.batch.set.mock.calls[0] as [RefFalsa, Record<string, unknown>];
+      expect(movDoc.costeo).toEqual({
+        v: 1,
+        fuente: 'promedio',
+        origen: 'venta',
+        costoUnitCents: 700,
+        costoItemCents: 2100,
+      });
+    });
+
+    it('pieza: base = costoKgCents de la pieza afectada (no el promedio del producto)', async () => {
+      const entrada: EntradaAjuste = {
+        usuarioId: 'admin-1',
+        tipo: 'merma',
+        producto: producto({ modoStock: 'fraccionado_por_pieza', costoPromedioCents: money(999) }),
+        pieza: pieza({ pesoRestanteGramos: peso(1000), costoKgCents: money(30000) }),
+        deltaGramos: peso(-40),
+      };
+      await ajustarStock(db, entrada);
+
+      const [, movDoc] = mocks.batch.set.mock.calls[0] as [RefFalsa, Record<string, unknown>];
+      expect(movDoc.costeo).toEqual({
+        v: 1,
+        fuente: 'pieza',
+        origen: 'venta',
+        costoUnitCents: 30000,
+        costoItemCents: 1200,
+      });
+    });
+
+    it('sin base de costo (costoPromedioCents money(0)): fuente sin_costo, sin montos', async () => {
+      const entrada: EntradaAjuste = {
+        usuarioId: 'admin-1',
+        tipo: 'ajuste_positivo',
+        producto: producto({ modoStock: 'granel', stockGranelGramos: peso(0), costoPromedioCents: money(0) }),
+        deltaGramos: peso(500),
+      };
+      await ajustarStock(db, entrada);
+
+      const [, movDoc] = mocks.batch.set.mock.calls[0] as [RefFalsa, Record<string, unknown>];
+      expect(movDoc.costeo).toEqual({ v: 1, fuente: 'sin_costo', origen: 'venta' });
+    });
+  });
 });
 
 // Separa los `batch.set` capturados en piezas vs movimientos según el path del
@@ -322,6 +402,39 @@ describe('ingresarPiezas', () => {
 
     const [, piezaDoc] = setsDe('piezas')[0]!;
     expect(piezaDoc.costoKgCents).toBe(0);
+  });
+
+  it('congela el costo del movimiento con la pieza recién creada como base (tarea A1b)', async () => {
+    const entrada: EntradaIngresoPiezas = {
+      usuarioId: 'admin-1',
+      producto: producto({ modoStock: 'fraccionado_por_pieza', costoPromedioCents: money(30000) }),
+      piezas: [{ pesoInicialGramos: peso(5000) }],
+    };
+
+    await ingresarPiezas(db, entrada);
+
+    const [, movDoc] = setsDe('movimientos')[0]!;
+    // Sin compraId: es un ingreso manual, no viene de una compra.
+    expect(movDoc.costeo).toEqual({
+      v: 1,
+      fuente: 'pieza',
+      origen: 'venta',
+      costoUnitCents: 30000,
+      costoItemCents: 150000,
+    });
+  });
+
+  it('sin base de costo (costoPromedioCents money(0)): el movimiento queda sin_costo', async () => {
+    const entrada: EntradaIngresoPiezas = {
+      usuarioId: 'admin-1',
+      producto: producto({ modoStock: 'fraccionado_por_pieza', costoPromedioCents: money(0) }),
+      piezas: [{ pesoInicialGramos: peso(5000) }],
+    };
+
+    await ingresarPiezas(db, entrada);
+
+    const [, movDoc] = setsDe('movimientos')[0]!;
+    expect(movDoc.costeo).toEqual({ v: 1, fuente: 'sin_costo', origen: 'venta' });
   });
 
   it('sin fechaVencimiento: no la incluye en la pieza', async () => {

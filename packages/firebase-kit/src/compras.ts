@@ -10,8 +10,11 @@ import {
 import {
   calcularCostoRealCents,
   calcularCostoRealKgCents,
+  calcularCostoRealUnitCents,
+  congelarCosteo,
   sumarMoney,
   type Compra,
+  type CosteoItem,
   type GastoCompra,
   type ItemCompra,
   type Money,
@@ -211,11 +214,17 @@ export async function actualizarBorradorCompra(
 
 // ── Confirmación ────────────────────────────────────────────────────────────
 
-/** Efecto de stock resuelto de un ítem, discriminado por cómo controla existencia. */
+/**
+ * Efecto de stock resuelto de un ítem, discriminado por cómo controla existencia.
+ * Cada variante lleva el costo real de ESE ítem (`costoRealKgCents` /
+ * `costoRealUnitCents`, tarea A1b): es la base del movimiento `ingreso_compra`
+ * — lo que costó ESTA mercadería puntual, no el promedio ponderado del
+ * producto (que mezcla el costo del stock viejo con el que entra).
+ */
 type EfectoItemCompra =
   | { tipo: 'pieza'; productoId: string; piezas: PiezaCompra[]; costoRealKgCents: Money }
-  | { tipo: 'granel'; productoId: string; gramos: Peso }
-  | { tipo: 'unidad'; productoId: string; unidades: number };
+  | { tipo: 'granel'; productoId: string; gramos: Peso; costoRealKgCents: Money }
+  | { tipo: 'unidad'; productoId: string; unidades: number; costoRealUnitCents: Money };
 
 /** Cantidades agregadas a incrementar y nuevo costo promedio de un producto. */
 interface AgregadoProducto {
@@ -232,7 +241,14 @@ interface AgregadoProducto {
  * (c) se incrementa el stock agregado (`stockGranelGramos` / `stockUnidades`) con
  *     `increment()`;
  * (d) se registra un movimiento `ingreso_compra` por pieza (ítems por pieza) o por
- *     ítem (granel/unidad), con `origenTipo: 'compra'`;
+ *     ítem (granel/unidad), con `origenTipo: 'compra'`. Cada uno congela su costo
+ *     (`costeo`, tarea A1b) con el costo REAL de ESE ítem: `costoRealKgCents` en
+ *     pieza/granel (la pieza recién creada, o `calcularCostoRealKgCents` del
+ *     ítem) y `calcularCostoRealUnitCents` en unidad. NUNCA `costoPromedioCents`
+ *     / `nuevoCostoPromedioCents` de `efectosProducto`: ese promedio mezcla el
+ *     costo del stock viejo con el que entra, y un `ingreso_compra` es un hecho
+ *     puntual — lo que costó ESTA mercadería en ESTA compra (doc 07, "¿el viaje
+ *     a Colonia rindió?" necesita valuar lo que ese viaje trajo, no un promedio);
  * (e) se actualiza `costoPromedioCents` (+ `actualizadoEn`) de cada producto con el
  *     valor que calculó el caller.
  *
@@ -281,7 +297,14 @@ export async function confirmarCompra(db: Firestore, entrada: EntradaConfirmarCo
     batch.update(doc(db, 'productos', productoId), update);
   }
 
-  // (b)+(d) Piezas y movimientos de ingreso.
+  // (b)+(d) Piezas y movimientos de ingreso. Cada uno congela su costo (tarea
+  // A1b, ver `congelarCosteo`) con el costo REAL de ESE ítem/pieza —lo que costó
+  // ESTA mercadería puntual en ESTA compra—, NUNCA `costoPromedioCents` /
+  // `nuevoCostoPromedioCents`: el promedio mezcla el costo del stock viejo que ya
+  // había con el que entra, y un `ingreso_compra` es un hecho puntual (ver
+  // `costos.ts`). Con precios estables ambos coinciden; el bug solo se ve cuando
+  // el precio cambió entre compras — que es justo cuando el dato importa (doc 07,
+  // "¿el viaje a Colonia rindió?").
   for (const efecto of efectos) {
     if (efecto.tipo === 'pieza') {
       for (const pz of efecto.piezas) {
@@ -302,17 +325,26 @@ export async function confirmarCompra(db: Firestore, entrada: EntradaConfirmarCo
           productoId: efecto.productoId,
           piezaId: piezaRef.id,
           deltaGramos: pz.pesoGramos,
+          costeo: congelarCosteo({ pieza, magnitud: { medida: 'peso', gramos: pz.pesoGramos } }),
         });
       }
     } else if (efecto.tipo === 'granel') {
       agregarMovimientoIngreso(batch, db, compra.id, usuarioId, ahora, {
         productoId: efecto.productoId,
         deltaGramos: efecto.gramos,
+        costeo: congelarCosteo({
+          costoPromedioCents: efecto.costoRealKgCents,
+          magnitud: { medida: 'peso', gramos: efecto.gramos },
+        }),
       });
     } else {
       agregarMovimientoIngreso(batch, db, compra.id, usuarioId, ahora, {
         productoId: efecto.productoId,
         deltaUnidades: efecto.unidades,
+        costeo: congelarCosteo({
+          costoPromedioCents: efecto.costoRealUnitCents,
+          magnitud: { medida: 'unidades', unidades: efecto.unidades },
+        }),
       });
     }
   }
@@ -411,8 +443,8 @@ function resolverEfectoItemCompra(item: ItemCompra, i: number): EfectoItemCompra
     if (item.unidades !== undefined) {
       throw new CompraIncoherenteError(`El ítem #${idx} (${productoId}) granel no lleva unidades.`);
     }
-    exigirCostoRealKgCoherente(costoRealKgCents, costoRealCents, gramos, idx, productoId);
-    return { tipo: 'granel', productoId, gramos };
+    const costoKg = exigirCostoRealKgCoherente(costoRealKgCents, costoRealCents, gramos, idx, productoId);
+    return { tipo: 'granel', productoId, gramos, costoRealKgCents: costoKg };
   }
 
   if (item.unidades !== undefined) {
@@ -426,7 +458,16 @@ function resolverEfectoItemCompra(item: ItemCompra, i: number): EfectoItemCompra
         `El ítem #${idx} (${productoId}) por unidad no lleva costoRealKgCents (no tiene costo por kg).`,
       );
     }
-    return { tipo: 'unidad', productoId, unidades: item.unidades };
+    // Costo por unidad de ESTE ítem (no persistido en `ItemCompra`, se deriva
+    // acá para el movimiento `ingreso_compra`): `unidades` ya se validó entero
+    // > 0, así que `calcularCostoRealUnitCents` nunca devuelve `null`.
+    const costoUnit = calcularCostoRealUnitCents(costoRealCents, item.unidades);
+    if (costoUnit === null) {
+      throw new CompraIncoherenteError(
+        `No se pudo derivar el costo por unidad del ítem #${idx} (${productoId}).`,
+      );
+    }
+    return { tipo: 'unidad', productoId, unidades: item.unidades, costoRealUnitCents: costoUnit };
   }
 
   throw new CompraIncoherenteError(
@@ -517,7 +558,13 @@ function agregarMovimientoIngreso(
   compraId: string,
   usuarioId: string,
   fecha: Date,
-  delta: { productoId: string; piezaId?: string; deltaGramos?: Peso; deltaUnidades?: number },
+  delta: {
+    productoId: string;
+    piezaId?: string;
+    deltaGramos?: Peso;
+    deltaUnidades?: number;
+    costeo: CosteoItem;
+  },
 ): void {
   const movRef = doc(collection(db, 'movimientos')).withConverter(movimientoConverter);
   const movimiento: MovimientoStock = {
@@ -531,6 +578,7 @@ function agregarMovimientoIngreso(
     origenId: compraId,
     usuarioId,
     fecha,
+    costeo: delta.costeo,
   };
   batch.set(movRef, movimiento);
 }

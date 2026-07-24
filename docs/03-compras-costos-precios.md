@@ -145,6 +145,12 @@ Cada ítem de venta conoce la pieza (y por ende su `costoKgCents`) o el
 Con eso: reporte de ganancia bruta real por período, por producto y por categoría,
 y ranking de rentabilidad (no solo qué se vende más, sino qué deja más).
 
+Implementado en la tarea A1 (2026-07-24) como el mapa `costeo` embebido en cada
+ítem de venta — shape, reglas de honestidad y selector en el doc 02, "Costo
+congelado por ítem". Las ventas anteriores a esa fecha NO lo tienen (`'legado'`):
+lo que el backfill no pueda reconstruir queda **sin costo**, nunca estimado en
+silencio.
+
 Esto permite responder la pregunta de negocio central: **"¿el viaje a Colonia me
 rinde?"** — comparando ganancia bruta de los productos de esa compra contra los
 gastos del viaje.

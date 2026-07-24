@@ -39,6 +39,33 @@ export type TipoMovimiento =
 /** Rol del usuario. Gobierna permisos en las reglas de Firestore. */
 export type Rol = 'admin' | 'vendedor';
 
+/**
+ * De dónde sale la base de costo congelada (ver `CosteoItem`).
+ *
+ * - `pieza`: el producto se controla por piezas y el costo salió del
+ *   `costoKgCents` de la pieza descontada (costo real de su compra de origen).
+ * - `promedio`: granel / unidad, SIN una pieza física de por medio. Dos orígenes
+ *   posibles según quién congela: una VENTA usa `Producto.costoPromedioCents`
+ *   (el cache ponderado vigente); un movimiento `ingreso_compra` (tarea A1b)
+ *   usa el costo REAL de ESE ítem (`calcularCostoRealKgCents` /
+ *   `calcularCostoRealUnitCents`), nunca el promedio — un ingreso es un hecho
+ *   puntual y el promedio mezclaría el stock viejo con el que entra.
+ * - `sin_costo`: no había base de costo (producto nunca comprado por el módulo de
+ *   Compras). NO se congelan montos: ver la nota de honestidad en `CosteoItem`.
+ */
+export type FuenteCosteo = 'pieza' | 'promedio' | 'sin_costo';
+
+/**
+ * Quién produjo el costo congelado. Es **ortogonal** a `FuenteCosteo`: un costo
+ * puede venir de la pieza Y haber sido reconstruido después.
+ *
+ * - `venta`: lo congeló la operación misma, con los datos vigentes en ese instante.
+ * - `backfill`: lo reconstruyó una migración posterior sobre ventas ya escritas.
+ *
+ * Es el bit que impide que un reporte mezcle dato real con dato estimado.
+ */
+export type OrigenCosteo = 'venta' | 'backfill';
+
 // ── Entidades ───────────────────────────────────────────────────────────────
 
 /**
@@ -119,8 +146,53 @@ export interface Pieza {
 }
 
 /**
- * Ítem de una venta, embebido y denormalizado: nombre y precio quedan congelados
- * al momento de la venta (las ventas son inmutables).
+ * Costo congelado de una línea de operación (ítem de venta hoy; movimiento de
+ * merma más adelante). Mapa **opcional y versionado**, embebido en la línea.
+ *
+ * Por qué congelar: el costo de un producto cambia con cada compra. Leerlo
+ * después de vender da un número equivocado, así que la ganancia real solo es
+ * calculable si el costo queda fijado en el instante de la operación.
+ *
+ * Reglas del mapa (no negociables, ver `costeo.ts`):
+ * - **`v` adentro; la AUSENCIA del mapa es la versión 0** (líneas escritas antes
+ *   de que existiera el congelado). Un consumidor NUNCA pregunta por
+ *   `costeo === undefined` a mano: usa `clasificarCosteo`.
+ * - **Van los dos montos.** El unitario hace el número auditable ("¿a cuánto me
+ *   salía el kg ese día?"); el total elimina la ambigüedad de redondeo:
+ *   `ganancia = subtotalCents − costoItemCents` tiene que ser reproducible dentro
+ *   de un año sin re-derivar nada.
+ * - **Honestidad**: si no hay base de costo (0 o ausente), `fuente` es
+ *   `'sin_costo'` y NO se congela ningún monto. Congelar un costo 0 declararía
+ *   100 % de ganancia — una mentira que después ningún reporte puede detectar.
+ */
+export interface CosteoItem {
+  /** Versión del esquema de costeo. Hoy siempre `1`. */
+  v: 1;
+  /** De dónde salió la base de costo (o `'sin_costo'` si no había). */
+  fuente: FuenteCosteo;
+  /** Dato real de la operación (`'venta'`) o reconstruido (`'backfill'`). */
+  origen: OrigenCosteo;
+  /**
+   * Costo unitario congelado: por kg (líneas al peso) o por unidad — misma
+   * convención que `ItemVenta.precioUnitCents`. Ausente si `fuente === 'sin_costo'`.
+   */
+  costoUnitCents?: Money;
+  /**
+   * Costo total de la línea, YA redondeado con la MISMA regla que el subtotal
+   * (`calcularSubtotal`). Ausente si `fuente === 'sin_costo'`.
+   */
+  costoItemCents?: Money;
+  /**
+   * Compra de origen de la pieza (`fuente === 'pieza'`), copiada de
+   * `Pieza.compraId`. Deja el reporte "¿el viaje a Colonia rindió?" en un scan
+   * plano de ventas, sin join ventas→piezas→compras en el cliente.
+   */
+  compraId?: string;
+}
+
+/**
+ * Ítem de una venta, embebido y denormalizado: nombre, precio y costo quedan
+ * congelados al momento de la venta (las ventas son inmutables).
  */
 export interface ItemVenta {
   productoId: string;
@@ -135,6 +207,12 @@ export interface ItemVenta {
   /** Precio unitario congelado: por kg o por unidad según el producto. */
   precioUnitCents: Money;
   subtotalCents: Money;
+  /**
+   * Costo congelado del ítem. OPCIONAL por retrocompatibilidad: las ventas
+   * escritas antes de esta capacidad no lo tienen y su ausencia significa
+   * "versión 0", no "costo cero" (ver `CosteoItem` y `clasificarCosteo`).
+   */
+  costeo?: CosteoItem;
 }
 
 /** Ticket de mostrador. Cabecera + ítems embebidos. */
@@ -178,6 +256,15 @@ export interface MovimientoStock {
   usuarioId: string;
   fecha: Date;
   nota?: string;
+  /**
+   * Costo congelado del movimiento (tarea A1b). OPCIONAL por retrocompatibilidad:
+   * los movimientos escritos antes de esta capacidad no lo tienen y su ausencia
+   * significa "versión 0", no "costo cero" (mismo criterio que `ItemVenta.costeo`;
+   * ver `CosteoItem` y `clasificarCosteo`). Base según el movimiento: el costo de
+   * la pieza afectada si el movimiento es a nivel de pieza, o el costo promedio
+   * vigente del producto si es a granel/unidad.
+   */
+  costeo?: CosteoItem;
 }
 
 /** Usuario de la app. `uid` proviene de Firebase Auth y es la clave del documento. */
