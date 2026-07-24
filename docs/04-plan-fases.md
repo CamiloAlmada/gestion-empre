@@ -354,6 +354,34 @@ proveedores del doc 07 (la parte ya en producción queda como está). El doc 09
 §A sigue EN PAUSA. La sesión de elicitación (doc 10 §8) reordena el roadmap
 post-demo, incluida Fase 3.
 
+## Tanda TM — Theme manager de colores del negocio — IMPLEMENTADA COMPLETA
+
+Estado (2026-07-23): 8 tareas (TM-0 contrato, TM-1 motor + TM-1b guard, TM-2
+reglas, TM-3 kit, TM-4 runtime + TM-4b fixtures, TM-5 editor, TM-6 wiring +
+TM-6b tests + TM-7 tri-estado) en dos waves paralelas con contrato congelado.
+Review senior integral: DEVUELTO (BLOQ-1: el runtime anulaba el anti-FOUC y
+borraba el cache por `null` sobrecargado "cargando"/"sin tema" — resuelto con
+tri-estado `undefined`/`null`/tokens; MED-1: timeout del teorema) → segunda
+pasada: APROBADO. Diseño: docs/06 §4 "Colores del negocio" y §7 "Paleta
+personalizada" — motor `generarPaleta` en core con anclaje por luminancia
+WCAG, matiz cuantizado y verificación EXHAUSTIVA de las 1080 paletas en CI
+con `reparaciones === 0`; semilla `{version, matiz, tinte}` en
+`configuracion/tema` (admin escribe/borra, matiz `is int` como backstop);
+runtime `:root[data-tema-negocio]`; cache localStorage + anti-FOUC (snippet
+canónico portable en `packages/config/anti-fouc-tema-negocio.md`); editor en
+Ajustes con 6 presets, slider de matiz, preview en vivo con restauración
+garantizada y panel de transparencia de ratios. Portar a la cerrajería:
+<1 día (todo en packages; por app: wiring + regla + snippet). Sin doc de
+tema la app es idéntica a antes (regresión cero verificada). 1054 tests en
+la app + 152 de reglas. Hallazgo colateral: fila del selector en §7 estaba
+vencida (12.33→5.96), corregida.
+
+Deuda anotada: staleness mínima del theme-color de la barra de estado tras
+"Restablecer" (solo ese flujo, se autocorrige — validada como aceptable por
+el review); sombras de Cálido con oklch cálido hardcodeado (decorativo, con
+tinte frío quedan apenas cálidas); flaky bajo carga de `Proveedores.test.tsx`
+(subir testTimeout si reincide).
+
 ## Tareas COSTO-2 + AUDIT-1 — IMPLEMENTADAS (2026-07-14)
 
 COSTO-2: desglose de última compra inline en `ModalPrecio` (hook compartido

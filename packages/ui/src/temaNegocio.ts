@@ -137,7 +137,10 @@ function esCacheTemaNegocioValido(x: unknown): x is CacheTemaNegocio {
   const themeColor = o['themeColor'];
   if (typeof themeColor !== 'object' || themeColor === null) return false;
   const tc = themeColor as Record<string, unknown>;
-  return typeof tc['light'] === 'string' && typeof tc['dark'] === 'string';
+  // Mismo regex de hex que el script inline (nota MENOR del review TM: sin
+  // esto, la paridad de sanidad que promete el JSDoc era inexacta).
+  const esHex = (v: unknown): v is string => typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v);
+  return esHex(tc['light']) && esHex(tc['dark']);
 }
 
 /**
