@@ -12,7 +12,8 @@
     "preview": "vite preview",
     "seed:demo": "tsx scripts/seed-demo.mjs",
     "seed:demo:limpiar": "tsx scripts/seed-demo.mjs --limpiar",
-    "seed:demo:verificar": "tsx scripts/seed-demo.mjs --verificar"
+    "seed:demo:verificar": "tsx scripts/seed-demo.mjs --verificar",
+    "reset:operativo": "tsx scripts/reset-operativo.mjs"
   },
   "dependencies": {
     "@gestion/core": "workspace:*",

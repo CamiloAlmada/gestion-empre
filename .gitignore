@@ -14,6 +14,10 @@ coverage/
 # OS
 .DS_Store
 
+# Backups de mantenimiento (apps/*/scripts/reset-operativo.mjs): contienen datos
+# personales de clientes reales. Se guardan fuera del repo.
+backups/
+
 # Logs
 logs/
 *.log
