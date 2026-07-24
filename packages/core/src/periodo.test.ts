@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { periodoDe, periodoAnterior, agruparPorPeriodo, variacionPorcentual } from './periodo.js';
+import {
+  periodoDe,
+  periodoAnterior,
+  agruparPorPeriodo,
+  variacionPorcentual,
+  dentroDePeriodo,
+  periodoEnCurso,
+  periodoAnteriorComparable,
+} from './periodo.js';
 
 /** Montevideo: UTC-3, sin horario de verano. */
 const OFFSET_UY = -180;
@@ -206,5 +214,97 @@ describe('variacionPorcentual — validación', () => {
     const anterior = { valor: 100, cantidadDatos: 10 };
     expect(() => variacionPorcentual(actual, anterior, { umbralPocosDatos: -1 })).toThrow(RangeError);
     expect(() => variacionPorcentual(actual, anterior, { umbralPocosDatos: NaN })).toThrow(RangeError);
+  });
+});
+
+describe('dentroDePeriodo', () => {
+  const periodo = periodoDe(new Date('2026-07-24T15:00:00Z'), 'dia', OFFSET_UY);
+
+  it('el borde `desde` es inclusive', () => {
+    expect(dentroDePeriodo(periodo.desde, periodo)).toBe(true);
+  });
+
+  it('el borde `hasta` es exclusivo', () => {
+    expect(dentroDePeriodo(periodo.hasta, periodo)).toBe(false);
+  });
+
+  it('un instante en el medio cae adentro', () => {
+    const medio = new Date(periodo.desde.getTime() + 1000);
+    expect(dentroDePeriodo(medio, periodo)).toBe(true);
+  });
+
+  it('antes de `desde` o después de `hasta` cae afuera', () => {
+    expect(dentroDePeriodo(new Date(periodo.desde.getTime() - 1), periodo)).toBe(false);
+    expect(dentroDePeriodo(new Date(periodo.hasta.getTime() + 1), periodo)).toBe(false);
+  });
+});
+
+describe('periodoEnCurso', () => {
+  const periodo = periodoDe(new Date('2026-07-24T15:00:00Z'), 'dia', OFFSET_UY);
+
+  it('ahora antes de que cierre → en curso', () => {
+    expect(periodoEnCurso(periodo, new Date(periodo.hasta.getTime() - 1))).toBe(true);
+  });
+
+  it('ahora exactamente en el límite → cerrado (no en curso)', () => {
+    expect(periodoEnCurso(periodo, periodo.hasta)).toBe(false);
+  });
+
+  it('ahora después del límite → cerrado', () => {
+    expect(periodoEnCurso(periodo, new Date(periodo.hasta.getTime() + 1))).toBe(false);
+  });
+
+  it('lanza RangeError con `ahora` inválido', () => {
+    expect(() => periodoEnCurso(periodo, new Date('no-es-fecha'))).toThrow(RangeError);
+  });
+});
+
+describe('periodoAnteriorComparable', () => {
+  it('mes en curso (día 3, 11hs): trunca el mes anterior a la MISMA porción transcurrida — el caso exacto del sesgo a corregir', () => {
+    // Julio en curso, el 3 a las 11 de la mañana (hora de Montevideo): 2 días y
+    // 11 horas transcurridas del mes. Comparar contra junio ENTERO (30 días)
+    // siempre mostraría una caída falsa — la corrección trunca junio a esos
+    // mismos 2 días y 11 horas, medidos desde su propio inicio.
+    const julioEnCurso = periodoDe(new Date('2026-07-24T00:00:00Z'), 'mes', OFFSET_UY); // límites del mes, no depende del día
+    const ahora = new Date('2026-07-03T14:00:00Z'); // 03/07 11:00 en Montevideo (UTC-3)
+    const junioCompleto = periodoAnterior(julioEnCurso, 'mes', OFFSET_UY);
+
+    const comparable = periodoAnteriorComparable(julioEnCurso, junioCompleto, ahora);
+
+    expect(comparable.desde.toISOString()).toBe(junioCompleto.desde.toISOString());
+    // Mismo "tamaño" que lo transcurrido de julio (2 días y 11 horas desde el
+    // 1º de julio 00:00 local), pero contado desde el 1º de junio.
+    expect(comparable.hasta.toISOString()).toBe('2026-06-03T14:00:00.000Z');
+    // Nunca junio completo: eso sería la comparación deshonesta original.
+    expect(comparable.hasta.toISOString()).not.toBe(junioCompleto.hasta.toISOString());
+  });
+
+  it('período YA CERRADO: devuelve el período anterior completo sin truncar (nada que corregir)', () => {
+    const hoy = periodoDe(new Date('2026-07-24T15:00:00Z'), 'dia', OFFSET_UY);
+    const ayer = periodoAnterior(hoy, 'dia', OFFSET_UY);
+    const ahoraDespuesDeCerrar = hoy.hasta; // límite exacto: cerrado, ver periodoEnCurso
+
+    const comparable = periodoAnteriorComparable(hoy, ayer, ahoraDespuesDeCerrar);
+
+    expect(comparable).toEqual(ayer);
+  });
+
+  it('clampea a la duración del período anterior si es MÁS CORTO que lo transcurrido (marzo día 31 vs. febrero de 28 días)', () => {
+    const marzo = periodoDe(new Date('2026-03-15T12:00:00Z'), 'mes', OFFSET_UY);
+    const febrero = periodoAnterior(marzo, 'mes', OFFSET_UY); // 28 días (2026 no es bisiesto)
+    const casiFinDeMarzo = new Date(marzo.hasta.getTime() - 1); // en curso, a un ms de cerrar (~31 días transcurridos)
+
+    const comparable = periodoAnteriorComparable(marzo, febrero, casiFinDeMarzo);
+
+    // No se puede truncar "más" que febrero entero: el resultado es febrero completo.
+    expect(comparable).toEqual(febrero);
+  });
+
+  it('lanza RangeError con alguna fecha inválida', () => {
+    const periodo = periodoDe(new Date('2026-07-24T15:00:00Z'), 'dia', OFFSET_UY);
+    const anterior = periodoAnterior(periodo, 'dia', OFFSET_UY);
+    expect(() => periodoAnteriorComparable(periodo, anterior, new Date('no-es-fecha'))).toThrow(
+      RangeError,
+    );
   });
 });

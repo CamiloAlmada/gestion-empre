@@ -249,3 +249,99 @@ export function variacionPorcentual(
   }
   return { tipo: 'normal', variacionBps };
 }
+
+/**
+ * `true` si `fecha` cae DENTRO de `periodo` (semiabierto: `desde` inclusive,
+ * `hasta` exclusivo). Generaliza la comprobación de rango que ya hacen
+ * `agruparPorPeriodo` (vía `periodoDe` por ítem) y las queries de Firestore
+ * (`where('fecha', '>=', periodo.desde), where('fecha', '<', periodo.hasta)`)
+ * para cuando el caller ya tiene los items en memoria y solo necesita
+ * filtrarlos contra un `Periodo` ya calculado — en particular, una ventana
+ * TRUNCADA que no coincide con ningún bucket de calendario (ver
+ * `periodoAnteriorComparable`, que es exactamente ese caso).
+ */
+export function dentroDePeriodo(fecha: Date, periodo: Periodo): boolean {
+  return fecha.getTime() >= periodo.desde.getTime() && fecha.getTime() < periodo.hasta.getTime();
+}
+
+/**
+ * `true` si `periodo` TODAVÍA NO CERRÓ al instante `ahora` (`ahora <
+ * periodo.hasta`). Con `ahora >= periodo.hasta` el período ya terminó
+ * (incluye el instante límite exacto: cerrado, no en curso).
+ *
+ * Distinguirlo es la base de la honestidad de un reporte "del período
+ * actual": uno en curso solo tiene datos PARCIALES, y compararlo contra un
+ * período anterior COMPLETO siempre muestra una caída falsa (ver
+ * `periodoAnteriorComparable`, que corrige exactamente ese sesgo).
+ *
+ * @throws {RangeError} si `periodo.hasta` o `ahora` son inválidas.
+ */
+export function periodoEnCurso(periodo: Periodo, ahora: Date): boolean {
+  if (!esFechaValida(periodo.hasta) || !esFechaValida(ahora)) {
+    throw new RangeError('periodoEnCurso requiere fechas válidas');
+  }
+  return ahora.getTime() < periodo.hasta.getTime();
+}
+
+/**
+ * Ventana del período ANTERIOR comparable con `periodoActual`, corrigiendo
+ * el sesgo de comparar un período EN CURSO contra uno COMPLETO: el día 3 de
+ * un mes, `periodoActual` lleva dos días y medio de datos; compararlo
+ * contra el mes anterior ENTERO (30 días) siempre muestra una caída — no
+ * porque el negocio haya empeorado, sino porque un mes completo casi
+ * siempre supera a dos días y medio. Ningún umbral de "pocos datos" atrapa
+ * este caso (puede haber decenas de ventas en esos dos días y medio: el
+ * problema no es el tamaño de la muestra, es que los dos períodos no son
+ * comparables entre sí).
+ *
+ * La corrección: truncar `periodoAnteriorCompleto` a la MISMA duración
+ * transcurrida de `periodoActual` — "los primeros 3 días de este mes"
+ * contra "los primeros 3 días del mes anterior", nunca contra el mes
+ * anterior entero.
+ *
+ * Con `periodoActual` ya CERRADO (`!periodoEnCurso`) devuelve
+ * `periodoAnteriorCompleto` sin tocar: cerrado contra cerrado ya es una
+ * comparación válida, no hay nada que truncar.
+ *
+ * La duración transcurrida se clampea a la duración de
+ * `periodoAnteriorCompleto` (ej. el día 31 de un mes de 31 días comparado
+ * contra febrero, de 28): no se puede truncar "más" que el período
+ * anterior completo, así que el resultado es el período anterior completo
+ * — el mismo caso que si no estuviera en curso.
+ *
+ * @throws {RangeError} si alguna fecha de `periodoActual`,
+ *   `periodoAnteriorCompleto` o `ahora` es inválida.
+ */
+export function periodoAnteriorComparable(
+  periodoActual: Periodo,
+  periodoAnteriorCompleto: Periodo,
+  ahora: Date,
+): Periodo {
+  for (const fecha of [
+    periodoActual.desde,
+    periodoActual.hasta,
+    periodoAnteriorCompleto.desde,
+    periodoAnteriorCompleto.hasta,
+    ahora,
+  ]) {
+    if (!esFechaValida(fecha)) {
+      throw new RangeError('periodoAnteriorComparable requiere fechas válidas');
+    }
+  }
+
+  if (!periodoEnCurso(periodoActual, ahora)) return periodoAnteriorCompleto;
+
+  const duracionActualMs = periodoActual.hasta.getTime() - periodoActual.desde.getTime();
+  const transcurridoMs = Math.min(
+    Math.max(ahora.getTime() - periodoActual.desde.getTime(), 0),
+    duracionActualMs,
+  );
+  const duracionAnteriorMs =
+    periodoAnteriorCompleto.hasta.getTime() - periodoAnteriorCompleto.desde.getTime();
+  const truncadoMs = Math.min(transcurridoMs, duracionAnteriorMs);
+
+  return {
+    desde: periodoAnteriorCompleto.desde,
+    hasta: new Date(periodoAnteriorCompleto.desde.getTime() + truncadoMs),
+  };
+}

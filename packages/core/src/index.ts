@@ -105,6 +105,9 @@ export {
   periodoAnterior,
   agruparPorPeriodo,
   variacionPorcentual,
+  dentroDePeriodo,
+  periodoEnCurso,
+  periodoAnteriorComparable,
 } from './periodo.js';
 export {
   type CoberturaCosto,
