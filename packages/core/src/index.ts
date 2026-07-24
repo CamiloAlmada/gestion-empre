@@ -95,6 +95,26 @@ export {
   clasificarInactividad,
 } from './fidelizacion.js';
 export {
+  type Granularidad,
+  type Periodo,
+  type BucketPeriodo,
+  type PuntoComparable,
+  type VariacionPeriodo,
+  type ConfigVariacion,
+  periodoDe,
+  periodoAnterior,
+  agruparPorPeriodo,
+  variacionPorcentual,
+} from './periodo.js';
+export {
+  type CoberturaCosto,
+  type ResumenPeriodo,
+  type ItemRanking,
+  resumenPeriodo,
+  rankingPorProducto,
+  rankingPorCategoria,
+} from './reporteVentas.js';
+export {
   type RgbLineal,
   type ResultadoClamp,
   parseHex,
