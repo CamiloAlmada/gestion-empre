@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useTema, useTemaNegocio, type Estilo, type Tema } from '@gestion/ui';
+import { leerCacheTemaNegocio, useTema, useTemaNegocio, type Estilo, type Tema } from '@gestion/ui';
 
 export type ModoEfectivo = 'light' | 'dark';
 
@@ -61,8 +61,25 @@ export function resolverModoEfectivo(tema: Tema, prefiereOscuro: boolean): ModoE
  * "Colores del negocio" (tercer eje, tanda TM) tiene PRIORIDAD sobre el mapa
  * estático: si hay tokens EFECTIVOS (`useTemaNegocio().tokens` — incluye el
  * preview en vivo del editor de Ajustes, no solo lo persistido), se usa el
- * `themeColor` de ESE modo; `MAPA_THEME_COLOR` queda como fallback para
- * cuando el negocio no tiene tema propio (`tokens === null`).
+ * `themeColor` de ESE modo. `MAPA_THEME_COLOR` es el ÚLTIMO fallback, para
+ * cuando el negocio CONFIRMADO no tiene tema propio (`tokens === null`).
+ *
+ * CASCADA DE 3 NIVELES (BLOQ-1, tanda TM7): con el tri-estado de
+ * `ProveedorTemaNegocioProps.tokens`, `tokens` puede ser `undefined`
+ * ("todavía no sé" — Firestore cargando, o `/login` con permission-denied).
+ * Ahí NO hay que caer directo al mapa estático — eso parpadearía la barra
+ * de estado a un color distinto del que el negocio configuró, apenas React
+ * monta, durante toda la carga (o toda la sesión, en `/login`). En cambio,
+ * `leerCacheTemaNegocio()` lee el MISMO cache que el script anti-FOUC de
+ * `index.html` ya usó para pintar el `<style>`/el `theme-color` inicial
+ * antes del primer paint: es la mejor aproximación disponible mientras no
+ * hay nada confirmado, y coincide con lo que el usuario ya está viendo.
+ * `tokens?.themeColor[modo] ?? leerCacheTemaNegocio()?.themeColor[modo] ??
+ * MAPA_THEME_COLOR[estilo][modo]`. Con `tokens: null` CONFIRMADO, el cache
+ * ya no existe (`ProveedorTemaNegocio` lo borra en el mismo momento que
+ * confirma "sin tema") — la cascada de todos modos intenta leerlo primero,
+ * pero como está vacío cae naturalmente al mapa, sin necesitar un caso
+ * especial para "no usar el cache si es null".
  *
  * El valor inicial (antes de que React monte) lo fija el script anti-FOUC
  * de `index.html` con el mismo criterio (cache de `temaNegocio` primero, el
@@ -79,7 +96,8 @@ export function MetaThemeColor() {
     function aplicar() {
       const modo = resolverModoEfectivo(tema, media.matches);
       const meta = document.querySelector('meta[name="theme-color"]');
-      const color = tokens?.themeColor[modo] ?? MAPA_THEME_COLOR[estilo][modo];
+      const color =
+        tokens?.themeColor[modo] ?? leerCacheTemaNegocio()?.themeColor[modo] ?? MAPA_THEME_COLOR[estilo][modo];
       meta?.setAttribute('content', color);
     }
 

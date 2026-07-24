@@ -16,6 +16,7 @@ export {
   limpiarTemaNegocio,
   escribirCacheTemaNegocio,
   borrarCacheTemaNegocio,
+  leerCacheTemaNegocio,
   type TinteFondo,
   type TemaPersonalizado,
   type TokensGenerados,

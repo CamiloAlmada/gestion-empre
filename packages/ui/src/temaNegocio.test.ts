@@ -4,6 +4,7 @@ import {
   aplicarTemaNegocio,
   borrarCacheTemaNegocio,
   escribirCacheTemaNegocio,
+  leerCacheTemaNegocio,
   limpiarTemaNegocio,
   type CacheTemaNegocio,
 } from './temaNegocio';
@@ -113,6 +114,82 @@ describe('temaNegocio', () => {
       expect(() => escribirCacheTemaNegocio(TOKENS_MIEL)).not.toThrow();
 
       setItemSpy.mockRestore();
+    });
+
+    describe('leerCacheTemaNegocio', () => {
+      it('sin nada guardado: null', () => {
+        expect(leerCacheTemaNegocio()).toBeNull();
+      });
+
+      it('con un cache válido (el mismo que escribirCacheTemaNegocio produce): lo devuelve tal cual', () => {
+        escribirCacheTemaNegocio(TOKENS_MIEL);
+
+        const leido = leerCacheTemaNegocio();
+
+        expect(leido).toEqual({
+          v: 1,
+          css: expect.stringContaining(TOKENS_MIEL.variables['--fondo-light']) as unknown as string,
+          themeColor: TOKENS_MIEL.themeColor,
+        });
+      });
+
+      it('JSON corrupto (no parsea): null, sin lanzar', () => {
+        window.localStorage.setItem('temaNegocio', '{no es json');
+
+        expect(() => leerCacheTemaNegocio()).not.toThrow();
+        expect(leerCacheTemaNegocio()).toBeNull();
+      });
+
+      it('v de otra versión: null', () => {
+        window.localStorage.setItem(
+          'temaNegocio',
+          JSON.stringify({ v: 2, css: ':root[data-tema-negocio] {\n}', themeColor: { light: '#fff', dark: '#000' } }),
+        );
+
+        expect(leerCacheTemaNegocio()).toBeNull();
+      });
+
+      it('css que no empieza con el selector esperado: null', () => {
+        window.localStorage.setItem(
+          'temaNegocio',
+          JSON.stringify({ v: 1, css: 'body { color: red }', themeColor: { light: '#fff', dark: '#000' } }),
+        );
+
+        expect(leerCacheTemaNegocio()).toBeNull();
+      });
+
+      it('css con un intento de cierre de </style> inyectado: null (salvaguarda contra inyección)', () => {
+        window.localStorage.setItem(
+          'temaNegocio',
+          JSON.stringify({
+            v: 1,
+            css: ':root[data-tema-negocio] {\n}</style><script>alert(1)</script>',
+            themeColor: { light: '#fff', dark: '#000' },
+          }),
+        );
+
+        expect(leerCacheTemaNegocio()).toBeNull();
+      });
+
+      it('themeColor con una clave faltante o no-string: null', () => {
+        window.localStorage.setItem(
+          'temaNegocio',
+          JSON.stringify({ v: 1, css: ':root[data-tema-negocio] {\n}', themeColor: { light: '#fff' } }),
+        );
+
+        expect(leerCacheTemaNegocio()).toBeNull();
+      });
+
+      it('tolera localStorage no disponible (getItem lanza): null, sin propagar', () => {
+        const getItemSpy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+          throw new Error('localStorage no disponible');
+        });
+
+        expect(() => leerCacheTemaNegocio()).not.toThrow();
+        expect(leerCacheTemaNegocio()).toBeNull();
+
+        getItemSpy.mockRestore();
+      });
     });
   });
 });
