@@ -30,17 +30,20 @@ export interface SincronizadorTemaNegocioProps {
  *
  * - Doc CONFIRMADO ausente (lectura exitosa, sin doc) o corrupto/versión
  *   futura (`temaNegocioConverter` lo tolera y devuelve `null`): el negocio
- *   de verdad no tiene tema propio → tokens `null`, la app cae al tema base.
- * - Error de lectura (permission-denied en `/login`, o cualquier otro
- *   transitorio): NO es una confirmación de nada, es "no sé". Si
- *   reaccionáramos a esto pasando `tokens: null` le estaríamos ORDENANDO a
- *   `ProveedorTemaNegocio` que limpie el tema aplicado — y el tema aplicado
- *   en `/login` es justo el que el script anti-FOUC de `index.html` ya pintó
- *   desde el cache de `localStorage` ANTES de que React monte. Limpiarlo acá
- *   sería pisar ese trabajo con el propio primer render de este componente.
- *   Por eso: ante un error, se mantiene el último valor CONFIRMADO tal cual
- *   estaba (ver el effect de abajo, que solo actualiza el estado cuando
- *   `cargando` es `false` Y `error` es `null`).
+ *   de verdad no tiene tema propio → tokens `null` (CONFIRMADO, ver el
+ *   tri-estado de `ProveedorTemaNegocioProps.tokens` en `@gestion/ui`), la
+ *   app cae al tema base.
+ * - Cargando, o error de lectura (permission-denied en `/login`, o
+ *   cualquier otro transitorio): NO es una confirmación de nada, es "no
+ *   sé" — se mantiene el último valor CONFIRMADO tal cual estaba (ver el
+ *   effect de abajo, que solo actualiza el estado cuando `cargando` es
+ *   `false` Y `error` es `null`). El estado ARRANCA en `undefined`
+ *   (tri-estado, no `null`) precisamente para que este "no sé" tenga un
+ *   valor propio que `ProveedorTemaNegocio` sabe NO tocar (ni el DOM que
+ *   pintó el script anti-FOUC ni el cache de `localStorage`) — un `null`
+ *   inicial habría sido indistinguible de "confirmado sin tema" y le habría
+ *   ordenado limpiar todo en cada arranque, incluido en `/login` (bug real
+ *   de producción, ver el review que motivó este tri-estado).
  *
  * RESUSCRIPCIÓN AL INICIAR SESIÓN: el SDK de Firestore no reintenta solo un
  * listener de `onSnapshot` que recibió `permission-denied` — queda
@@ -78,7 +81,9 @@ export function SincronizadorTemaNegocio({ children }: SincronizadorTemaNegocioP
     }
   }, [semilla]);
 
-  const [tokens, setTokens] = useState<TokensGenerados | null>(null);
+  // Arranca en `undefined` ("todavía no sé"), NO en `null` ("confirmado sin
+  // tema") — ver el JSDoc de arriba y el de `ProveedorTemaNegocioProps.tokens`.
+  const [tokens, setTokens] = useState<TokensGenerados | null | undefined>(undefined);
 
   useEffect(() => {
     // Ver el comentario "PERMISOS VS. SIN TEMA" arriba: mientras carga o hay

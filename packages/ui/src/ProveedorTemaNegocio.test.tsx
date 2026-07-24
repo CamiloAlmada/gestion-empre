@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render, renderHook, screen } from '@testing-library/react';
 import { generarPaleta, type TokensGenerados } from '@gestion/core';
 import { ProveedorTemaNegocio, useTemaNegocio, type EstadoTemaNegocio } from './ProveedorTemaNegocio';
+import { aplicarTemaNegocio, escribirCacheTemaNegocio } from './temaNegocio';
 
 // Tokens REALES del motor (no maquetas a mano) — dos matices distintos para
 // los tests que necesitan diferenciar "el tema anterior" de "el nuevo".
@@ -11,10 +12,22 @@ const TOKENS_MIEL: TokensGenerados = generarPaleta({ version: 1, matiz: 78, tint
 const TOKENS_LAVANDA: TokensGenerados = generarPaleta({ version: 1, matiz: 300, tinte: 'frio' });
 const TOKENS_MAR: TokensGenerados = generarPaleta({ version: 1, matiz: 245, tinte: 'frio' });
 
-function envolver(tokens: TokensGenerados | null) {
+function envolver(tokens: TokensGenerados | null | undefined) {
   return function Envoltorio({ children }: { children: ReactNode }) {
     return <ProveedorTemaNegocio tokens={tokens}>{children}</ProveedorTemaNegocio>;
   };
+}
+
+/** Simula lo que el script anti-FOUC de `index.html` ya dejó en el DOM y en
+ * `localStorage` ANTES de que React monte (ver
+ * `packages/config/anti-fouc-tema-negocio.md`): un `<style id="tema-negocio">`
+ * con contenido real, el atributo en `<html>`, y el mismo cache que
+ * `escribirCacheTemaNegocio` produce. Los tests de "arranque con `tokens:
+ * undefined`" (BLOQ-1, tanda TM7) parten de este estado para comprobar que
+ * el proveedor NO lo toca mientras no hay una respuesta confirmada. */
+function simularAntiFouc(tokens: TokensGenerados): void {
+  aplicarTemaNegocio(tokens);
+  escribirCacheTemaNegocio(tokens);
 }
 
 /** Sonda que expone el estado del contexto a la variable que le pasan, para
@@ -63,6 +76,132 @@ describe('ProveedorTemaNegocio / useTemaNegocio', () => {
 
     expect(document.documentElement.hasAttribute('data-tema-negocio')).toBe(false);
     expect(window.localStorage.getItem('temaNegocio')).toBeNull();
+  });
+
+  // BLOQ-1 (review senior de la tanda TM, TM7): `tokens: undefined` es
+  // "todavía no sé" (Firestore cargando, o permission-denied en /login) — a
+  // diferencia de `null` ("confirmado: sin tema"), NO debe tocar ni el DOM
+  // ni el cache. Antes de este fix, el proveedor solo conocía `null`, así
+  // que el primer render con la respuesta de Firestore todavía sin resolver
+  // (el estado inicial real de cualquier `SincronizadorTemaNegocio`) pisaba
+  // con `limpiarTemaNegocio()`/`borrarCacheTemaNegocio()` lo que el script
+  // anti-FOUC de `index.html` ya había pintado — flash tema→base→tema en
+  // CADA arranque con tema guardado, y en /login (permission-denied
+  // permanente durante toda la sesión) el tema quedaba borrado y el cache
+  // eliminado, dejando al PRÓXIMO arranque sin anti-FOUC siquiera.
+  describe('tokens: undefined ("todavía no sé", BLOQ-1)', () => {
+    it('arranque con el DOM y el cache que dejó el anti-FOUC: quedan INTACTOS', () => {
+      simularAntiFouc(TOKENS_MIEL);
+
+      renderHook(() => useTemaNegocio(), { wrapper: envolver(undefined) });
+
+      expect(document.documentElement.hasAttribute('data-tema-negocio')).toBe(true);
+      expect(document.getElementById('tema-negocio')?.textContent).toContain(
+        TOKENS_MIEL.variables['--fondo-light'],
+      );
+      const cache = JSON.parse(window.localStorage.getItem('temaNegocio') ?? '{}') as { css: string };
+      expect(cache.css).toContain(TOKENS_MIEL.variables['--fondo-light']);
+    });
+
+    it('permission-denied desde el arranque (mismo caso que /login sin sesión): ídem intactos', () => {
+      // Mismo escenario que arriba, pero nombrado por el caso de negocio
+      // real que lo dispara: sin sesión, `useDoc` recibe un error de
+      // permisos, nunca una respuesta confirmada — el estado se queda en
+      // `undefined` toda la sesión (ver SincronizadorTemaNegocio.tsx).
+      simularAntiFouc(TOKENS_MIEL);
+
+      renderHook(() => useTemaNegocio(), { wrapper: envolver(undefined) });
+
+      expect(document.documentElement.hasAttribute('data-tema-negocio')).toBe(true);
+      expect(window.localStorage.getItem('temaNegocio')).not.toBeNull();
+    });
+
+    it('sin nada pintado todavía (primer arranque sin cache): tampoco escribe nada', () => {
+      renderHook(() => useTemaNegocio(), { wrapper: envolver(undefined) });
+
+      expect(document.documentElement.hasAttribute('data-tema-negocio')).toBe(false);
+      expect(window.localStorage.getItem('temaNegocio')).toBeNull();
+    });
+
+    it('el contexto expone tokens: undefined (no lo colapsa a null)', () => {
+      const { result } = renderHook(() => useTemaNegocio(), { wrapper: envolver(undefined) });
+
+      expect(result.current.tokens).toBeUndefined();
+    });
+
+    it('al desmontar sin haber tocado nada, no limpia lo que dejó el anti-FOUC', () => {
+      simularAntiFouc(TOKENS_MIEL);
+
+      const { unmount } = renderHook(() => useTemaNegocio(), { wrapper: envolver(undefined) });
+      unmount();
+
+      expect(document.documentElement.hasAttribute('data-tema-negocio')).toBe(true);
+    });
+
+    it('transición undefined → null (doc confirmado inexistente): recién ahí limpia DOM y cache', () => {
+      simularAntiFouc(TOKENS_MIEL);
+      let estado: EstadoTemaNegocio | null = null;
+      const onEstado = (e: EstadoTemaNegocio) => {
+        estado = e;
+      };
+
+      const { rerender } = render(
+        <ProveedorTemaNegocio tokens={undefined}>
+          <Sonda onEstado={onEstado} />
+        </ProveedorTemaNegocio>,
+      );
+      // Todavía intacto: la carga inicial no resolvió.
+      expect(document.documentElement.hasAttribute('data-tema-negocio')).toBe(true);
+
+      rerender(
+        <ProveedorTemaNegocio tokens={null}>
+          <Sonda onEstado={onEstado} />
+        </ProveedorTemaNegocio>,
+      );
+
+      expect(document.documentElement.hasAttribute('data-tema-negocio')).toBe(false);
+      expect(window.localStorage.getItem('temaNegocio')).toBeNull();
+      expect((estado as EstadoTemaNegocio | null)?.tokens).toBeNull();
+    });
+
+    it('transición undefined → tokens (doc válido): aplica y cachea recién ahí', () => {
+      let estado: EstadoTemaNegocio | null = null;
+      const onEstado = (e: EstadoTemaNegocio) => {
+        estado = e;
+      };
+
+      const { rerender } = render(
+        <ProveedorTemaNegocio tokens={undefined}>
+          <Sonda onEstado={onEstado} />
+        </ProveedorTemaNegocio>,
+      );
+      expect(document.documentElement.hasAttribute('data-tema-negocio')).toBe(false);
+
+      rerender(
+        <ProveedorTemaNegocio tokens={TOKENS_MIEL}>
+          <Sonda onEstado={onEstado} />
+        </ProveedorTemaNegocio>,
+      );
+
+      expect(document.documentElement.hasAttribute('data-tema-negocio')).toBe(true);
+      expect((estado as EstadoTemaNegocio | null)?.tokens?.tema.matiz).toBe(78);
+      expect(window.localStorage.getItem('temaNegocio')).not.toBeNull();
+    });
+
+    it('previsualizar funciona igual mientras tokens todavía es undefined (el editor solo abre logueado, pero el tipo no lo exige)', () => {
+      const { result } = renderHook(() => useTemaNegocio(), { wrapper: envolver(undefined) });
+
+      act(() => {
+        result.current.previsualizar(TOKENS_MAR);
+      });
+
+      expect(result.current.tokens?.tema.matiz).toBe(245);
+      expect(document.getElementById('tema-negocio')?.textContent).toContain(
+        TOKENS_MAR.variables['--fondo-light'],
+      );
+      // El preview nunca toca el cache — mismo criterio que con tokens null.
+      expect(window.localStorage.getItem('temaNegocio')).toBeNull();
+    });
   });
 
   it('al desmontar, limpia el documento (no deja el atributo pisado)', () => {

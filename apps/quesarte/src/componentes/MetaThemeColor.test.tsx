@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { generarPaleta } from '@gestion/core';
-import { ProveedorTema, ProveedorTemaNegocio, useTema, useTemaNegocio } from '@gestion/ui';
+import { generarPaleta, type TokensGenerados } from '@gestion/core';
+import { escribirCacheTemaNegocio, ProveedorTema, ProveedorTemaNegocio, useTema, useTemaNegocio } from '@gestion/ui';
 import { MAPA_THEME_COLOR, MetaThemeColor } from './MetaThemeColor';
 
 /**
@@ -74,6 +74,20 @@ function envolver({ children }: { children: ReactNode }) {
       <ProveedorTemaNegocio tokens={null}>{children}</ProveedorTemaNegocio>
     </ProveedorTema>
   );
+}
+
+/** Variante de `envolver` con `tokens` parametrizable — para los tests de
+ * la cascada de 3 niveles (BLOQ-1, tanda TM7): con `tokens: undefined`
+ * ("todavía no sé"), `MetaThemeColor` debe caer al cache de `localStorage`
+ * ANTES que al mapa estático. */
+function envolverCon(tokens: TokensGenerados | null | undefined) {
+  return function Envoltorio({ children }: { children: ReactNode }) {
+    return (
+      <ProveedorTema>
+        <ProveedorTemaNegocio tokens={tokens}>{children}</ProveedorTemaNegocio>
+      </ProveedorTema>
+    );
+  };
 }
 
 function leerContentMeta(): string | null {
@@ -212,5 +226,57 @@ describe('MetaThemeColor', () => {
     fireEvent.click(screen.getByRole('button', { name: 'restaurar tema negocio' }));
 
     expect(leerContentMeta()).toBe(MAPA_THEME_COLOR.minimalista.light);
+  });
+
+  // BLOQ-1 (review senior de la tanda TM, TM7): cascada de 3 niveles —
+  // `tokens?.themeColor` → `leerCacheTemaNegocio()?.themeColor` → el mapa
+  // estático. El nivel del medio es el que faltaba: sin él, mientras
+  // `tokens` es `undefined` ("todavía no sé" — Firestore cargando, o
+  // `/login` con permission-denied) la barra de estado saltaba al color
+  // BASE, distinto del que el negocio configuró, aunque el resto del
+  // documento (el `<style>` que pintó el anti-FOUC) siguiera mostrando el
+  // tema del negocio — una inconsistencia visible entre el fondo y la barra
+  // de estado del navegador/SO.
+  describe('tokens undefined ("todavía no sé"): cae al cache antes que al mapa (BLOQ-1)', () => {
+    it('(d) con un cache de temaNegocio válido en localStorage, usa SU themeColor durante la carga', () => {
+      instalarMatchMediaFalso(false);
+      const tokensCache = generarPaleta(SEMILLA_TEMA_NEGOCIO);
+      escribirCacheTemaNegocio(tokensCache);
+
+      render(<Arnes />, { wrapper: envolverCon(undefined) });
+
+      expect(leerContentMeta()).toBe(tokensCache.themeColor.light);
+    });
+
+    it('sigue el modo efectivo (dark) también con el color del cache', () => {
+      instalarMatchMediaFalso(false);
+      const tokensCache = generarPaleta(SEMILLA_TEMA_NEGOCIO);
+      escribirCacheTemaNegocio(tokensCache);
+
+      render(<Arnes />, { wrapper: envolverCon(undefined) });
+      fireEvent.click(screen.getByRole('button', { name: 'tema dark' }));
+
+      expect(leerContentMeta()).toBe(tokensCache.themeColor.dark);
+    });
+
+    it('sin cache disponible, cae al mapa estático (mismo criterio que hoy)', () => {
+      instalarMatchMediaFalso(false);
+      // Sin `escribirCacheTemaNegocio`: localStorage limpio (ver beforeEach).
+
+      render(<Arnes />, { wrapper: envolverCon(undefined) });
+
+      expect(leerContentMeta()).toBe(MAPA_THEME_COLOR.minimalista.light);
+    });
+
+    it('en cuanto tokens se confirma (ya no undefined), el cache deja de usarse: gana la respuesta real', () => {
+      instalarMatchMediaFalso(false);
+      const tokensCache = generarPaleta(SEMILLA_TEMA_NEGOCIO);
+      escribirCacheTemaNegocio(tokensCache);
+      const tokensConfirmados = generarPaleta({ version: 1, matiz: 130, tinte: 'neutro' });
+
+      render(<Arnes />, { wrapper: envolverCon(tokensConfirmados) });
+
+      expect(leerContentMeta()).toBe(tokensConfirmados.themeColor.light);
+    });
   });
 });

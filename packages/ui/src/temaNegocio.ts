@@ -121,3 +121,47 @@ export function borrarCacheTemaNegocio(): void {
     // Sin localStorage disponible no hay nada que borrar.
   }
 }
+
+/** Type guard con las MISMAS verificaciones de sanidad que el script
+ * anti-FOUC de `index.html` (duplicadas a propósito ahí, ver
+ * `packages/config/anti-fouc-tema-negocio.md`): un dato de `JSON.parse`
+ * sobre un string arbitrario de `localStorage` no tiene ningún tipo
+ * garantizado, y viaja a un `<style>`/`<meta content>` reales. */
+function esCacheTemaNegocioValido(x: unknown): x is CacheTemaNegocio {
+  if (typeof x !== 'object' || x === null) return false;
+  const o = x as Record<string, unknown>;
+  if (o['v'] !== 1) return false;
+  if (typeof o['css'] !== 'string') return false;
+  if (!o['css'].startsWith(':root[data-tema-negocio]')) return false;
+  if (o['css'].includes('</style')) return false;
+  const themeColor = o['themeColor'];
+  if (typeof themeColor !== 'object' || themeColor === null) return false;
+  const tc = themeColor as Record<string, unknown>;
+  return typeof tc['light'] === 'string' && typeof tc['dark'] === 'string';
+}
+
+/**
+ * Lee y valida el cache de `localStorage['temaNegocio']` (el mismo que
+ * `escribirCacheTemaNegocio` escribe y que el script anti-FOUC de
+ * `index.html` consume ANTES de que React monte). Pensado para el breve
+ * tramo en que el runtime todavía no tiene una respuesta CONFIRMADA de
+ * Firestore (`tokens: undefined`, ver `ProveedorTemaNegocio`): en ese
+ * tramo, un consumidor que necesite un color YA (p. ej. `MetaThemeColor`
+ * para el `theme-color` de la barra de estado) puede caer acá antes de caer
+ * al mapa estático por defecto — es la MISMA fuente que ya pintó el
+ * `<style>`/atributo que el anti-FOUC dejó en el documento, así que usarla
+ * de fallback es coherente con lo que el usuario ya está viendo en pantalla.
+ *
+ * Devuelve `null` ante cualquier dato ausente, corrupto o que no pase las
+ * verificaciones de sanidad — nunca lanza.
+ */
+export function leerCacheTemaNegocio(): CacheTemaNegocio | null {
+  try {
+    const crudo = window.localStorage.getItem(CLAVE_LOCALSTORAGE_TEMA_NEGOCIO);
+    if (crudo === null) return null;
+    const datos: unknown = JSON.parse(crudo);
+    return esCacheTemaNegocioValido(datos) ? datos : null;
+  } catch {
+    return null;
+  }
+}
