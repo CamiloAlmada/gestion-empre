@@ -13,7 +13,11 @@ function ratioDe(tokens: TokensGenerados, id: string): number {
 }
 
 describe('EL TEOREMA: AA por construcción en las 1080 paletas', () => {
-  it('genera matiz 0..359 × 3 tintes sin lanzar y con todosPasan', () => {
+  // Timeout explícito (MED-1 del review senior de la tanda TM): aislado corre
+  // en <1s, pero bajo `turbo --force` (lint+build+tests de todos los paquetes
+  // en paralelo) el default de 5s de vitest puede expirar por contención de
+  // CPU — y ESTE test es el gate del contrato §7: no puede dar rojo espurio.
+  it('genera matiz 0..359 × 3 tintes sin lanzar y con todosPasan', { timeout: 60_000 }, () => {
     const inicio = Date.now();
     let generadas = 0;
     for (let matiz = 0; matiz < 360; matiz++) {
