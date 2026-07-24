@@ -299,3 +299,29 @@ describe('Reportes - selector de período', () => {
     expect(mes.getAttribute('aria-pressed')).toBe('false');
   });
 });
+
+describe('Reportes - "Para mirar" reenvía el período al drill-down (tarea B2)', () => {
+  it('sin tocar el selector, el link no lleva query (el default "mes" es implícito en las DOS pantallas por igual)', () => {
+    configurarVentas(estadoOk([]));
+
+    renderizar();
+
+    // No hace falta escribir el default a la URL: `granularidadDesdeParam`
+    // resuelve 'mes' en la home y en el drill-down con el MISMO fallback, así
+    // que un link sin `?periodo=` sigue siendo el período correcto de
+    // cualquier lado. Ver el siguiente test para el caso que sí importa: el
+    // usuario ELIGIÓ un período distinto del default.
+    const link = screen.getByRole('link', { name: /Rentabilidad por producto y categoría/ });
+    expect(link.getAttribute('href')).toBe('/reportes/rentabilidad');
+  });
+
+  it('cambiar el período en la home actualiza el link SIN que la tarea B2 haya tocado registro.ts', () => {
+    configurarVentas(estadoOk([]));
+
+    renderizar();
+    fireEvent.click(screen.getByRole('button', { name: 'Semana' }));
+
+    const link = screen.getByRole('link', { name: /Rentabilidad por producto y categoría/ });
+    expect(link.getAttribute('href')).toBe('/reportes/rentabilidad?periodo=semana');
+  });
+});

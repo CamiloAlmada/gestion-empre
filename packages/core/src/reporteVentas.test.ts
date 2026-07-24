@@ -3,6 +3,8 @@ import {
   resumenPeriodo,
   rankingPorProducto,
   rankingPorCategoria,
+  margenDeRanking,
+  proporcionGanancia,
   type ItemRanking,
 } from './reporteVentas.js';
 import { money } from './money.js';
@@ -207,8 +209,73 @@ describe('rankingPorCategoria', () => {
         etiqueta: 'Sin categoría',
         facturacionCents: money(1_000),
         gananciaCents: money(500),
+        lineasConCosto: 1,
         lineasSinCosto: 0,
       },
     ]);
+  });
+});
+
+describe('ranking — lineasConCosto (tarea B2: separar "sin costo conocido" de "ganancia real 0")', () => {
+  it('con al menos una línea de costo conocido, lineasConCosto > 0 aunque haya otras sin costo', () => {
+    const idCompartido = 'prod-mixto';
+    const v = venta([
+      itemConCosto(1_000, 600, { productoId: idCompartido }),
+      itemSinCosto(500, { productoId: idCompartido }),
+    ]);
+    const ranking = rankingPorProducto([v]);
+    expect(ranking[0]!.lineasConCosto).toBe(1);
+    expect(ranking[0]!.lineasSinCosto).toBe(1);
+  });
+
+  it('sin NINGUNA línea con costo conocido, lineasConCosto es 0 y gananciaCents es 0 (no "0 de ganancia real")', () => {
+    const idCompartido = 'prod-fantasma-costo';
+    const v = venta([
+      itemSinCosto(1_000, { productoId: idCompartido }),
+      itemSinCosto(2_000, { productoId: idCompartido }),
+    ]);
+    const ranking = rankingPorProducto([v]);
+    expect(ranking[0]!.lineasConCosto).toBe(0);
+    expect(ranking[0]!.lineasSinCosto).toBe(2);
+    expect(ranking[0]!.gananciaCents).toBe(money(0));
+    expect(ranking[0]!.facturacionCents).toBe(money(3_000));
+  });
+});
+
+describe('margenDeRanking', () => {
+  it('ganancia / facturación en bps, redondeado half-up', () => {
+    expect(margenDeRanking({ facturacionCents: money(10_000), gananciaCents: money(4_000) })).toBe(4_000); // 40%
+  });
+
+  it('permite negativo (venta a pérdida), mismo criterio que margenDesdePrecio', () => {
+    expect(margenDeRanking({ facturacionCents: money(10_000), gananciaCents: money(-1_000) })).toBe(-1_000);
+  });
+
+  it('facturación 0 o negativa: null (nunca dividir por cero)', () => {
+    expect(margenDeRanking({ facturacionCents: money(0), gananciaCents: money(0) })).toBeNull();
+  });
+
+  it('el caso central de la tarea B2: alta facturación con margen bajo se distingue de una con margen alto', () => {
+    // Producto A: factura mucho, deja poco (10% de margen).
+    const margenA = margenDeRanking({ facturacionCents: money(100_000), gananciaCents: money(10_000) });
+    // Producto B: factura poco, pero con mucho margen (80%).
+    const margenB = margenDeRanking({ facturacionCents: money(1_000), gananciaCents: money(800) });
+    expect(margenA).toBe(1_000); // 10%
+    expect(margenB).toBe(8_000); // 80%
+    expect(margenA).toBeLessThan(margenB!);
+  });
+});
+
+describe('proporcionGanancia', () => {
+  it('la ganancia máxima da 100', () => {
+    expect(proporcionGanancia(money(5_000), money(5_000))).toBe(100);
+  });
+
+  it('la mitad de la ganancia máxima da 50', () => {
+    expect(proporcionGanancia(money(2_500), money(5_000))).toBe(50);
+  });
+
+  it('maxGananciaCents <= 0: devuelve 0 (nunca dividir por cero)', () => {
+    expect(proporcionGanancia(money(0), money(0))).toBe(0);
   });
 });

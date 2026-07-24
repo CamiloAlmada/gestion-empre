@@ -116,6 +116,8 @@ export {
   resumenPeriodo,
   rankingPorProducto,
   rankingPorCategoria,
+  margenDeRanking,
+  proporcionGanancia,
 } from './reporteVentas.js';
 export {
   type RgbLineal,

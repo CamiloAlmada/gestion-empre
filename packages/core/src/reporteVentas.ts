@@ -129,6 +129,14 @@ export interface ItemRanking {
   readonly facturacionCents: Money;
   /** Ganancia aportada (misma política que `resumenPeriodo`: solo líneas con costo conocido). Criterio de orden. */
   readonly gananciaCents: Money;
+  /**
+   * Cuántas de sus líneas SÍ tenían costo congelado. `0` significa que
+   * `gananciaCents` es `money(0)` porque no se supo el costo de NINGUNA
+   * línea, no porque la clave haya dejado 0 de ganancia real — la pantalla
+   * (tarea B2) usa este campo para separar esas claves en un grupo aparte,
+   * en vez de mostrarlas mezcladas en el ranking como si "no dejaran plata".
+   */
+  readonly lineasConCosto: number;
   /** Cuántas de sus líneas no tenían costo congelado (para que la pantalla pueda rotular el dato como parcial). */
   readonly lineasSinCosto: number;
 }
@@ -137,6 +145,7 @@ interface AcumuladorRanking {
   etiqueta: string;
   facturacion: number;
   ganancia: number;
+  conCosto: number;
   sinCosto: number;
 }
 
@@ -164,13 +173,18 @@ function rankingPor(
         etiqueta: etiquetaDe(item),
         facturacion: 0,
         ganancia: 0,
+        conCosto: 0,
         sinCosto: 0,
       };
 
       entrada.facturacion += item.subtotalCents;
       const costo = costoCongeladoDe(item);
-      if (costo !== null) entrada.ganancia += item.subtotalCents - costo;
-      else entrada.sinCosto += 1;
+      if (costo !== null) {
+        entrada.ganancia += item.subtotalCents - costo;
+        entrada.conCosto += 1;
+      } else {
+        entrada.sinCosto += 1;
+      }
 
       acumulado.set(clave, entrada);
     }
@@ -182,6 +196,7 @@ function rankingPor(
       etiqueta: v.etiqueta,
       facturacionCents: money(v.facturacion),
       gananciaCents: money(v.ganancia),
+      lineasConCosto: v.conCosto,
       lineasSinCosto: v.sinCosto,
     }))
     .sort((a, b) => b.gananciaCents - a.gananciaCents);
@@ -210,4 +225,43 @@ export function rankingPorCategoria(
 ): ItemRanking[] {
   const etiquetaDe = (item: ItemVenta): string => categoriaDeProducto(item.productoId) ?? SIN_CATEGORIA;
   return rankingPor(ventas, etiquetaDe, etiquetaDe);
+}
+
+/**
+ * Margen sobre facturación de una fila del ranking (`gananciaCents /
+ * facturacionCents`, en bps enteros — mismo idioma que `margen.ts`).
+ *
+ * Es el número que hace evidente "vende mucho, deja poco" en una sola cifra
+ * por fila (tarea B2: consumido como `valorSecundario` de `FilaRanking`,
+ * `packages/ui`) — sin él, distinguir un producto de alta facturación y baja
+ * ganancia exige comparar dos listas mentalmente, que es justo lo que el
+ * drill-down existe para evitar. Vive en `packages/core` (regla de oro 3:
+ * cero aritmética de plata en un componente) aunque el consumidor sea una
+ * sola pantalla.
+ *
+ * `null` si `facturacionCents <= 0`: sin facturación no hay margen que
+ * expresar (evita dividir por cero, mismo criterio que `margenDesdePrecio`).
+ */
+export function margenDeRanking(
+  item: Pick<ItemRanking, 'facturacionCents' | 'gananciaCents'>,
+): number | null {
+  if (item.facturacionCents <= 0) return null;
+  return redondearHalfUp((item.gananciaCents * BPS_TOTAL) / item.facturacionCents);
+}
+
+/**
+ * Proporción `0-100` de `gananciaCents` respecto de `maxGananciaCents` (la
+ * mayor ganancia del ranking que se está mostrando) — el ancho de la barra
+ * de `FilaRanking`. El resultado no es una cifra de negocio (es layout), pero
+ * la operación de origen SÍ es aritmética de plata, así que vive acá y no en
+ * la pantalla (regla de oro 3). `FilaRanking` clampea el resultado a `[0,
+ * 100]` por robustez de rango (una ganancia negativa, venta a pérdida, no
+ * debe romper el layout); acá no hace falta duplicar ese clamp.
+ *
+ * `0` si `maxGananciaCents <= 0`: sin una ganancia máxima positiva no hay
+ * proporción que calcular (evita dividir por cero).
+ */
+export function proporcionGanancia(gananciaCents: Money, maxGananciaCents: Money): number {
+  if (maxGananciaCents <= 0) return 0;
+  return (gananciaCents / maxGananciaCents) * 100;
 }

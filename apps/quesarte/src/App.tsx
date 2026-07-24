@@ -70,6 +70,9 @@ const DetalleClientePantalla = lazy(() =>
 const Reportes = lazy(() =>
   import('./pantallas/Reportes').then((m) => ({ default: m.Reportes })),
 );
+const RankingRentabilidad = lazy(() =>
+  import('./pantallas/RankingRentabilidad').then((m) => ({ default: m.RankingRentabilidad })),
+);
 const Ajustes = lazy(() => import('./pantallas/Ajustes').then((m) => ({ default: m.Ajustes })));
 const Usuarios = lazy(() =>
   import('./pantallas/Usuarios').then((m) => ({ default: m.Usuarios })),
@@ -178,6 +181,17 @@ export function App() {
             element={
               <RutaSoloAdmin>
                 <Reportes />
+              </RutaSoloAdmin>
+            }
+          />
+          {/* Drill-down de rentabilidad por producto/categoría (Fase 3,
+              tanda B2, docs/PLAN-ACTIVO.md): ruta real propia, mismo criterio
+              de protección que Reportes (docs/06-ui-ux.md §2). */}
+          <Route
+            path="reportes/rentabilidad"
+            element={
+              <RutaSoloAdmin>
+                <RankingRentabilidad />
               </RutaSoloAdmin>
             }
           />

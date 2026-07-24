@@ -56,6 +56,25 @@ export function etiquetasPeriodo(granularidad: Granularidad): EtiquetasPeriodo {
   return ETIQUETAS_POR_GRANULARIDAD[granularidad];
 }
 
+const GRANULARIDADES_VALIDAS: readonly Granularidad[] = ['dia', 'semana', 'mes'];
+
+/**
+ * Parsea el query param `periodo` de la URL a una `Granularidad` válida, o
+ * `null` si está ausente o no es uno de los tres valores conocidos — el
+ * caller decide el default (`Reportes.tsx` y el drill-down de rentabilidad,
+ * tarea B2, los dos usan `'mes'`).
+ *
+ * Vive acá (helper compartido, sin React ni Firebase) para que el período
+ * elegido en la home viaje al drill-down con el MISMO criterio de parseo en
+ * ambos lados — doc de la tarea B2: "el período seleccionado en la home
+ * tiene que viajar… un parámetro en la URL es el camino natural".
+ */
+export function granularidadDesdeParam(valor: string | null): Granularidad | null {
+  return valor !== null && (GRANULARIDADES_VALIDAS as readonly string[]).includes(valor)
+    ? (valor as Granularidad)
+    : null;
+}
+
 /**
  * Título del hero de ganancia. Con el período EN CURSO usa `actualEnCurso`
  * ("Ganancia de lo que va del mes") en vez de `actualCerrado` ("Ganancia de

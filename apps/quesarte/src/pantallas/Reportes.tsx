@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { collection, orderBy, query, where } from 'firebase/firestore';
 import {
   dentroDePeriodo,
@@ -28,6 +28,7 @@ import {
   comparacionGanancia,
   etiquetaComparacion,
   etiquetasPeriodo,
+  granularidadDesdeParam,
   notaCobertura,
   offsetMinutosLocal,
   tituloGanancia,
@@ -91,12 +92,27 @@ const OPCIONES_PERIODO: readonly OpcionGrupoSegmentado<Granularidad>[] = [
  * `dentroDePeriodo` (core) filtra directamente los items en memoria contra
  * el `Periodo` que corresponda en cada caso.
  *
- * **Registro de reportes** (§1 del brief): `REGISTRO_REPORTES` está vacío
- * hoy porque los drill-downs (rentabilidad por producto/categoría, alertas,
- * rendimiento de compra) son tareas futuras (B2/B3/B4, ver
- * `docs/PLAN-ACTIVO.md`) — la sección "Para mirar" solo se renderiza si el
- * registro trae algo, así que agregar una entrada ahí no requiere tocar
- * esta pantalla.
+ * **Registro de reportes** (§1 del brief): la sección "Para mirar" itera
+ * `REGISTRO_REPORTES` (hoy con la entrada de B2, rentabilidad por
+ * producto/categoría) y solo se renderiza si el registro trae algo — B3/B4
+ * agregan su entrada ahí sin tocar el layout de esta pantalla.
+ *
+ * **El período viaja al drill-down** (tarea B2, doc de la tarea: "el período
+ * seleccionado en la home tiene que viajar… no puede resetearse por su
+ * cuenta"): `granularidad` deja de ser solo `useState` y se respalda en el
+ * query param `?periodo=` (`useSearchParams`, parseado con
+ * `granularidadDesdeParam` — mismo helper que usa el drill-down, para que el
+ * criterio de parseo no diverja entre las dos pantallas). El link de cada
+ * entrada de "Para mirar" reenvía el `search` ACTUAL de esta URL sin conocer
+ * qué reporte es (genérico, no acoplado a "periodo"): así el drill-down
+ * arranca en el mismo período, sobrevive a un refresh (está en su propia
+ * URL) y al botón atrás (cada cambio de período usa `replace`, no apila
+ * historial por cada toque del selector). Es el único punto donde esta
+ * tarea tocó la home: `DefinicionReporte.ruta` es un string estático (no
+ * conoce el período elegido), así que alguna pantalla tenía que ser la que
+ * lo escribe a la URL — ver "Qué asumí" en la salida de la tarea para el
+ * detalle de por qué no alcanzaba con el contrato de `registro.ts` tal cual
+ * estaba.
  *
  * **Offline** (docs/06-ui-ux.md §2, excepción de banner local): con
  * persistencia offline habilitada, `useCollection` sigue resolviendo de
@@ -117,7 +133,8 @@ export function Reportes() {
   // de arriba) el default ya no importa para la HONESTIDAD del número (las
   // 3 granularidades quedan correctas), pero sí para qué tan accionable es
   // el primer vistazo.
-  const [granularidad, setGranularidad] = useState<Granularidad>('mes');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const granularidad = granularidadDesdeParam(searchParams.get('periodo')) ?? 'mes';
   const [intento, setIntento] = useState(0);
   // `ahora` fijo al montar: un reintento (o cualquier re-render) no debe
   // correr el "hoy" de referencia a mitad de sesión — misma foto fija que
@@ -185,6 +202,20 @@ export function Reportes() {
     setIntento((n) => n + 1);
   }
 
+  // `replace: true`: tocar el selector de período no debe apilar una entrada
+  // de historial por toque (el botón atrás del teléfono volvería pantalla
+  // por pantalla de períodos en vez de salir de Reportes).
+  function cambiarGranularidad(valor: Granularidad) {
+    setSearchParams(
+      (previo) => {
+        const siguiente = new URLSearchParams(previo);
+        siguiente.set('periodo', valor);
+        return siguiente;
+      },
+      { replace: true },
+    );
+  }
+
   let contenido;
   if (ventas.cargando) {
     contenido = <p className="py-8 text-center text-texto-secundario">Cargando reportes…</p>;
@@ -229,7 +260,7 @@ export function Reportes() {
       <GrupoSegmentado
         opciones={OPCIONES_PERIODO}
         valor={granularidad}
-        onCambiar={setGranularidad}
+        onCambiar={cambiarGranularidad}
         ariaLabel="Período del reporte"
       />
       {!enLinea && (
@@ -248,8 +279,12 @@ export function Reportes() {
           <ul className="flex flex-col gap-2">
             {REGISTRO_REPORTES.map((reporte) => (
               <li key={reporte.id}>
+                {/* Reenvía el `search` ACTUAL de esta URL (hoy: `?periodo=`)
+                    sin saber qué reporte es del otro lado — así el período
+                    elegido acá viaja al drill-down (tarea B2) y el registro
+                    (`registro.ts`) sigue siendo agnóstico de esa lógica. */}
                 <Link
-                  to={reporte.ruta}
+                  to={{ pathname: reporte.ruta, search: searchParams.toString() }}
                   className="flex flex-col gap-0.5 rounded-card border border-borde bg-superficie p-4 transition-colors hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
                 >
                   <span className="font-medium text-texto">{reporte.titulo}</span>

@@ -6,13 +6,20 @@
  * pantalla.
  *
  * Los drill-downs (rentabilidad por producto/categoría → B2, alertas →
- * B3, rendimiento de compra/viaje → B4) NO están construidos todavía —
- * `docs/PLAN-ACTIVO.md`, tanda B. Este archivo define el contrato para que
- * esas tareas agreguen su entrada sin tocar el layout de la home. Hoy el
- * catálogo está VACÍO a propósito: no hay ningún drill-down real para
- * linkear, y la home no inventa una ruta que todavía no existe (la sección
- * "Para mirar" simplemente no se renderiza mientras esté vacío, ver
- * `Reportes.tsx`).
+ * B3, rendimiento de compra/viaje → B4) son tareas de `docs/PLAN-ACTIVO.md`,
+ * tanda B. Este archivo define el contrato para que esas tareas agreguen su
+ * entrada sin tocar el layout de la home — la sección "Para mirar" solo se
+ * renderiza si el registro trae algo (ver `Reportes.tsx`).
+ *
+ * **Nota del contrato (tarea B2, primera entrada real):** `ruta` es un
+ * string ESTÁTICO, sin contexto de sesión (ej. el período elegido en la
+ * home). Eso alcanza para el caso general (linkear a un drill-down), pero
+ * NO alcanza por sí solo cuando el drill-down necesita heredar un estado
+ * elegido en la home (ver "el período viaja" en el JSDoc de `Reportes.tsx`)
+ * — ese caso lo resuelve la home reenviando su propio `search` de URL al
+ * navegar, sin que este archivo ni `ItemRanking`/`DefinicionReporte` sepan
+ * nada de "período". El contrato de ESTE archivo (agregar una entrada acá
+ * sin tocar el layout) sí se sostuvo.
  */
 export interface DefinicionReporte {
   /** Identificador estable, para `key` de lista y para no duplicar entradas. */
@@ -31,5 +38,12 @@ export interface DefinicionReporte {
   readonly ruta: string;
 }
 
-/** Vacío hasta que B2/B3/B4 agreguen su entrada. Ver el JSDoc de arriba. */
-export const REGISTRO_REPORTES: readonly DefinicionReporte[] = [];
+/** B3/B4 agregan su entrada acá. Ver el JSDoc de arriba. */
+export const REGISTRO_REPORTES: readonly DefinicionReporte[] = [
+  {
+    id: 'rentabilidad',
+    titulo: 'Rentabilidad por producto y categoría',
+    descripcion: 'Qué deja plata de verdad, no solo qué se vende más.',
+    ruta: '/reportes/rentabilidad',
+  },
+];
