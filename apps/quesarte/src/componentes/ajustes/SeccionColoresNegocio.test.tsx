@@ -52,6 +52,14 @@ function renderizar(tokensIniciales: TokensGenerados | null = null) {
   );
 }
 
+/** La galería REAL de `@gestion/ui` (`GaleriaPresetsTema`) expone cada
+ * preset como `role="radio"` dentro de un `radiogroup` (contrato de
+ * accesibilidad de esa tarea, no "button") — mismo criterio de query que
+ * `packages/ui/src/GaleriaPresetsTema.test.tsx`. */
+function elegirPreset(preset: (typeof PRESETS_TEMA)[number]) {
+  fireEvent.click(screen.getByRole('radio', { name: new RegExp(preset.nombre) }));
+}
+
 describe('SeccionColoresNegocio', () => {
   beforeEach(() => {
     instalarMatchMediaFalso();
@@ -83,12 +91,23 @@ describe('SeccionColoresNegocio', () => {
     expect(screen.getByRole('button', { name: 'Volver a los colores originales' })).toBeTruthy();
   });
 
-  it('elegir un preset previsualiza en vivo (aplica data-tema-negocio) y muestra Guardar/Descartar', () => {
+  it('elegir un preset marca su radio (aria-checked), previsualiza en vivo (data-tema-negocio) y muestra Guardar/Descartar', () => {
     renderizar(null);
     expect(document.documentElement.hasAttribute('data-tema-negocio')).toBe(false);
+    // Sin tema persistido, la base es "Miel" (ver TEMA_BASE en el
+    // componente): su radio arranca marcado.
+    expect(screen.getByRole('radio', { name: new RegExp(PRESET_MIEL.nombre) }).getAttribute('aria-checked')).toBe(
+      'true',
+    );
 
-    fireEvent.click(screen.getByRole('button', { name: PRESET_OLIVA.nombre }));
+    elegirPreset(PRESET_OLIVA);
 
+    expect(screen.getByRole('radio', { name: new RegExp(PRESET_OLIVA.nombre) }).getAttribute('aria-checked')).toBe(
+      'true',
+    );
+    expect(screen.getByRole('radio', { name: new RegExp(PRESET_MIEL.nombre) }).getAttribute('aria-checked')).toBe(
+      'false',
+    );
     expect(document.documentElement.hasAttribute('data-tema-negocio')).toBe(true);
     expect(screen.getByRole('button', { name: 'Guardar' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Descartar' })).toBeTruthy();
@@ -100,7 +119,7 @@ describe('SeccionColoresNegocio', () => {
   it('elegir el preset que YA es el persistido no ofrece Guardar/Descartar (sin cambios reales)', () => {
     renderizar(generarPaleta(PRESET_MIEL.tema));
 
-    fireEvent.click(screen.getByRole('button', { name: PRESET_MIEL.nombre }));
+    elegirPreset(PRESET_MIEL);
 
     expect(screen.queryByRole('button', { name: 'Guardar' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Descartar' })).toBeNull();
@@ -109,7 +128,7 @@ describe('SeccionColoresNegocio', () => {
   it('Guardar (en línea) llama a guardarTemaNegocio con el tema elegido y avisa con un toast', async () => {
     renderizar(null);
 
-    fireEvent.click(screen.getByRole('button', { name: PRESET_OLIVA.nombre }));
+    elegirPreset(PRESET_OLIVA);
     fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
 
     await waitFor(() => expect(mocks.guardarTemaNegocio).toHaveBeenCalledTimes(1));
@@ -124,7 +143,7 @@ describe('SeccionColoresNegocio', () => {
     mocks.useOnlineStatus.mockReturnValue(false);
     renderizar(null);
 
-    fireEvent.click(screen.getByRole('button', { name: PRESET_OLIVA.nombre }));
+    elegirPreset(PRESET_OLIVA);
     fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
 
     expect(mocks.guardarTemaNegocio).toHaveBeenCalledTimes(1);
@@ -134,7 +153,7 @@ describe('SeccionColoresNegocio', () => {
   it('Descartar restaura el tema persistido, sin llamar a guardarTemaNegocio', () => {
     renderizar(null);
 
-    fireEvent.click(screen.getByRole('button', { name: PRESET_OLIVA.nombre }));
+    elegirPreset(PRESET_OLIVA);
     expect(document.documentElement.hasAttribute('data-tema-negocio')).toBe(true);
 
     fireEvent.click(screen.getByRole('button', { name: 'Descartar' }));
@@ -143,6 +162,20 @@ describe('SeccionColoresNegocio', () => {
     expect(screen.queryByRole('button', { name: 'Guardar' })).toBeNull();
     // Sin tema persistido (null), restaurar = volver a "sin tema del negocio".
     expect(document.documentElement.hasAttribute('data-tema-negocio')).toBe(false);
+  });
+
+  it('mover el slider de matiz a un valor que no coincide con ningún preset: ningún radio queda marcado y aparece "Personalizado"', () => {
+    renderizar(null);
+    expect(screen.queryByText('Personalizado')).toBeNull();
+
+    // 17° no coincide con ningún preset de PRESETS_TEMA (78/52/130/245/300/215).
+    fireEvent.change(screen.getByRole('slider', { name: 'Matiz de marca' }), { target: { value: '17' } });
+
+    for (const radio of screen.getAllByRole('radio')) {
+      expect(radio.getAttribute('aria-checked')).toBe('false');
+    }
+    expect(screen.getByText('Personalizado')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Guardar' })).toBeTruthy();
   });
 
   it('"Volver a los colores originales" pide confirmación antes de borrar', () => {
@@ -181,6 +214,10 @@ describe('SeccionColoresNegocio', () => {
   it('muestra el panel de contraste AA (ReporteContrasteAa) con el tema activo', () => {
     renderizar(generarPaleta(PRESET_MIEL.tema));
 
-    expect(screen.getByText(/Contraste verificado \(AA\)/)).toBeTruthy();
+    // Texto real de packages/ui/src/ReporteContrasteAa.tsx — el motor
+    // garantiza AA por construcción, así que esta línea es siempre de éxito.
+    expect(screen.getByText('Contraste verificado: todos los pares cumplen AA')).toBeTruthy();
+    // El detalle (tabla de pares) vive plegado en un <details>/<summary>.
+    expect(screen.getByText('Ver detalle')).toBeTruthy();
   });
 });
