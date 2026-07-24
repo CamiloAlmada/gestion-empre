@@ -88,7 +88,7 @@ después de las preguntas abiertas, para no contaminar sus respuestas).
 | --- | --- | --- | --- | --- |
 | B5 | `TarjetaDelta` + `FilaRanking` en `packages/ui` | `semisenior` | — | ✅ **hecha** (con una corrección, ver abajo). 205 tests verdes verificados por el orquestador |
 | A6 | Datos de demo en `quesarte-uy-dev` | `semisenior` | ✅ **hecha** (sin correr todavía) | **Extendió** el seed existente, no lo duplicó. ~4 meses, 523 docs en 8 colecciones, 162 ventas con `costeo` congelado vía `congelarCosteo`, 6 compras cuyo prorrateo se calcula con el mismo módulo puro que usa `CompraPantalla`, 1 anulada, y los 4 casos borde de UI. Mapeo byte a byte contra los converters reales, testeado. Determinista con semilla |
-| B1 | Home de Reportes: registro de reportes, hero del período, sección "Para mirar", estados loading/error/vacío/offline (`fromCache`) | `semisenior` | A3, B5 | Criterio 1 del dueño (doc 04:478); cobertura <100% visible; delta oculto sin base; nota offline verificada |
+| B1 | Home de Reportes: registro de reportes, hero del período, estados loading/error/vacío/offline | `semisenior` | A3, B5 | ✅ **hecha** (con una corrección, ver abajo). Criterio 1 del dueño cumplido; cobertura <100% visible; una sola query para los dos períodos, sin índice compuesto nuevo. El aviso de offline usa `useOnlineStatus` (patrón de toda la app) y no `metadata.fromCache`, que ningún hook del repo expone hoy |
 | B2 | Drill-down de rentabilidad por producto/categoría | `semisenior` | B1 | Ranking por **ganancia aportada**, no por facturación; ítems `sin_costo` en bucket rotulado |
 | B3 | Alertas: vencimientos en N días + stock bajo | `semisenior` (reglas revisadas por `senior`) | A4 | Criterio 3 (doc 04:480); **extender `configuracionGeneralValida`** (`firestore.rules:184`) en la misma tarea que agrega la clave |
 | B4 | Rendimiento de compra/viaje | `semisenior` | A1, A2, B1 | Criterio 2 (doc 04:479); una compra de dev muestra gastos vs ganancia y % vendido; parte granel rotulada "aproximada" |
@@ -177,6 +177,16 @@ dónde salen esas ventas es problema del hook, no del dominio. No antes.
 - El seed de demo existente cubre solo clientes + WhatsApp (doc 08) y arma ítems
   **sin** `costeo`: sin actualizarlo, toda venta sembrada en dev clasifica como
   `legado` y los reportes de ganancia no muestran nada. Va incluido en A6.
+- **Hallazgo del review de B1 (2026-07-24):** la pantalla comparaba el período
+  de calendario EN CURSO contra el anterior COMPLETO. El día 3 de un mes son
+  dos días y medio de ventas contra treinta: una caída del 44% que solo dice
+  que el mes no terminó, y que aparecería todos los meses hasta el día 28.
+  No lo cubre el umbral de "pocos datos" (puede haber 40 ventas en esos días:
+  el problema no es la muestra, es que los períodos no son comparables).
+  Resuelto con `periodoAnteriorComparable` en core, que trunca el anterior a
+  la misma porción transcurrida y clampea cuando lo transcurrido excede al
+  período anterior entero (día 31 contra febrero). Además la pantalla ahora
+  dice cuál está mirando: "Ganancia de lo que va del mes" vs. "de este mes".
 - **Hallazgo del review de A1b (2026-07-24):** el movimiento `ingreso_compra`
   de granel y unidad congelaba `nuevoCostoPromedioCents` (el promedio ponderado
   DESPUÉS del ingreso) en vez del costo real de esa mercadería en esa compra.
