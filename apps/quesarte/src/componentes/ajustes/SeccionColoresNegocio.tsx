@@ -7,15 +7,19 @@ import {
   type TinteFondo,
 } from '@gestion/core';
 import { borrarTemaNegocio, ConfiguracionInvalidaError, guardarTemaNegocio, useOnlineStatus } from '@gestion/firebase-kit';
-import { Button, useTema, useTemaNegocio, useToasts } from '@gestion/ui';
+import {
+  Button,
+  GaleriaPresetsTema,
+  ReporteContrasteAa,
+  SelectorTinte,
+  SliderMatiz,
+  useTema,
+  useTemaNegocio,
+  useToasts,
+} from '@gestion/ui';
 import { db } from '../../firebase';
 import { resolverModoEfectivo } from '../MetaThemeColor';
 import { ModalConfirmarRestablecerTemaNegocio } from './ModalConfirmarRestablecerTemaNegocio';
-// TODO(merge TM-5): estos 4 componentes los trae la tanda TM en
-// `@gestion/ui` con el mismo contrato de props — cuando se mergee, cambiar
-// este import a `'@gestion/ui'` y borrar `stubsEditorTema.tsx` (ver el
-// comentario de ese archivo).
-import { GaleriaPresetsTema, ReporteContrasteAa, SelectorTinte, SliderMatiz } from './stubsEditorTema';
 
 /** Base cuando el negocio todavía no personalizó nada (ni persistido ni
  * draft en curso): el preset "Miel" reproduce el carácter Minimalista
