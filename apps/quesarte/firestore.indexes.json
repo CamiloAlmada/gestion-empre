@@ -1,11 +1,11 @@
 {
   "indexes": [
     {
-      "collectionGroup": "productos",
+      "collectionGroup": "movimientos",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "activo", "order": "ASCENDING" },
-        { "fieldPath": "nombre", "order": "ASCENDING" }
+        { "fieldPath": "tipo", "order": "ASCENDING" },
+        { "fieldPath": "fecha", "order": "DESCENDING" }
       ]
     },
     {
@@ -14,6 +14,14 @@
       "fields": [
         { "fieldPath": "productoId", "order": "ASCENDING" },
         { "fieldPath": "fecha", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "piezas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "estado", "order": "ASCENDING" },
+        { "fieldPath": "fechaVencimiento", "order": "ASCENDING" }
       ]
     },
     {
