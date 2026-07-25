@@ -186,9 +186,8 @@ describe('construirDatosReportes', () => {
     expect(otra.ventas.length).not.toBe(datosReportes.ventas.length);
   });
 
-  it('todos los ids (de todas las colecciones) empiezan con el prefijo demo- y son únicos', () => {
-    const todos = [
-      ...datosReportes.categorias,
+  it('todos los ids (de todas las colecciones) son únicos; los no-categorías llevan prefijo demo-', () => {
+    const conPrefijo = [
       ...datosReportes.proveedores,
       ...datosReportes.productos,
       ...datosReportes.piezas,
@@ -197,9 +196,12 @@ describe('construirDatosReportes', () => {
       ...datosReportes.ventas,
       ...datosReportes.clientes,
     ];
+    const todos = [...datosReportes.categorias, ...conPrefijo];
     const ids = new Set();
-    for (const o of todos) {
+    for (const o of conPrefijo) {
       expect(o.id.startsWith(PREFIJO_DEMO)).toBe(true);
+    }
+    for (const o of todos) {
       expect(ids.has(o.id)).toBe(false);
       ids.add(o.id);
     }

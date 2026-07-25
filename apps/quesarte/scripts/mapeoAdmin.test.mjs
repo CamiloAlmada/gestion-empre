@@ -9,6 +9,7 @@ import {
   proveedorConverter,
   ventaConverter,
 } from '@gestion/firebase-kit';
+import { claveCategoria } from '@gestion/core';
 import { construirDatosDemo, construirDatosReportes } from './generador.mjs';
 import {
   categoriaADoc,
@@ -130,6 +131,12 @@ describe('mapeoAdmin vs. converters reales de @gestion/firebase-kit (Reportes)',
       expect(item.costeo.fuente).toBe('sin_costo');
       expect(item.costeo.costoItemCents).toBeUndefined();
       expect(item.costeo.costoUnitCents).toBeUndefined();
+    }
+  });
+
+  it('todas las categorías del seed tienen id === claveCategoria(nombre)', () => {
+    for (const categoria of datosReportes.categorias) {
+      expect(categoria.id).toBe(claveCategoria(categoria.nombre));
     }
   });
 });

@@ -20,6 +20,7 @@
 
 import {
   calcularSubtotal,
+  claveCategoria,
   congelarCosteo,
   elegirPieza,
   money,
@@ -1135,7 +1136,7 @@ export function construirDatosReportes(ahora, opciones = {}) {
   const rng = crearRng(seed);
 
   const categorias = CATEGORIAS_REPORTES.map((c) => ({
-    id: `${PREFIJO_DEMO}categoria-${c.slug}`,
+    id: claveCategoria(c.nombre),
     nombre: c.nombre,
     orden: c.orden,
   }));

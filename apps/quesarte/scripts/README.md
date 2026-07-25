@@ -157,6 +157,13 @@ documentos cuyo id empieza con `demo-`, en las 8 colecciones que toca el seed
 `seed:demo` sin `--limpiar` primero limpia y después siembra: repetirlo deja
 siempre un estado fresco (para las DOS tandas a la vez).
 
+**Excepción: las categorías del seed NO llevan prefijo `demo-`**, su id es
+la clave canónica del nombre (`claveCategoria(nombre)`). Por eso el comando
+`seed:demo:limpiar` no las borra: son catálogo, no datos operativos. Si
+necesitás limpiarlas, hay que borrarlas a mano desde la consola de Firebase:
+ningún script de esta carpeta borra categorías sueltas
+(`canonicalizar-categorias.mjs` canonicaliza y deduplica, no borra a pedido).
+
 ## Por qué no se prueba contra Firestore real
 
 El DoD de esta tarea prohíbe correr el script contra cualquier proyecto real
