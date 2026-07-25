@@ -127,10 +127,21 @@ export function proveedorADoc(proveedor) {
   return doc;
 }
 
-/** Espejo de `categoriaConverter.toFirestore` en `converters/categoria.ts`. */
+/**
+ * Espejo de `categoriaConverter.toFirestore` en `converters/categoria.ts`.
+ *
+ * `clave` es un campo derivado: `claveCategoria(nombre)` de `@gestion/core`,
+ * o sea `trim().toLowerCase()`. Se replica acá en vez de importarse, igual que
+ * el resto de este archivo (ver cabecera); `mapeoAdmin.test.mjs` compara contra
+ * el converter real, así que una divergencia rompe el test.
+ *
+ * OJO: escribir el campo `clave` NO alcanza para cumplir el invariante de
+ * `categorias/{id}`, que exige además `id === clave`. Elegir ese id es
+ * responsabilidad de quien llama (ver `seed-demo.mjs`).
+ */
 export function categoriaADoc(categoria) {
   const { nombre, orden } = categoria;
-  return { nombre, orden };
+  return { nombre, orden, clave: nombre.trim().toLowerCase() };
 }
 
 /** Espejo de `piezaADoc`/`piezaConverter.toFirestore` en `converters/compra.ts`

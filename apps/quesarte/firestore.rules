@@ -105,12 +105,40 @@ service cloud.firestore {
     // Shape estricto de una categoría (create/update de admin): exactamente
     // { nombre: string no vacío, orden: int >= 0 }. `orden is int` rechaza floats
     // (2.5) y `>= 0` rechaza negativos.
-    function categoriaValida() {
+    // Shape de una categoría MÁS el invariante de unicidad: el id del documento
+    // tiene que ser su propia `clave`.
+    //
+    // "No hay dos categorías con el mismo nombre" es un invariante ENTRE
+    // documentos y las reglas no hacen queries, así que no se puede expresar.
+    // Pero convertido en un invariante DE cada documento —"el id de este
+    // documento es la clave de su nombre"— sí: si TODOS lo cumplen, dos
+    // categorías homónimas serían el mismo documento. Eso es lo que se verifica
+    // acá, sin leer nada más.
+    //
+    // Por qué se compara contra el campo `clave` y no contra `nombre.lower()`:
+    // el `lower()` del lenguaje de reglas SOLO baja A–Z ASCII, deja intactos
+    // 'Ñ' y las vocales acentuadas (verificado contra el emulador, ver la suite
+    // de reglas). Con `id == nombre.trim().lower()` el alta de "Ñoquis" o "CAFÉ"
+    // daría permission-denied, y en una quesería uruguaya esos nombres no son
+    // hipotéticos. Por eso la clave se calcula en `packages/core`
+    // (`claveCategoria`, = `trim().toLowerCase()` de JS, con Unicode completo),
+    // se persiste como campo y la regla exige la igualdad con el id.
+    //
+    // Límite conocido y aceptado: las reglas verifican que id == clave, no que
+    // clave se derive honestamente de nombre (eso exigiría replicar
+    // `toLowerCase()` Unicode, que el lenguaje no tiene). Un cliente admin podría
+    // escribir un par (nombre, clave) incoherente. Lo que SÍ queda garantizado
+    // —y es lo que importa para la unicidad— es que a un mismo path le
+    // corresponde un solo documento, y que la app y el seed derivan la clave con
+    // la misma función de `core`.
+    function categoriaValida(categoriaId) {
       let d = request.resource.data;
-      return d.keys().hasOnly(['nombre', 'orden'])
-        && d.keys().hasAll(['nombre', 'orden'])
+      return d.keys().hasOnly(['nombre', 'orden', 'clave'])
+        && d.keys().hasAll(['nombre', 'orden', 'clave'])
         && d.nombre is string && d.nombre.size() > 0
-        && d.orden is int && d.orden >= 0;
+        && d.orden is int && d.orden >= 0
+        && d.clave is string && d.clave.size() > 0
+        && categoriaId == d.clave;
     }
 
     // Claves permitidas de un cliente (doc 07 + `telefonoE164` de doc 08). Ninguna
@@ -274,13 +302,29 @@ service cloud.firestore {
     match /categorias/{id} {
       // Vocabulario visible para todo usuario activo (agrupa listas de Stock).
       allow read: if usuarioActivo();
-      // Alta y edición (renombrar/reordenar) solo admin, con shape estricto. En
-      // update, `soloCambian` limita las claves afectadas a nombre/orden (permite
-      // tocar solo una de las dos, p. ej. renombrar sin mover el orden).
-      allow create: if esAdmin() && categoriaValida();
-      allow update: if esAdmin() && categoriaValida() && soloCambian(['nombre', 'orden']);
-      // Regla de dominio: las categorías NO se borran (evita productos huérfanos).
-      allow delete: if false;
+      // Alta y edición (renombrar/reordenar) solo admin, con shape estricto y
+      // con el invariante id == clave exigido en AMBAS: si solo se pidiera en el
+      // alta, un update podría romperlo después y dejar dos documentos con el
+      // mismo nombre. En update, `soloCambian` limita las claves afectadas a
+      // nombre/orden/clave (permite tocar solo una, p. ej. reordenar sin
+      // renombrar).
+      allow create: if esAdmin() && categoriaValida(id);
+      allow update: if esAdmin() && categoriaValida(id) && soloCambian(['nombre', 'orden', 'clave']);
+      // El borrado se abre a admin porque el renombre lo NECESITA: cuando cambia
+      // la clave, el documento se muda de path (set del nuevo + delete del viejo
+      // en un solo batch, ver `renombrarCategoria` en firebase-kit). Sin delete,
+      // el documento viejo quedaría como categoría fantasma y el invariante se
+      // rompería.
+      //
+      // Qué reemplaza al `delete: false` como protección contra productos
+      // huérfanos: ya no lo hace esta regla, lo hace la atomicidad del batch de
+      // renombrado, que es el único borrado real del sistema —re-etiqueta todos
+      // los productos de la categoría en el MISMO commit que borra el documento
+      // viejo—. O pasa todo o no pasa nada: nunca hay una ventana con productos
+      // apuntando a una categoría que ya no existe. La pantalla de categorías no
+      // ofrece "eliminar", así que un delete suelto solo puede venir de un admin
+      // usando la consola de Firebase.
+      allow delete: if esAdmin();
     }
 
     match /productos/{id} {

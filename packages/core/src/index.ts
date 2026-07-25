@@ -179,6 +179,11 @@ export {
   stockBajo,
 } from './stock.js';
 export {
+  LARGO_MAX_CLAVE_CATEGORIA,
+  claveCategoria,
+  claveCategoriaValida,
+} from './categoria.js';
+export {
   type PiezaEnAlerta,
   type AlertaVencimiento,
   type MagnitudStock,

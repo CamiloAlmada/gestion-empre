@@ -11,6 +11,7 @@ import {
   addDoc,
   collection,
   deleteDoc,
+  deleteField,
   doc,
   getDoc,
   getDocs,
@@ -162,7 +163,13 @@ beforeEach(async () => {
       rol: 'vendedor',
       activo: false,
     });
-    await setDoc(doc(seed, 'categorias', 'cat-quesos'), { nombre: 'Quesos', orden: 0 });
+    // Categoría canónica: el id del documento ES la clave de su nombre
+    // (`claveCategoria('Quesos') === 'quesos'`), que es lo que exigen las reglas.
+    await setDoc(doc(seed, 'categorias', 'quesos'), {
+      nombre: 'Quesos',
+      orden: 0,
+      clave: 'quesos',
+    });
     await setDoc(doc(seed, 'productos', 'prod-nuez'), {
       nombre: 'Nuez mariposa',
       categoria: 'frutos_secos',
@@ -314,75 +321,175 @@ describe('usuarios', () => {
 
 describe('categorias', () => {
   it('vendedor lee categorías', async () => {
-    await assertSucceeds(getDoc(doc(db(VENDEDOR), 'categorias', 'cat-quesos')));
+    await assertSucceeds(getDoc(doc(db(VENDEDOR), 'categorias', 'quesos')));
   });
 
   it('vendedor NO crea categorías', async () => {
     await assertFails(
-      setDoc(doc(db(VENDEDOR), 'categorias', 'cat-x'), { nombre: 'Miel', orden: 1 }),
+      setDoc(doc(db(VENDEDOR), 'categorias', 'miel'), {
+        nombre: 'Miel',
+        orden: 1,
+        clave: 'miel',
+      }),
     );
   });
 
   it('vendedor NO edita categorías', async () => {
-    await assertFails(
-      updateDoc(doc(db(VENDEDOR), 'categorias', 'cat-quesos'), { nombre: 'Otros' }),
-    );
+    await assertFails(updateDoc(doc(db(VENDEDOR), 'categorias', 'quesos'), { nombre: 'Otros' }));
   });
 
   it('admin crea categoría con shape válido', async () => {
     await assertSucceeds(
-      setDoc(doc(db(ADMIN), 'categorias', 'cat-miel'), { nombre: 'Miel', orden: 1 }),
+      setDoc(doc(db(ADMIN), 'categorias', 'miel'), { nombre: 'Miel', orden: 1, clave: 'miel' }),
     );
   });
 
-  it('admin renombra (update solo nombre)', async () => {
+  it('admin renombra in-place (update de nombre + clave, misma clave)', async () => {
     await assertSucceeds(
-      updateDoc(doc(db(ADMIN), 'categorias', 'cat-quesos'), { nombre: 'Quesos artesanales' }),
+      updateDoc(doc(db(ADMIN), 'categorias', 'quesos'), { nombre: 'QUESOS', clave: 'quesos' }),
     );
   });
 
   it('admin reordena (update solo orden)', async () => {
-    await assertSucceeds(
-      updateDoc(doc(db(ADMIN), 'categorias', 'cat-quesos'), { orden: 5 }),
-    );
-  });
-
-  it('nadie borra categorías (ni el admin)', async () => {
-    await assertFails(deleteDoc(doc(db(ADMIN), 'categorias', 'cat-quesos')));
+    await assertSucceeds(updateDoc(doc(db(ADMIN), 'categorias', 'quesos'), { orden: 5 }));
   });
 
   it('admin NO crea con nombre vacío', async () => {
-    await assertFails(
-      setDoc(doc(db(ADMIN), 'categorias', 'cat-x'), { nombre: '', orden: 1 }),
-    );
+    await assertFails(setDoc(doc(db(ADMIN), 'categorias', 'x'), { nombre: '', orden: 1, clave: 'x' }));
   });
 
   it('admin NO crea con orden negativo', async () => {
     await assertFails(
-      setDoc(doc(db(ADMIN), 'categorias', 'cat-x'), { nombre: 'Miel', orden: -1 }),
+      setDoc(doc(db(ADMIN), 'categorias', 'miel'), { nombre: 'Miel', orden: -1, clave: 'miel' }),
     );
   });
 
   it('admin NO crea con orden float', async () => {
     await assertFails(
-      setDoc(doc(db(ADMIN), 'categorias', 'cat-x'), { nombre: 'Miel', orden: 1.5 }),
+      setDoc(doc(db(ADMIN), 'categorias', 'miel'), { nombre: 'Miel', orden: 1.5, clave: 'miel' }),
     );
   });
 
   it('admin NO crea con clave extra', async () => {
     await assertFails(
-      setDoc(doc(db(ADMIN), 'categorias', 'cat-x'), { nombre: 'Miel', orden: 1, color: 'rojo' }),
+      setDoc(doc(db(ADMIN), 'categorias', 'miel'), {
+        nombre: 'Miel',
+        orden: 1,
+        clave: 'miel',
+        color: 'rojo',
+      }),
     );
   });
 
   it('admin NO agrega una clave extra en un update', async () => {
-    await assertFails(
-      updateDoc(doc(db(ADMIN), 'categorias', 'cat-quesos'), { color: 'rojo' }),
-    );
+    await assertFails(updateDoc(doc(db(ADMIN), 'categorias', 'quesos'), { color: 'rojo' }));
   });
 
   it('admin NO deja el nombre vacío en un update', async () => {
-    await assertFails(updateDoc(doc(db(ADMIN), 'categorias', 'cat-quesos'), { nombre: '' }));
+    await assertFails(updateDoc(doc(db(ADMIN), 'categorias', 'quesos'), { nombre: '' }));
+  });
+
+  // El invariante que sustituye a la unicidad "entre documentos", que las reglas
+  // no pueden expresar porque no hacen queries: el id de CADA documento es su
+  // propia clave. Si todos lo cumplen, dos categorías homónimas serían el mismo
+  // documento. Ver el comentario de `categoriaValida()` en firestore.rules.
+  describe('invariante id == clave', () => {
+    it('rechaza un alta cuyo id NO coincide con la clave', async () => {
+      await assertFails(
+        setDoc(doc(db(ADMIN), 'categorias', 'cat-miel-random'), {
+          nombre: 'Miel',
+          orden: 1,
+          clave: 'miel',
+        }),
+      );
+    });
+
+    it('rechaza un alta SIN el campo clave', async () => {
+      await assertFails(
+        setDoc(doc(db(ADMIN), 'categorias', 'miel'), { nombre: 'Miel', orden: 1 }),
+      );
+    });
+
+    it('rechaza un update que rompe la coincidencia (cambia clave, no el id)', async () => {
+      await assertFails(
+        updateDoc(doc(db(ADMIN), 'categorias', 'quesos'), {
+          nombre: 'Fiambres',
+          clave: 'fiambres',
+        }),
+      );
+    });
+
+    it('rechaza un update que borra el campo clave', async () => {
+      await assertFails(
+        updateDoc(doc(db(ADMIN), 'categorias', 'quesos'), { clave: deleteField() }),
+      );
+    });
+
+    it('rechaza un update con clave vacía', async () => {
+      await assertFails(updateDoc(doc(db(ADMIN), 'categorias', 'quesos'), { clave: '' }));
+    });
+  });
+
+  // El renombrado que cambia de clave muda el documento de path: set del nuevo +
+  // delete del viejo en el MISMO batch. Sin delete para admin, el documento viejo
+  // quedaría como categoría fantasma y el invariante se rompería.
+  describe('delete (necesario para el renombrado que muda de path)', () => {
+    it('admin borra una categoría', async () => {
+      await assertSucceeds(deleteDoc(doc(db(ADMIN), 'categorias', 'quesos')));
+    });
+
+    it('vendedor NO borra categorías', async () => {
+      await assertFails(deleteDoc(doc(db(VENDEDOR), 'categorias', 'quesos')));
+    });
+  });
+
+  // TRIPWIRE Unicode. El `lower()` del lenguaje de reglas SOLO baja A–Z ASCII:
+  // deja intactas 'Ñ' y las vocales acentuadas. Por eso la regla NO compara
+  // contra `nombre.trim().lower()` sino contra el campo `clave`, calculado en
+  // `packages/core` con el `toLowerCase()` de JS (Unicode completo). Estos casos
+  // fallarían con permission-denied si alguien "simplificara" la regla a
+  // `id == nombre.trim().lower()`, y en una quesería uruguaya son nombres reales.
+  describe('Unicode: eñe y acentos', () => {
+    // [nombre, clave según claveCategoria() de @gestion/core]
+    const casos: [string, string][] = [
+      ['Ñoquis', 'ñoquis'],
+      ['ÑOQUIS', 'ñoquis'],
+      ['Café', 'café'],
+      ['CAFÉ', 'café'],
+      ['Ñandú', 'ñandú'],
+    ];
+
+    for (const [nombre, clave] of casos) {
+      it(`admin crea "${nombre}" con id "${clave}"`, async () => {
+        await assertSucceeds(
+          setDoc(doc(db(ADMIN), 'categorias', clave), { nombre, orden: 1, clave }),
+        );
+      });
+    }
+
+    it('documenta el motivo: lower() de las reglas NO baja la Ñ', async () => {
+      // Si lower() bajara la Ñ como JS, la clave de "ÑOQUIS" sería 'ñoquis' y
+      // este id incoherente no tendría por qué aceptarse. Se acepta porque la
+      // regla compara contra `clave`, no contra `nombre.lower()`: la prueba de
+      // que la comparación textual quedó fuera de las reglas a propósito.
+      await assertSucceeds(
+        setDoc(doc(db(ADMIN), 'categorias', 'ñoquis'), {
+          nombre: 'ÑOQUIS',
+          orden: 1,
+          clave: 'ñoquis',
+        }),
+      );
+    });
+
+    it('un id con la Ñ en MAYÚSCULA sigue siendo rechazado si no coincide con la clave', async () => {
+      await assertFails(
+        setDoc(doc(db(ADMIN), 'categorias', 'Ñoquis'), {
+          nombre: 'Ñoquis',
+          orden: 1,
+          clave: 'ñoquis',
+        }),
+      );
+    });
   });
 });
 
