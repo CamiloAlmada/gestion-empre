@@ -118,7 +118,9 @@ export {
   rankingPorCategoria,
   margenDeRanking,
   proporcionGanancia,
+  ventasVigentes,
 } from './reporteVentas.js';
+export { type RendimientoCompra, calcularRendimientoCompra } from './rendimientoCompra.js';
 export {
   type RgbLineal,
   type ResultadoClamp,

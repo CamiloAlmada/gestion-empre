@@ -76,6 +76,14 @@ const RankingRentabilidad = lazy(() =>
 const AlertasStock = lazy(() =>
   import('./pantallas/AlertasStock').then((m) => ({ default: m.AlertasStock })),
 );
+const RendimientoCompras = lazy(() =>
+  import('./pantallas/RendimientoCompras').then((m) => ({ default: m.RendimientoCompras })),
+);
+const RendimientoCompraPantalla = lazy(() =>
+  import('./pantallas/RendimientoCompraPantalla').then((m) => ({
+    default: m.RendimientoCompraPantalla,
+  })),
+);
 const Ajustes = lazy(() => import('./pantallas/Ajustes').then((m) => ({ default: m.Ajustes })));
 const Usuarios = lazy(() =>
   import('./pantallas/Usuarios').then((m) => ({ default: m.Usuarios })),
@@ -206,6 +214,26 @@ export function App() {
             element={
               <RutaSoloAdmin>
                 <AlertasStock />
+              </RutaSoloAdmin>
+            }
+          />
+          {/* Rendimiento de compra/viaje (Fase 3, tanda B4,
+              docs/PLAN-ACTIVO.md): listado de compras confirmadas + detalle
+              por compra, mismo criterio de protección que el resto de
+              Reportes. */}
+          <Route
+            path="reportes/compras"
+            element={
+              <RutaSoloAdmin>
+                <RendimientoCompras />
+              </RutaSoloAdmin>
+            }
+          />
+          <Route
+            path="reportes/compras/:id"
+            element={
+              <RutaSoloAdmin>
+                <RendimientoCompraPantalla />
               </RutaSoloAdmin>
             }
           />

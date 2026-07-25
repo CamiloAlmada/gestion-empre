@@ -449,6 +449,15 @@ export function CompraPantalla() {
           >
             Revisar precios y márgenes →
           </Link>
+          {/* Rendimiento de este viaje (Fase 3, tanda B4, docs/PLAN-ACTIVO.md,
+              criterio 2 del dueño, doc 04:479): desde acá se llega al mismo
+              cálculo que el listado de Reportes, pero directo a ESTA compra. */}
+          <Link
+            to={`/reportes/compras/${compraCargada?.id}`}
+            className="font-medium text-primary-700 underline-offset-2 hover:underline dark:text-primary-300"
+          >
+            Ver rendimiento del viaje →
+          </Link>
         </div>
       )}
 

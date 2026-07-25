@@ -51,4 +51,10 @@ export const REGISTRO_REPORTES: readonly DefinicionReporte[] = [
     descripcion: 'Qué deja plata de verdad, no solo qué se vende más.',
     ruta: '/reportes/rentabilidad',
   },
+  {
+    id: 'rendimiento-compras',
+    titulo: 'Rendimiento de compra/viaje',
+    descripcion: 'Si el último viaje a comprar mercadería se pagó solo.',
+    ruta: '/reportes/compras',
+  },
 ];

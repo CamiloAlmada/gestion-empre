@@ -19,8 +19,16 @@ import type { ItemVenta, Venta } from './tipos.js';
  * alguna función olvidara filtrarla los reportes mentirían para siempre.
  */
 
-/** Ventas no anuladas. Único filtro de estado de todo el módulo. */
-function ventasVigentes(ventas: readonly Venta[]): Venta[] {
+/**
+ * Ventas no anuladas. Único filtro de estado de todo el módulo.
+ *
+ * Exportada (tarea B4, `rendimientoCompra.ts`): es el mismo filtro que
+ * necesita cualquier otra agregación sobre `Venta[]`, y la regla del proyecto
+ * es "el filtro ya existe en core, no se reimplementa" — un segundo
+ * `v.estado !== 'anulada'` esparcido es exactamente el riesgo que este único
+ * punto existía para evitar.
+ */
+export function ventasVigentes(ventas: readonly Venta[]): Venta[] {
   return ventas.filter((v) => v.estado !== 'anulada');
 }
 
