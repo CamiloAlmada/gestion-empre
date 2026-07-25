@@ -62,3 +62,8 @@ export {
   type Valoracion,
 } from './TarjetaDelta';
 export { FilaRanking, type FilaRankingProps } from './FilaRanking';
+export {
+  useSwipeHorizontal,
+  type DireccionSwipeHorizontal,
+  type ManejadoresSwipeHorizontal,
+} from './useSwipeHorizontal';

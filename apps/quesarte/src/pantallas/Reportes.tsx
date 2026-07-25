@@ -35,6 +35,23 @@ import {
   offsetMinutosLocal,
   tituloGanancia,
 } from '../componentes/reportes/calculoReportes';
+import { useSwipePeriodo } from '../componentes/reportes/useSwipePeriodo';
+
+/**
+ * Altura mínima del contenedor de swipe (UI-4d, docs/06-ui-ux.md §2, mismo
+ * criterio que `CLASE_ALTURA_MINIMA` de `StockLayout.tsx`): el área del gesto
+ * debe cubrir TODO el alto visible de la pantalla, no solo donde llegue el
+ * contenido (un período sin ventas deja muy poco para tocar). A diferencia de
+ * Stock, acá NO hace falta una variante `md:` distinta: Reportes nunca
+ * declara acciones de header (`useHeader({ titulo: 'Reportes' })`, sin
+ * `acciones`), así que el cluster flotante mobile de `Shell.tsx` nunca
+ * existe para esta pantalla — el resto es siempre el mismo en cualquier
+ * ancho: `p-4` (1rem, techo de `<main>`) + el colchón inferior fijo (+2rem)
+ * = 3rem, sin el +3.5rem que sí necesita Stock cuando su sección activa
+ * declara acciones.
+ */
+const CLASE_ALTURA_MINIMA =
+  'min-h-[calc(100dvh-var(--altura-header)-var(--altura-zona-inferior)-3rem)]';
 
 const OPCIONES_PERIODO: readonly OpcionGrupoSegmentado<Granularidad>[] = [
   { valor: 'dia', etiqueta: 'Día' },
@@ -122,6 +139,21 @@ const OPCIONES_PERIODO: readonly OpcionGrupoSegmentado<Granularidad>[] = [
  * ESPECÍFICO de Reportes (no repite el chip genérico "Sin conexión" del
  * header): explica que puede faltar lo vendido desde otros dispositivos
  * hasta reconectar, la limitación concreta de un reporte agregado.
+ *
+ * **Swipe entre períodos** (pedido del dueño, docs/06-ui-ux.md §2, UI-4c):
+ * deslizar horizontal sobre esta pantalla cambia de período en el orden del
+ * selector (Día → Semana → Mes), sin wrap-around en los extremos — el MISMO
+ * gesto, con el mismo umbral y la misma dominancia de eje, que ya se usa
+ * para deslizar entre secciones de Stock (`useSwipeSeccion`). La detección
+ * en sí vive en `useSwipeHorizontal` (`@gestion/ui`), compartida entre las
+ * dos pantallas para que el gesto nunca diverja; `useSwipePeriodo`
+ * (`componentes/reportes/`) solo traduce la dirección a "período
+ * siguiente/anterior" y llama a `cambiarGranularidad` — el MISMO callback
+ * que usa el `GrupoSegmentado` visible, así que el swipe sigue yendo por la
+ * URL con `replace: true` sin conocerlo. El `GrupoSegmentado` puede tener
+ * scroll horizontal propio (más opciones a futuro): un gesto que nazca ahí
+ * no dispara el cambio de período, misma exclusión que ya protege al
+ * selector de secciones de Stock.
  */
 export function Reportes() {
   useHeader({ titulo: 'Reportes' });
@@ -222,6 +254,14 @@ export function Reportes() {
     );
   }
 
+  // Swipe entre períodos (ver JSDoc de arriba): mismo callback que usa el
+  // `GrupoSegmentado` visible, así que el atajo táctil respeta `replace: true`
+  // sin conocerlo.
+  const { ref, onTouchStart, onTouchEnd, onTouchCancel } = useSwipePeriodo(
+    granularidad,
+    cambiarGranularidad,
+  );
+
   let contenido;
   if (ventas.cargando) {
     contenido = <p className="py-8 text-center text-texto-secundario">Cargando reportes…</p>;
@@ -262,7 +302,14 @@ export function Reportes() {
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div
+      data-testid="layout-reportes"
+      ref={ref}
+      onTouchStart={onTouchStart}
+      onTouchEnd={onTouchEnd}
+      onTouchCancel={onTouchCancel}
+      className={`flex flex-col gap-4 ${CLASE_ALTURA_MINIMA}`}
+    >
       <GrupoSegmentado
         opciones={OPCIONES_PERIODO}
         valor={granularidad}

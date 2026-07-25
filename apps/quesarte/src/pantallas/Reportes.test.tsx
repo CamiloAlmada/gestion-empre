@@ -310,6 +310,132 @@ describe('Reportes - selector de período', () => {
   });
 });
 
+// UI-4c (docs/06-ui-ux.md §2): el swipe usa la MISMA detección de gesto que
+// Stock (`useSwipeHorizontal`, `@gestion/ui`) — acá solo se verifica que la
+// traducción a "período siguiente/anterior" (`useSwipePeriodo`) queda bien
+// cableada a esta pantalla, no se reexplican umbral/dominancia/exclusión
+// (eso ya lo cubren `useSwipeHorizontal.test.tsx` y `useSwipePeriodo.test.tsx`).
+function swipe(
+  contenedor: HTMLElement,
+  origen: { x: number; y: number },
+  destino: { x: number; y: number },
+  nace: HTMLElement = contenedor,
+) {
+  fireEvent.touchStart(nace, { touches: [{ clientX: origen.x, clientY: origen.y }] });
+  fireEvent.touchEnd(contenedor, { changedTouches: [{ clientX: destino.x, clientY: destino.y }] });
+}
+
+describe('Reportes - swipe de período (mismo gesto que Stock, UI-4c)', () => {
+  it('el contenedor lleva la altura mínima que estira el área de swipe al viewport completo (UI-4d)', () => {
+    configurarVentas(estadoOk([]));
+
+    renderizar();
+
+    const layout = screen.getByTestId('layout-reportes');
+    expect(layout.className).toContain(
+      'min-h-[calc(100dvh-var(--altura-header)-var(--altura-zona-inferior)',
+    );
+  });
+
+  it('swipe hacia la izquierda avanza de Día a Semana', () => {
+    configurarVentas(estadoOk([]));
+
+    renderizar();
+    fireEvent.click(screen.getByRole('button', { name: 'Día' }));
+
+    const layout = screen.getByTestId('layout-reportes');
+    swipe(layout, { x: 300, y: 100 }, { x: 200, y: 100 }); // dx = -100
+
+    const semana = screen.getByRole('button', { name: 'Semana' });
+    expect(semana.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('swipe hacia la derecha retrocede de Semana a Día', () => {
+    configurarVentas(estadoOk([]));
+
+    renderizar();
+    fireEvent.click(screen.getByRole('button', { name: 'Semana' }));
+
+    const layout = screen.getByTestId('layout-reportes');
+    swipe(layout, { x: 100, y: 100 }, { x: 220, y: 100 }); // dx = +120
+
+    const dia = screen.getByRole('button', { name: 'Día' });
+    expect(dia.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('en el último período (Mes, el default), swipe hacia la izquierda no hace nada (sin wrap-around)', () => {
+    configurarVentas(estadoOk([]));
+
+    renderizar();
+
+    const layout = screen.getByTestId('layout-reportes');
+    swipe(layout, { x: 300, y: 100 }, { x: 200, y: 100 });
+
+    const mes = screen.getByRole('button', { name: 'Mes' });
+    expect(mes.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('en el primer período (Día), swipe hacia la derecha no hace nada (sin wrap-around)', () => {
+    configurarVentas(estadoOk([]));
+
+    renderizar();
+    fireEvent.click(screen.getByRole('button', { name: 'Día' }));
+
+    const layout = screen.getByTestId('layout-reportes');
+    swipe(layout, { x: 100, y: 100 }, { x: 220, y: 100 });
+
+    const dia = screen.getByRole('button', { name: 'Día' });
+    expect(dia.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('un gesto vertical dominante no cambia el período', () => {
+    configurarVentas(estadoOk([]));
+
+    renderizar();
+    fireEvent.click(screen.getByRole('button', { name: 'Día' }));
+
+    const layout = screen.getByTestId('layout-reportes');
+    swipe(layout, { x: 200, y: 100 }, { x: 260, y: 260 }); // dx = 60, dy = 160
+
+    const dia = screen.getByRole('button', { name: 'Día' });
+    expect(dia.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('un gesto que nace en el GrupoSegmentado (con scroll horizontal propio) no cambia el período', () => {
+    configurarVentas(estadoOk([]));
+
+    renderizar();
+    fireEvent.click(screen.getByRole('button', { name: 'Día' }));
+
+    const selector = screen.getByRole('group', { name: 'Período del reporte' });
+    // jsdom no calcula layout real: se simula que el selector tiene scroll
+    // horizontal propio (mismo criterio que `useSwipeHorizontal.test.tsx`) —
+    // hace falta tanto el par scrollWidth/clientWidth como el `overflowX`
+    // computado, que el hook exige en conjunto para excluir el gesto.
+    selector.style.overflowX = 'auto';
+    Object.defineProperty(selector, 'scrollWidth', { value: 600, configurable: true });
+    Object.defineProperty(selector, 'clientWidth', { value: 300, configurable: true });
+
+    const layout = screen.getByTestId('layout-reportes');
+    swipe(layout, { x: 300, y: 100 }, { x: 200, y: 100 }, selector);
+
+    const dia = screen.getByRole('button', { name: 'Día' });
+    expect(dia.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('cambiar el período con swipe actualiza el link de "Para mirar" con replace (misma URL que el selector visible)', () => {
+    configurarVentas(estadoOk([]));
+
+    renderizar();
+
+    const layout = screen.getByTestId('layout-reportes');
+    swipe(layout, { x: 100, y: 100 }, { x: 220, y: 100 }); // derecha: Mes -> Semana
+
+    const link = screen.getByRole('link', { name: /Rentabilidad por producto y categoría/ });
+    expect(link.getAttribute('href')).toBe('/reportes/rentabilidad?periodo=semana');
+  });
+});
+
 describe('Reportes - "Para mirar" reenvía el período al drill-down (tarea B2)', () => {
   it('sin tocar el selector, el link no lleva query (el default "mes" es implícito en las DOS pantallas por igual)', () => {
     configurarVentas(estadoOk([]));
