@@ -47,6 +47,36 @@ comentario al principio de `seed-demo.mjs`).
   reales — **si un converter cambia de forma y este mapeo no se actualiza,
   ese test rompe** (la garantía central de que el seed es indistinguible de
   datos reales).
+- `coherenciaCruzada.test.mjs` — batería de **coherencia cruzada**: invariantes
+  que viven ENTRE documentos, no dentro de uno solo. `generador.test.mjs` y
+  `mapeoAdmin.test.mjs` validan cada documento por separado; ninguno de los
+  dos puede detectar, por ejemplo, dos categorías con el mismo nombre (dos
+  documentos, cada uno perfectamente válido) — que es exactamente el bug real
+  que motivó este archivo (ver el comentario de cabecera del archivo y
+  `docs/02-dominio-quesarte.md`, sección "Categoría"). Cubre, sobre
+  `construirDatosDemo` y `construirDatosReportes`:
+  - Unicidad: claves de categoría (`claveCategoria`), nombres de proveedor
+    (sin chequeo de dominio equivalente — `crearProveedor` no lo tiene).
+  - Integridad referencial: `producto.categoria`/`proveedorPrincipalId`,
+    `compra.proveedorId`/ítems, `pieza.productoId`/`compraId` (+ costo
+    heredado coherente), `movimiento.productoId`/`piezaId`/`origenId`,
+    `venta.items[].productoId`/`piezaId`, `venta.clienteId` — en cada caso,
+    también que el campo denormalizado (nombre) esté sincronizado con el
+    documento referenciado.
+  - Costeo congelado: `fuente`↔`compraId`↔presencia de montos, según las
+    reglas de `congelarCosteo` (`packages/core/src/costeo.ts`).
+  - Reconstrucción del ledger: el stock final de cada producto (granel/
+    unidades) y el peso restante de cada pieza deben poder recalcularse
+    exactamente sumando los `deltaGramos`/`deltaUnidades` de sus propios
+    movimientos — si el ledger de auditoría y el estado final divergen, algo
+    se escribió por fuera de él.
+  - `clientes.stats` coherente con sus ventas `completada` sembradas.
+
+  Cada detector devuelve la lista de documentos concretos que violan la
+  regla (nunca solo pasa/falla) y cada uno se verificó por falsación durante
+  el desarrollo (corrompiendo una copia del dataset y confirmando que lo
+  caza) — no quedó en el repo por no ser parte del comportamiento a
+  mantener, solo de su verificación puntual.
 - `seed-demo.mjs` — el shell: guardrail de `projectId`, limpieza,
   siembra y verificación de las dos tandas, usando `firebase-admin`.
 
