@@ -104,9 +104,23 @@ las dos. Diseño cerrado por `advisor`.
 | # | Tarea | Agente | Estado |
 | --- | --- | --- | --- |
 | C1+C2 | `claveCategoria` en core, id del documento = clave, renombrado que muda el documento de path, e invariante exigido en `firestore.rules` | `senior` | ✅ **hecha**. 175 tests de reglas |
-| C3 | Script de canonicalización de los ids existentes + deduplicación | `senior` | **en curso** |
-| C4 | Seed: ids de categoría canónicos (sin prefijo `demo-`) | `trainee` | pendiente |
-| C5 | Tests de coherencia cruzada sobre el generador puro del seed | `semisenior` | pendiente |
+| C3 | Script de canonicalización de los ids existentes + deduplicación | `senior` | ✅ **hecho, sin correr**. Plan puro con 35 tests + E2E contra el emulador. La corrida real la hace una persona |
+| C4 | Seed: ids de categoría canónicos (sin prefijo `demo-`) | `trainee` | ✅ **hecha** |
+| C5 | Tests de coherencia cruzada sobre el generador puro del seed | `semisenior` | ✅ **hecha**. 20 invariantes, 25 casos de falsación verificados, ninguna violación real en el dataset |
+
+**Criterio de supervivencia entre categorías homónimas** (C3): `orden` menor —la
+única señal de intención humana que persiste en el documento—; empate → la que
+ya está en su path canónico (va segunda a propósito: si fuera primera, un
+"quesos" en minúscula le ganaría a un "Quesos" bien escrito); empate → id menor,
+solo por determinismo. Descartados: "la más antigua" es indecidible (no hay
+fecha y los ids autogenerados de Firestore son aleatorios, no monótonos) y "la
+que tiene más productos" no está definido en el caso real, porque los productos
+referencian por nombre y para homónimas exactas apuntan a las dos.
+
+**Por qué C5 importa más allá de las categorías**: los tests del seed comparaban
+cada documento byte a byte contra los converters reales, y el duplicado se coló
+igual porque cada documento por separado era impecable. C5 cubre la clase entera
+—invariantes ENTRE documentos— y cada uno se verificó por falsación.
 
 ### 🚨 ORDEN DE DESPLIEGUE — no negociable
 
