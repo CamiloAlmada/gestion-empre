@@ -1,8 +1,12 @@
 # Scripts — seed de demo (WA-D + Reportes/Fase 3)
 
-> Otros scripts de esta carpeta: **`reset-operativo.mjs`** (reseteo de datos
-> operativos antes de entregarle el sistema al dueño, tarea A5) — ver
-> `README-reset-operativo.md`.
+> Otros scripts de esta carpeta:
+>
+> - **`reset-operativo.mjs`** (reseteo de datos operativos antes de entregarle el
+>   sistema al dueño, tarea A5) — ver `README-reset-operativo.md`.
+> - **`canonicalizar-categorias.mjs`** (migración de los ids de `categorias` a su
+>   forma canónica + deduplicación, tarea C3; corre **antes** del deploy de las
+>   reglas nuevas) — ver `README-canonicalizar-categorias.md`.
 
 `seed-demo.mjs` siembra datos de prueba en Firestore, en DOS tandas
 independientes (mismo script, mismas colecciones, mismo prefijo `demo-`):
