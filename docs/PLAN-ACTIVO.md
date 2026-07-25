@@ -93,18 +93,23 @@ después de las preguntas abiertas, para no contaminar sus respuestas).
 | B3 | Alertas: vencimientos en N días + stock bajo | `senior` | — | ✅ **hecha**. Criterio 3 del dueño. `evaluarAlertas` en core es ahora el único cálculo de alertas del proyecto (Productos y Reportes lo comparten). Umbral configurable, default 7 días. `configuracionGeneralValida` extendida y verificada por falsación |
 | B4 | Rendimiento de compra/viaje | `semisenior` | A1, B1 | ✅ **hecha**. Criterio 2 del dueño. La porción granel se excluye en vez de estimarse y `porcentajeVendidoBps` es `null` (no 0) cuando no hay nada atribuible. `estado` separa "es pronto para juzgar" de "rindió mal" |
 
-## Pendiente de decisión del dueño — antes de correr el reseteo (A5)
+## Reseteo de datos de prueba (A5) — decidido, pendiente de ejecutar
 
-El script está listo pero NO se corrió. Decisiones que tomó por defecto y que
-hay que confirmar antes de ejecutarlo contra `quesarte-uy`:
+El script está listo y NO se corrió. **El dueño confirmó las cinco decisiones
+el 2026-07-24**, y coinciden con lo que el script ya hace: no hay cambios de
+código pendientes.
 
-| Decisión por defecto | Alternativa |
+| Decisión | Confirmada |
 | --- | --- |
-| Los **clientes** de prueba se conservan, con `stats` en cero | Que Adrián arranque con la agenda vacía (hoy el script no lo implementa) |
-| Los **usuarios** de prueba se conservan y no se desactivan; Firebase Auth no se toca | Darlos de baja desde la pantalla de Usuarios |
-| `configuracion` (general, tema, plantillas de WhatsApp) se conserva entera | — |
-| Las **compras en borrador** se borran junto con las confirmadas | — |
-| El backup incluye las 10 colecciones, no solo las que se tocan | — |
+| Los **clientes** de prueba se conservan, con `stats` en cero | ✅ conservar |
+| Los **usuarios** de prueba se conservan y no se desactivan; Firebase Auth no se toca | ✅ conservar |
+| `configuracion` (general, tema, plantillas de WhatsApp) se conserva entera | ✅ conservar |
+| Las **compras en borrador** se borran junto con las confirmadas | ✅ borrar |
+| El backup incluye las 10 colecciones y queda fuera del repo (datos personales) | ✅ fuera del repo |
+
+**Orden de ejecución (importante):** el reseteo va DESPUÉS de mergear la Fase 3
+y deployar. Si se limpia antes, todo lo que se pruebe hasta el deploy vuelve a
+nacer sin costeo congelado y hay que limpiar de nuevo.
 
 Se borran: `ventas`, `movimientos`, `piezas`, `compras`. Se resetean sin borrar
 el documento: `clientes.stats`, y en `productos` el `costoPromedioCents` y los
