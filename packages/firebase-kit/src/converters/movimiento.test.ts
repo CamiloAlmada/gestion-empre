@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { QueryDocumentSnapshot } from 'firebase/firestore';
-import { peso, type MovimientoStock } from '@gestion/core';
+import { clasificarCosteo, money, peso, type CosteoItem, type MovimientoStock } from '@gestion/core';
 import { movimientoConverter } from './movimiento';
 
 function timestampFalso(fecha: Date) {
@@ -75,6 +75,74 @@ describe('movimientoConverter.fromFirestore', () => {
   });
 });
 
+// Retrocompatibilidad (tarea A1b): `docCompleto` es EXACTAMENTE el formato
+// viejo (sin `costeo`), el que hay escrito en producción. Debe seguir
+// deserializando sin error.
+describe('movimientoConverter y el costeo congelado (costeo)', () => {
+  it('movimiento viejo SIN costeo: deserializa sin error y clasifica como legado', () => {
+    const movimiento = movimientoConverter.fromFirestore(snapshotDe('m-viejo', docCompleto), {});
+
+    expect(movimiento.costeo).toBeUndefined();
+    expect(clasificarCosteo(movimiento)).toBe('legado');
+  });
+
+  it('reconstruye el mapa completo con money() y lo clasifica como real', () => {
+    const doc = {
+      ...docCompleto,
+      costeo: {
+        v: 1,
+        fuente: 'pieza',
+        origen: 'venta',
+        costoUnitCents: 30000,
+        costoItemCents: 10500,
+        compraId: 'compra-7',
+      },
+    };
+    const movimiento = movimientoConverter.fromFirestore(snapshotDe('m-nuevo', doc), {});
+
+    expect(movimiento.costeo).toEqual({
+      v: 1,
+      fuente: 'pieza',
+      origen: 'venta',
+      costoUnitCents: 30000,
+      costoItemCents: 10500,
+      compraId: 'compra-7',
+    });
+    expect(clasificarCosteo(movimiento)).toBe('real');
+  });
+
+  it('costeo sin montos (sin_costo) se reconstruye sin inventar ceros', () => {
+    const doc = { ...docCompleto, costeo: { v: 1, fuente: 'sin_costo', origen: 'venta' } };
+    const movimiento = movimientoConverter.fromFirestore(snapshotDe('m-sin-costo', doc), {});
+
+    expect(movimiento.costeo?.fuente).toBe('sin_costo');
+    expect(movimiento.costeo?.costoUnitCents).toBeUndefined();
+    expect(movimiento.costeo?.costoItemCents).toBeUndefined();
+    expect(clasificarCosteo(movimiento)).toBe('sin_dato');
+  });
+
+  it('rechaza un costo no entero dentro del costeo (doc corrupto)', () => {
+    const doc = {
+      ...docCompleto,
+      costeo: { v: 1, fuente: 'pieza', origen: 'venta', costoItemCents: 105.5 },
+    };
+    expect(() => movimientoConverter.fromFirestore(snapshotDe('m-corrupto', doc), {})).toThrow(
+      RangeError,
+    );
+  });
+
+  it('una versión de costeo futura se ignora (legado) en vez de romper el historial', () => {
+    const doc = {
+      ...docCompleto,
+      costeo: { v: 2, fuente: 'pieza', origen: 'venta', costoItemCents: 10500 },
+    };
+    const movimiento = movimientoConverter.fromFirestore(snapshotDe('m-futuro', doc), {});
+
+    expect(movimiento.costeo).toBeUndefined();
+    expect(clasificarCosteo(movimiento)).toBe('legado');
+  });
+});
+
 describe('movimientoConverter.toFirestore', () => {
   const movimiento: MovimientoStock = {
     id: 'm1',
@@ -116,5 +184,51 @@ describe('movimientoConverter.toFirestore', () => {
     expect(doc).not.toHaveProperty('piezaId');
     expect(doc).not.toHaveProperty('deltaGramos');
     expect(doc).not.toHaveProperty('nota');
+  });
+
+  it('omite el mapa costeo cuando el movimiento no lo trae (movimiento viejo, byte-idéntico)', () => {
+    const doc = movimientoConverter.toFirestore(movimiento);
+    expect(doc).not.toHaveProperty('costeo');
+  });
+
+  it('persiste el mapa costeo y sobrevive el round-trip', () => {
+    const costeo: CosteoItem = {
+      v: 1,
+      fuente: 'pieza',
+      origen: 'venta',
+      costoUnitCents: money(30000),
+      costoItemCents: money(10500),
+      compraId: 'compra-7',
+    };
+    const conCosteo: MovimientoStock = { ...movimiento, costeo };
+
+    const doc = movimientoConverter.toFirestore(conCosteo);
+    expect(doc.costeo).toEqual({
+      v: 1,
+      fuente: 'pieza',
+      origen: 'venta',
+      costoUnitCents: 30000,
+      costoItemCents: 10500,
+      compraId: 'compra-7',
+    });
+
+    const reconstruido = movimientoConverter.fromFirestore(
+      snapshotDe('m1', { ...doc, fecha: timestampFalso(fecha) }),
+      {},
+    );
+    expect(reconstruido.costeo).toEqual(costeo);
+  });
+
+  it('sin_costo: NO persiste montos (un 0 declararía 100 % de ganancia)', () => {
+    const costeo: CosteoItem = { v: 1, fuente: 'sin_costo', origen: 'venta' };
+    const conCosteo: MovimientoStock = { ...movimiento, costeo };
+
+    const doc = movimientoConverter.toFirestore(conCosteo);
+    const mapa = doc.costeo as Record<string, unknown>;
+
+    expect(mapa).toEqual({ v: 1, fuente: 'sin_costo', origen: 'venta' });
+    expect(mapa).not.toHaveProperty('costoUnitCents');
+    expect(mapa).not.toHaveProperty('costoItemCents');
+    expect(mapa).not.toHaveProperty('compraId');
   });
 });

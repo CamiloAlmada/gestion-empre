@@ -150,7 +150,25 @@ orquestador; no se ignora en silencio.
     distancia + dominancia de eje, mismo criterio que el arrastre del
     carrito §6) y NUNCA si el gesto nace en un contenedor con scroll
     horizontal propio (el selector mismo, tablas). En los extremos no hay
-    wrap-around.
+    wrap-around. La DETECCIÓN del gesto (umbral, dominancia de eje, exclusión
+    de contenedores con scroll horizontal propio, descarte de multitouch)
+    vive en una pieza compartida y agnóstica de dominio, `useSwipeHorizontal`
+    (`@gestion/ui`): informa solo "izquierda"/"derecha", nunca "sección
+    siguiente" ni nada específico de una pantalla — quien la usa decide qué
+    significa cada dirección. Dos detecciones separadas del mismo gesto
+    divergirían con el tiempo (ya pasó en este repo con el cálculo de
+    alertas, duplicado entre Productos y Reportes hasta que se unificó).
+    **El mismo gesto aplica al selector de período de la home de Reportes**
+    (pedido del dueño, 2026-07-24: "que se sienta igual que en Stock"):
+    deslizar horizontal sobre la pantalla cambia de período en el orden del
+    selector visible (Día → Semana → Mes), sin wrap-around en los extremos,
+    con el contenedor estirado al viewport disponible igual que Stock
+    (`useSwipePeriodo`, `apps/quesarte/src/componentes/reportes/`). El
+    cambio de período por swipe reusa el MISMO callback que el
+    `GrupoSegmentado` visible, así que sigue yendo por la URL (`?periodo=`)
+    con `replace: true` — el swipe es un atajo, nunca un camino paralelo; el
+    selector visible sigue siendo la única forma "oficial" de cambiar de
+    período.
   - **Píldora animada** (UI-4): la transición del ítem activo del selector se
     anima con la **View Transitions API** nativa (`view-transition-name` en la
     píldora + navegación con `viewTransition` de react-router): el navegador

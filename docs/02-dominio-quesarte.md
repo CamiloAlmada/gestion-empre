@@ -65,13 +65,63 @@ ser: buscar producto → ingresar peso (o cantidad) → agregar al ticket. Rápi
 ### Categoría
 
 Vocabulario controlado para agrupar productos (Quesos, Embutidos, Miel, Frutos
-secos, Especias…). Las define el admin (crear, renombrar, reordenar); **no se
-borran** (evita productos huérfanos — una categoría en desuso simplemente no se
-elige más). El producto guarda el **nombre** de la categoría (denormalizado, no
-el id): renombrar una categoría actualiza su doc y todos sus productos en un
-**batch atómico**. `orden` (entero) controla cómo se agrupan las listas (Stock).
-Un producto cuya categoría no coincida con ninguna definida se muestra al final
-bajo "Sin categoría". La grilla del POS no agrupa (velocidad primero).
+secos, Especias…). Las define el admin (crear, renombrar, reordenar). El producto
+guarda el **nombre** de la categoría (denormalizado, no el id): renombrar una
+categoría actualiza su doc y todos sus productos en un **batch atómico**. `orden`
+(entero) controla cómo se agrupan las listas (Stock). Un producto cuya categoría
+no coincida con ninguna definida se muestra al final bajo "Sin categoría". La
+grilla del POS no agrupa (velocidad primero).
+
+#### Esquema de id: el id ES la clave del nombre
+
+**Invariante: `categorias/{id}` cumple siempre `id === claveCategoria(nombre)`**,
+donde `claveCategoria` (en `packages/core/src/categoria.ts`) es `trim()` +
+`toLowerCase()`. El documento persiste esa clave también como campo, `clave`.
+
+Es lo que hace **imposible** tener dos categorías con el mismo nombre. "No hay
+dos categorías homónimas" es un invariante ENTRE documentos, y `firestore.rules`
+no puede expresarlo porque las reglas no hacen queries. Convertido en invariante
+DE cada documento —"el id de este documento es la clave de su nombre"— sí se
+puede: si todos lo cumplen, dos categorías con el mismo nombre serían el mismo
+documento. La regla lo exige en **create y en update** (`categoriaId ==
+request.resource.data.clave`).
+
+Antes, la unicidad la chequeaba solo `crearCategoria` (leer → comparar →
+escribir). Eso no alcanzaba: no cubría al Admin SDK (el seed de demo llegó a
+crear un segundo "Quesos") y tenía condición de carrera, porque siendo la app
+offline-first dos dispositivos sin conexión leen su cache, ambos pasan el chequeo
+y ambos encolan el alta. Con el id derivado del nombre esa carrera **converge**:
+las dos escrituras van a `categorias/quesos` y al sincronizar queda un documento.
+El chequeo de aplicación se conserva, pero solo como fuente del mensaje amigable
+("Ya existe una categoría llamada X").
+
+Consecuencias:
+
+- **Renombrar puede mudar el documento de path.** Si la clave nueva es igual a la
+  actual (cambiaron solo mayúsculas o espacios), se actualiza in-place. Si cambia,
+  el documento se muda: `set` del nuevo path (conservando `orden`) + `delete` del
+  viejo + fan-out a productos, todo en el mismo batch. Conservar el id viejo
+  rompería el invariante: si "Quesos" (id `quesos`) pasara a llamarse "Fiambres"
+  pero siguiera viviendo en `quesos`, un alta posterior de "Quesos" pisaría a
+  Fiambres.
+- **Por eso `delete` está abierto a admin** (antes era `false` para evitar
+  productos huérfanos). Lo que protege ahora contra huérfanos es la atomicidad del
+  batch de renombrado —el único borrado real del sistema—, que re-etiqueta todos
+  los productos en el mismo commit en que borra el documento viejo. La pantalla de
+  categorías no ofrece "eliminar".
+- **Nombres rechazados**: los que producen una clave que no sirve como id de
+  Firestore (`.`, `..`, cualquiera con `/`, y la forma `__algo__`). Se rechazan en
+  `exigirNombre` con `CategoriaInvalidaError` en español, antes de que el SDK tire
+  un error críptico.
+- **La clave NO se reduce a ASCII**: "Ñoquis" → `ñoquis`, "Café" → `café`. Se
+  verificó contra el emulador que el `lower()` del lenguaje de reglas solo baja
+  A–Z ASCII (deja intactas 'Ñ' y las vocales acentuadas), así que la regla NO
+  compara contra `nombre.trim().lower()` —eso rechazaría nombres perfectamente
+  válidos en una quesería uruguaya— sino contra el campo `clave`, calculado en
+  `core` con el `toLowerCase()` de JS. Límite aceptado: las reglas garantizan
+  `id == clave`, no que `clave` derive honestamente de `nombre` (replicar el
+  `toLowerCase()` Unicode no es posible en el lenguaje de reglas). Lo que importa
+  para la unicidad —un path, un documento— sí queda garantizado.
 
 ### Movimiento de stock
 
@@ -87,6 +137,33 @@ unitario congelado al momento de la venta, subtotal. Cabecera: fecha, usuario,
 total, medio de pago (`efectivo` | `debito` | `credito` | `transferencia`),
 estado (`completada` | `anulada`). La anulación NO borra: genera movimientos
 inversos y marca estado.
+
+**Costo congelado por ítem (`costeo`, Fase 3 / tarea A1).** El costo de un
+producto cambia con cada compra: leerlo después de vender da un número
+equivocado, así que cada ítem congela el suyo al vender, en un mapa opcional y
+versionado:
+
+```
+costeo?: {
+  v: 1,                                   // ausencia del mapa = versión 0 (ítems pre-congelado)
+  fuente: 'pieza'|'promedio'|'sin_costo', // pieza.costoKgCents | producto.costoPromedioCents | sin base
+  origen: 'venta'|'backfill',             // dato real vs reconstruido (ortogonal a `fuente`)
+  costoUnitCents?,                        // por kg o por unidad, igual que precioUnitCents
+  costoItemCents?,                        // total del ítem, YA redondeado con la MISMA regla que subtotalCents
+  compraId?                               // procedencia (copiado de pieza.compraId)
+}
+```
+
+Reglas duras (implementadas en `packages/core/src/costeo.ts`):
+- Sin base de costo (0 o ausente) ⇒ `fuente: 'sin_costo'` y **sin montos**.
+  Congelar un costo 0 declararía 100 % de ganancia: una mentira indetectable.
+- `costoItemCents` sale de `calcularSubtotal`, la misma función que produce
+  `subtotalCents` ⇒ `ganancia = subtotalCents − costoItemCents` es reproducible.
+- La rama "¿existe `costeo`?" vive SOLO en el converter y en `clasificarCosteo`
+  (`'real' | 'estimado' | 'sin_dato' | 'legado'`). Ninguna pantalla ni agregación
+  vuelve a preguntar por `costeo === undefined`.
+- El congelado es aritmética síncrona sobre datos que el POS ya tiene en memoria:
+  **cero lecturas nuevas** en el camino de venta (offline-first).
 
 **Escritura atómica**: registrar la venta + descontar piezas/stock + crear
 movimientos debe hacerse en una transacción o batch de Firestore.
@@ -104,7 +181,8 @@ movimientos debe hacerse en una transacción o batch de Firestore.
 
 ```
 usuarios/{uid}             → { nombre, email, rol: 'admin'|'vendedor', activo }
-categorias/{id}            → { nombre, orden }   // vocabulario; producto referencia por nombre
+categorias/{id}            → { nombre, orden, clave }  // id === clave === trim+lowercase(nombre)
+                                                       // vocabulario; producto referencia por nombre
 productos/{id}             → { nombre, categoria, modoPrecio, modoStock,
                                precioVentaCents (por kg o por unidad según modoPrecio),
                                costoPromedioCents, margenObjetivoPct?,
@@ -115,7 +193,8 @@ piezas/{id}                → { productoId, pesoInicialGramos, pesoRestanteGram
                                fechaVencimiento?, estado }
 ventas/{id}                → { numero, fecha, usuarioId, items: [ {productoId, piezaId?,
                                gramos?, unidades?, precioUnitCents, subtotalCents,
-                               nombreProducto} ], totalCents, medioPago, estado }
+                               nombreProducto, costeo?} ], totalCents, medioPago, estado,
+                               clienteId?, clienteNombre? }
 compras/{id}               → ver docs/03
 movimientos/{id}           → { tipo, productoId, piezaId?, deltaGramos?, deltaUnidades?,
                                origenTipo, origenId, usuarioId, fecha, nota? }
@@ -138,8 +217,10 @@ Notas:
   con `activo == true`.
 - `rol == 'vendedor'`: puede crear ventas y leer productos/piezas. No puede editar
   precios, compras ni ajustes.
-- `categorias`: lectura para todo usuario activo; create/update solo admin; sin
-  delete (regla dura, ver "Categoría").
+- `categorias`: lectura para todo usuario activo; create/update/delete solo admin.
+  En create y update se exige además `categoriaId == request.resource.data.clave`:
+  es la garantía estructural de unicidad de nombres (ver "Categoría"). El delete
+  está abierto porque el renombrado que cambia de clave muda el documento de path.
 - `rol == 'admin'`: todo.
 - `movimientos` y `ventas`: prohibido update/delete (solo create; anulación vía
   campo estado con regla que valida transición).

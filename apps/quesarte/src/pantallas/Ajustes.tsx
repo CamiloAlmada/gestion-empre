@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 import { Button, useTema, type Estilo, type Tema } from '@gestion/ui';
 import { useAuth } from '@gestion/firebase-kit';
 import { useHeader } from '../componentes/header/ContextoHeader';
+import { SeccionAlertas } from '../componentes/ajustes/SeccionAlertas';
 import { SeccionColoresNegocio } from '../componentes/ajustes/SeccionColoresNegocio';
 import { SeccionNegocio } from '../componentes/ajustes/SeccionNegocio';
 import { SeccionPlantillasWhatsApp } from '../componentes/ajustes/SeccionPlantillasWhatsApp';
@@ -191,6 +192,15 @@ export function Ajustes() {
       {perfil?.rol === 'admin' && (
         <Seccion titulo="Negocio">
           <SeccionNegocio />
+        </Seccion>
+      )}
+
+      {/* Alertas de stock (tarea B3): la ventana de aviso de vencimientos es
+          config del NEGOCIO, no preferencia personal — solo admin, igual que
+          "Negocio" y las plantillas de WhatsApp. */}
+      {perfil?.rol === 'admin' && (
+        <Seccion titulo="Alertas de stock">
+          <SeccionAlertas />
         </Seccion>
       )}
 

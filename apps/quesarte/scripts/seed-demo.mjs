@@ -43,8 +43,17 @@ import { readFileSync } from 'node:fs';
 import { applicationDefault, initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { clasificarInactividad, formatearMoney } from '@gestion/core';
-import { construirDatosDemo, PREFIJO_DEMO } from './generador.mjs';
-import { clienteADoc, ventaADoc } from './mapeoAdmin.mjs';
+import { construirDatosDemo, construirDatosReportes, PREFIJO_DEMO } from './generador.mjs';
+import {
+  categoriaADoc,
+  clienteADoc,
+  compraADoc,
+  movimientoADoc,
+  piezaADoc,
+  productoADoc,
+  proveedorADoc,
+  ventaADoc,
+} from './mapeoAdmin.mjs';
 
 // ── Guardrail de projectId ───────────────────────────────────────────────────
 
@@ -143,6 +152,20 @@ function parsearArgs(argv) {
   return args;
 }
 
+// Todas las colecciones que este script llega a tocar (WA-D + Reportes, Fase
+// 3). Un solo criterio de limpieza (`id.startsWith(PREFIJO_DEMO)`) barre las
+// dos tandas a la vez: no hace falta saber cuál sembró qué.
+const COLECCIONES_DEMO = [
+  'clientes',
+  'ventas',
+  'productos',
+  'categorias',
+  'proveedores',
+  'piezas',
+  'compras',
+  'movimientos',
+];
+
 // ── Limpieza (borra SOLO docs con id prefijado `demo-`) ─────────────────────
 
 async function borrarPorPrefijo(db, coleccionNombre) {
@@ -160,51 +183,87 @@ async function borrarPorPrefijo(db, coleccionNombre) {
 }
 
 async function limpiarDemo(db) {
-  const nClientes = await borrarPorPrefijo(db, 'clientes');
-  const nVentas = await borrarPorPrefijo(db, 'ventas');
-  console.log(`  clientes borrados: ${nClientes}`);
-  console.log(`  ventas borradas:   ${nVentas}`);
+  for (const coleccion of COLECCIONES_DEMO) {
+    const n = await borrarPorPrefijo(db, coleccion);
+    console.log(`  ${coleccion} borrados: ${n}`);
+  }
 }
 
 // ── Siembra ───────────────────────────────────────────────────────────────
 
+/** Escribe `items` (cada uno con `.id`) en `coleccionNombre`, mapeados con
+ * `aDoc`, troceado en lotes de 500 (límite de un batch de Firestore). */
+async function escribirEnLotes(db, coleccionNombre, items, aDoc) {
+  for (let i = 0; i < items.length; i += 500) {
+    const lote = items.slice(i, i + 500);
+    const batch = db.batch();
+    for (const item of lote) {
+      batch.set(db.collection(coleccionNombre).doc(item.id), aDoc(item));
+    }
+    await batch.commit();
+  }
+}
+
+/**
+ * Siembra las DOS tandas de demo en las colecciones que comparten (`clientes`,
+ * `ventas`): WA-D (6 clientes + fidelización/WhatsApp, doc 08) y Reportes (Fase
+ * 3: catálogo, compras con costo real, ventas con costeo congelado, ajustes y
+ * una anulación, doc PLAN-ACTIVO tanda A/B). Son datasets independientes —
+ * ningún cliente ni venta se comparte entre ambos (ver el porqué en el JSDoc de
+ * `construirDatosReportes`, `generador.mjs`) — pero conviven en las mismas
+ * colecciones de Firestore, como en la app real.
+ */
 async function sembrarDemo(db) {
   const ahora = new Date();
-  const { clientes, ventas } = construirDatosDemo(ahora);
+  const { clientes: clientesWaD, ventas: ventasWaD } = construirDatosDemo(ahora);
+  const reportes = construirDatosReportes(ahora);
 
-  for (let i = 0; i < clientes.length; i += 500) {
-    const lote = clientes.slice(i, i + 500);
-    const batch = db.batch();
-    for (const cliente of lote) {
-      batch.set(db.collection('clientes').doc(cliente.id), clienteADoc(cliente));
-    }
-    await batch.commit();
-  }
-  for (let i = 0; i < ventas.length; i += 500) {
-    const lote = ventas.slice(i, i + 500);
-    const batch = db.batch();
-    for (const venta of lote) {
-      batch.set(db.collection('ventas').doc(venta.id), ventaADoc(venta));
-    }
-    await batch.commit();
-  }
+  await escribirEnLotes(db, 'clientes', clientesWaD, clienteADoc);
+  await escribirEnLotes(db, 'ventas', ventasWaD, ventaADoc);
 
-  console.log(`  clientes creados: ${clientes.length}`);
-  console.log(`  ventas creadas:   ${ventas.length}`);
+  await escribirEnLotes(db, 'categorias', reportes.categorias, categoriaADoc);
+  await escribirEnLotes(db, 'proveedores', reportes.proveedores, proveedorADoc);
+  await escribirEnLotes(db, 'productos', reportes.productos, productoADoc);
+  await escribirEnLotes(db, 'piezas', reportes.piezas, piezaADoc);
+  await escribirEnLotes(db, 'compras', reportes.compras, compraADoc);
+  await escribirEnLotes(db, 'movimientos', reportes.movimientos, movimientoADoc);
+  await escribirEnLotes(db, 'clientes', reportes.clientes, clienteADoc);
+  await escribirEnLotes(db, 'ventas', reportes.ventas, ventaADoc);
+
+  console.log(`  clientes creados: ${clientesWaD.length + reportes.clientes.length} (WA-D: ${clientesWaD.length}, Reportes: ${reportes.clientes.length})`);
+  console.log(`  ventas creadas:   ${ventasWaD.length + reportes.ventas.length} (WA-D: ${ventasWaD.length}, Reportes: ${reportes.ventas.length})`);
+  console.log(`  categorías creadas: ${reportes.categorias.length}`);
+  console.log(`  proveedores creados: ${reportes.proveedores.length}`);
+  console.log(`  productos creados: ${reportes.productos.length}`);
+  console.log(`  piezas creadas:    ${reportes.piezas.length}`);
+  console.log(`  compras creadas:   ${reportes.compras.length}`);
+  console.log(`  movimientos creados: ${reportes.movimientos.length}`);
 }
 
 // ── Verificación (relee lo escrito, corre clasificarInactividad) ────────────
+
+// Prefijos específicos de CADA tanda: WA-D (`demo-cliente-01-...` /
+// `demo-venta-01-frecuente-activo-1`) y Reportes (`demo-cliente-reportes-*` /
+// `demo-venta-reportes-*`) comparten colección pero no deben mezclarse en los
+// resúmenes (clasificarInactividad sobre un cliente de Reportes no dice nada:
+// son datasets independientes, ver `construirDatosReportes`).
+const PREFIJO_CLIENTE_WA_D = `${PREFIJO_DEMO}cliente-`;
+const PREFIJO_CLIENTE_REPORTES = `${PREFIJO_DEMO}cliente-reportes-`;
+const PREFIJO_VENTA_WA_D = `${PREFIJO_DEMO}venta-`;
+const PREFIJO_VENTA_REPORTES = `${PREFIJO_DEMO}venta-reportes-`;
 
 async function imprimirVerificacion(db) {
   const ahora = new Date();
   const snapClientes = await db.collection('clientes').get();
   const clientesDemo = snapClientes.docs
-    .filter((d) => d.id.startsWith(PREFIJO_DEMO))
+    .filter((d) => d.id.startsWith(PREFIJO_CLIENTE_WA_D) && !d.id.startsWith(PREFIJO_CLIENTE_REPORTES))
     .map((d) => ({ id: d.id, ...d.data() }))
     .sort((a, b) => a.id.localeCompare(b.id));
 
   const snapVentas = await db.collection('ventas').get();
-  const ventasDemo = snapVentas.docs.filter((d) => d.id.startsWith(PREFIJO_DEMO)).map((d) => d.data());
+  const ventasDemo = snapVentas.docs
+    .filter((d) => d.id.startsWith(PREFIJO_VENTA_WA_D) && !d.id.startsWith(PREFIJO_VENTA_REPORTES))
+    .map((d) => d.data());
 
   console.log(`\nResumen de datos demo en '${PROJECT_ID_PERMITIDO}':\n`);
   if (clientesDemo.length === 0) {
@@ -243,6 +302,63 @@ async function imprimirVerificacion(db) {
   console.log('');
 }
 
+/**
+ * Resumen de la tanda de Reportes (Fase 3): cuántas compras/ventas/movimientos,
+ * en qué rango de fechas, cuánta cobertura de costo tienen los ítems vendidos
+ * y un chequeo rápido de los casos borde pedidos (Orégano sin costo conocido).
+ * No reclasifica nada (a diferencia de `imprimirVerificacion`): son ventas
+ * anónimas en su mayoría, el chequeo que importa acá es de VOLUMEN y COSTEO,
+ * no de fidelización.
+ */
+async function imprimirVerificacionReportes(db) {
+  const snapVentas = await db.collection('ventas').get();
+  const ventasReportes = snapVentas.docs
+    .filter((d) => d.id.startsWith(PREFIJO_VENTA_REPORTES))
+    .map((d) => d.data());
+
+  console.log(`\nResumen de datos de REPORTES en '${PROJECT_ID_PERMITIDO}':\n`);
+  if (ventasReportes.length === 0) {
+    console.log('  (no hay ventas de reportes demo- — ¿corriste el seed?)');
+    return;
+  }
+
+  const [snapCompras, snapMovimientos, snapProductos] = await Promise.all([
+    db.collection('compras').get(),
+    db.collection('movimientos').get(),
+    db.collection('productos').get(),
+  ]);
+  const comprasDemo = snapCompras.docs.filter((d) => d.id.startsWith(PREFIJO_DEMO));
+  const movimientosDemo = snapMovimientos.docs.filter((d) => d.id.startsWith(PREFIJO_DEMO));
+  const productosDemo = snapProductos.docs
+    .filter((d) => d.id.startsWith(PREFIJO_DEMO))
+    .map((d) => ({ id: d.id, ...d.data() }));
+
+  const fechas = ventasReportes.map((v) => v.fecha.toDate().getTime());
+  const desde = new Date(Math.min(...fechas));
+  const hasta = new Date(Math.max(...fechas));
+  const anuladas = ventasReportes.filter((v) => v.estado === 'anulada').length;
+  const itemsTotales = ventasReportes.flatMap((v) => v.items);
+  const conCosteo = itemsTotales.filter((i) => i.costeo?.costoItemCents !== undefined).length;
+  const sinCosto = itemsTotales.filter((i) => i.costeo?.fuente === 'sin_costo').length;
+
+  console.log(`  compras: ${comprasDemo.length}`);
+  console.log(`  ventas: ${ventasReportes.length} (anuladas: ${anuladas})`);
+  console.log(`  movimientos: ${movimientosDemo.length}`);
+  console.log(
+    `  rango de fechas de ventas: ${desde.toLocaleDateString('es-UY')} → ${hasta.toLocaleDateString('es-UY')}`,
+  );
+  console.log(`  ítems con costo congelado: ${conCosteo}/${itemsTotales.length} (sin costo conocido: ${sinCosto})`);
+
+  const oregano = productosDemo.find((p) => p.nombre === 'Orégano');
+  if (oregano !== undefined) {
+    console.log(
+      `  Orégano (caso "sin costo conocido"): costoPromedioCents=${oregano.costoPromedioCents}, ` +
+        `stock=${oregano.stockGranelGramos ?? 0}g`,
+    );
+  }
+  console.log('');
+}
+
 // ── main ──────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -255,6 +371,7 @@ async function main() {
 
   if (args.verificar) {
     await imprimirVerificacion(db);
+    await imprimirVerificacionReportes(db);
     return;
   }
 
@@ -270,7 +387,8 @@ async function main() {
   await sembrarDemo(db);
 
   await imprimirVerificacion(db);
-  console.log('Listo. Revisá la clasificación de arriba antes de la demo.');
+  await imprimirVerificacionReportes(db);
+  console.log('Listo. Revisá la clasificación y el resumen de arriba antes de la demo.');
 }
 
 main().catch((error) => {

@@ -16,6 +16,10 @@ const mocks = vi.hoisted(() => {
   return {
     useAuth: vi.fn(),
     useCollection: vi.fn(),
+    // `useContextoAlertas` (tarea B3) lee `configuracion/general` para la
+    // ventana de aviso de vencimiento: sin config, el hook cae al default de
+    // core (7 días), que es con el que están escritos los casos de acá.
+    useDoc: vi.fn(() => ({ datos: null, cargando: false, error: null })),
     useOnlineStatus: vi.fn(() => true),
     ingresarPiezas: vi.fn(),
     ajustarStock: vi.fn(),
@@ -38,7 +42,9 @@ const mocks = vi.hoisted(() => {
 vi.mock('@gestion/firebase-kit', () => ({
   useAuth: mocks.useAuth,
   useCollection: mocks.useCollection,
+  useDoc: mocks.useDoc,
   useOnlineStatus: mocks.useOnlineStatus,
+  configuracionConverter: {},
   productoConverter: {},
   piezaConverter: {},
   movimientoConverter: {},

@@ -1,7 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { money, peso, type Producto } from '@gestion/core';
-import { contarAlertas, filtrarPorAlerta } from './alertas';
-import { calcularResumen, type ResumenStock } from './resumen';
+import {
+  DIAS_AVISO_VENCIMIENTO_DEFAULT,
+  agruparPiezasPorProducto,
+  evaluarAlertas,
+  money,
+  peso,
+  type Alertas,
+  type ContextoAlertas,
+  type Pieza,
+  type Producto,
+} from '@gestion/core';
+import { conteoDeAlertas, idsEnAlerta } from './alertas';
+
+// La decisión de QUÉ está en alerta se testea en `packages/core`
+// (`alertas.test.ts`). Acá se testea solo la proyección a lo que consume la
+// franja de chips y —lo importante— que esa proyección salga del MISMO
+// resultado que consume Reportes: por eso los casos parten de `evaluarAlertas`
+// real y no de un `Alertas` armado a mano.
 
 function producto(over: Partial<Producto> & Pick<Producto, 'id' | 'modoStock'>): Producto {
   return {
@@ -11,176 +26,106 @@ function producto(over: Partial<Producto> & Pick<Producto, 'id' | 'modoStock'>):
     precioVentaCents: money(1000),
     costoPromedioCents: money(500),
     activo: true,
-    actualizadoEn: new Date('2026-01-01'),
+    actualizadoEn: new Date(2026, 0, 1),
     ...over,
   };
 }
 
-/** Resumen 'piezas' con un único vencimiento (o sin vencimiento). */
-function resumenPiezas(vencimientoProximo: Date | null): ResumenStock {
-  return { tipo: 'piezas', cantidadPiezas: 1, pesoTotalGramos: peso(1000), vencimientoProximo };
+function pieza(over: Partial<Pieza> & Pick<Pieza, 'id' | 'productoId'>): Pieza {
+  return {
+    pesoInicialGramos: peso(5000),
+    pesoRestanteGramos: peso(4000),
+    costoKgCents: money(30000),
+    fechaIngreso: new Date(2026, 0, 1),
+    estado: 'disponible',
+    ...over,
+  };
 }
 
-function resumenGranel(pesoTotalGramos: number): ResumenStock {
-  return { tipo: 'granel', pesoTotalGramos: peso(pesoTotalGramos) };
+/** Instante UTC del mediodía uruguayo del día dado. */
+function dia(anio: number, mes: number, d: number): Date {
+  return new Date(Date.UTC(anio, mes - 1, d, 15, 0, 0));
 }
 
-// Relativas a "hoy" (momento de ejecución del test), igual que
-// `ListaProductos.test.tsx`: `estadoVencimiento` compara contra `new Date()`
-// por defecto, así que una fecha fija hardcodeada quedaría desactualizada.
-const HOY = new Date();
-const AYER = new Date(HOY.getFullYear(), HOY.getMonth(), HOY.getDate() - 1);
-const EN_3_DIAS = new Date(HOY.getFullYear(), HOY.getMonth(), HOY.getDate() + 3);
-const EN_30_DIAS = new Date(HOY.getFullYear(), HOY.getMonth(), HOY.getDate() + 30);
+const CTX: ContextoAlertas = {
+  ahora: dia(2026, 7, 8),
+  offsetMinutos: -180,
+  diasAviso: DIAS_AVISO_VENCIMIENTO_DEFAULT,
+};
 
-describe('contarAlertas', () => {
-  it('sin productos: conteo en cero', () => {
-    expect(contarAlertas([], new Map())).toEqual({ porVencer: 0, stockBajo: 0 });
+const SIN_ALERTAS: Alertas = { porVencer: [], bajoUmbral: [] };
+
+describe('conteoDeAlertas', () => {
+  it('sin alertas: los dos conteos en cero', () => {
+    expect(conteoDeAlertas(SIN_ALERTAS)).toEqual({ porVencer: 0, stockBajo: 0 });
   });
 
-  it('sin ninguna alerta disparada: conteo en cero', () => {
-    const p1 = producto({ id: 'p1', modoStock: 'granel', stockGranelGramos: peso(5000) });
-    const resumenes = new Map([['p1', resumenGranel(5000)]]);
-
-    expect(contarAlertas([p1], resumenes)).toEqual({ porVencer: 0, stockBajo: 0 });
-  });
-
-  it('solo vencidas: cuentan como "por vencer"', () => {
-    const p1 = producto({ id: 'p1', modoStock: 'fraccionado_por_pieza' });
-    const p2 = producto({ id: 'p2', modoStock: 'fraccionado_por_pieza' });
-    const resumenes = new Map([
-      ['p1', resumenPiezas(AYER)],
-      ['p2', resumenPiezas(EN_30_DIAS)],
+  it('cuenta PRODUCTOS, no piezas: dos piezas del mismo producto suman una sola alerta', () => {
+    const p = producto({ id: 'p1', modoStock: 'fraccionado_por_pieza' });
+    const piezas = agruparPiezasPorProducto([
+      pieza({ id: 'a', productoId: 'p1', fechaVencimiento: dia(2026, 7, 9) }),
+      pieza({ id: 'b', productoId: 'p1', fechaVencimiento: dia(2026, 7, 10) }),
     ]);
 
-    expect(contarAlertas([p1, p2], resumenes)).toEqual({ porVencer: 1, stockBajo: 0 });
+    expect(conteoDeAlertas(evaluarAlertas([p], piezas, CTX))).toEqual({ porVencer: 1, stockBajo: 0 });
   });
 
-  it('vencidas y vence-pronto se suman juntas bajo "por vencer"', () => {
-    const p1 = producto({ id: 'p1', modoStock: 'fraccionado_por_pieza' });
-    const p2 = producto({ id: 'p2', modoStock: 'fraccionado_por_pieza' });
-    const resumenes = new Map([
-      ['p1', resumenPiezas(AYER)],
-      ['p2', resumenPiezas(EN_3_DIAS)],
+  it('agrupa vencidas y por vencer en un mismo conteo', () => {
+    const productos = [
+      producto({ id: 'venc', modoStock: 'pieza_entera' }),
+      producto({ id: 'pronto', modoStock: 'pieza_entera' }),
+    ];
+    const piezas = agruparPiezasPorProducto([
+      pieza({ id: 'a', productoId: 'venc', fechaVencimiento: dia(2026, 7, 1) }),
+      pieza({ id: 'b', productoId: 'pronto', fechaVencimiento: dia(2026, 7, 10) }),
     ]);
 
-    expect(contarAlertas([p1, p2], resumenes)).toEqual({ porVencer: 2, stockBajo: 0 });
+    expect(conteoDeAlertas(evaluarAlertas(productos, piezas, CTX)).porVencer).toBe(2);
   });
 
-  it('mezcla: vencimiento y stock bajo se cuentan independientemente (un producto puede disparar ambas)', () => {
-    const p1 = producto({ id: 'p1', modoStock: 'fraccionado_por_pieza', umbralAlertaStock: 2000 });
-    const p2 = producto({ id: 'p2', modoStock: 'granel', stockGranelGramos: peso(100), umbralAlertaStock: 500 });
-    const resumenP1: ResumenStock = {
-      tipo: 'piezas',
-      cantidadPiezas: 1,
-      pesoTotalGramos: peso(1000),
-      vencimientoProximo: AYER,
-    }; // vence Y bajo (umbral 2000)
-    const resumenes = new Map<string, ResumenStock>([
-      ['p1', resumenP1],
-      ['p2', resumenGranel(100)], // solo bajo
+  it('cuenta stock bajo por separado, y un producto puede estar en los dos', () => {
+    const p = producto({ id: 'p1', modoStock: 'fraccionado_por_pieza', umbralAlertaStock: 10_000 });
+    const piezas = agruparPiezasPorProducto([
+      pieza({ id: 'a', productoId: 'p1', pesoRestanteGramos: peso(900), fechaVencimiento: dia(2026, 7, 9) }),
     ]);
 
-    expect(contarAlertas([p1, p2], resumenes)).toEqual({ porVencer: 1, stockBajo: 2 });
+    expect(conteoDeAlertas(evaluarAlertas([p], piezas, CTX))).toEqual({ porVencer: 1, stockBajo: 1 });
   });
 
-  it('granel/unidad nunca disparan "por vencer" aunque tengan resumen', () => {
-    const p1 = producto({ id: 'p1', modoStock: 'granel', stockGranelGramos: peso(5000) });
-    const resumenes = new Map([['p1', resumenGranel(5000)]]);
+  it('la ventana configurada cambia el conteo', () => {
+    const p = producto({ id: 'p1', modoStock: 'pieza_entera' });
+    const piezas = agruparPiezasPorProducto([
+      pieza({ id: 'a', productoId: 'p1', fechaVencimiento: dia(2026, 7, 20) }),
+    ]);
 
-    expect(contarAlertas([p1], resumenes).porVencer).toBe(0);
-  });
-
-  it('producto sin resumen en el mapa: se ignora (no rompe)', () => {
-    const p1 = producto({ id: 'p1', modoStock: 'granel', stockGranelGramos: peso(5000) });
-
-    expect(contarAlertas([p1], new Map())).toEqual({ porVencer: 0, stockBajo: 0 });
+    expect(conteoDeAlertas(evaluarAlertas([p], piezas, { ...CTX, diasAviso: 7 })).porVencer).toBe(0);
+    expect(conteoDeAlertas(evaluarAlertas([p], piezas, { ...CTX, diasAviso: 14 })).porVencer).toBe(1);
   });
 });
 
-describe('filtrarPorAlerta', () => {
-  it('alerta === null: devuelve todos los productos sin filtrar', () => {
-    const p1 = producto({ id: 'p1', modoStock: 'granel', stockGranelGramos: peso(5000) });
-    const p2 = producto({ id: 'p2', modoStock: 'granel', stockGranelGramos: peso(100), umbralAlertaStock: 500 });
-    const resumenes = new Map([
-      ['p1', resumenGranel(5000)],
-      ['p2', resumenGranel(100)],
-    ]);
+describe('idsEnAlerta', () => {
+  const productos = [
+    producto({ id: 'vence', modoStock: 'pieza_entera' }),
+    producto({ id: 'bajo', modoStock: 'granel', stockGranelGramos: peso(100), umbralAlertaStock: 500 }),
+  ];
+  const piezas = agruparPiezasPorProducto([
+    pieza({ id: 'a', productoId: 'vence', fechaVencimiento: dia(2026, 7, 9) }),
+  ]);
+  const alertas = evaluarAlertas(productos, piezas, CTX);
 
-    expect(filtrarPorAlerta([p1, p2], resumenes, null)).toEqual([p1, p2]);
+  it('sin alerta activa devuelve null (la señal de "sin filtro")', () => {
+    expect(idsEnAlerta(alertas, null)).toBeNull();
   });
 
-  it('"por_vencer": solo deja productos vencidos o por vencer', () => {
-    const p1 = producto({ id: 'p1', modoStock: 'fraccionado_por_pieza' });
-    const p2 = producto({ id: 'p2', modoStock: 'fraccionado_por_pieza' });
-    const resumenes = new Map([
-      ['p1', resumenPiezas(AYER)],
-      ['p2', resumenPiezas(EN_30_DIAS)],
-    ]);
-
-    expect(filtrarPorAlerta([p1, p2], resumenes, 'por_vencer')).toEqual([p1]);
+  it('por_vencer devuelve solo los productos por vencer', () => {
+    expect(idsEnAlerta(alertas, 'por_vencer')).toEqual(new Set(['vence']));
   });
 
-  it('"stock_bajo": solo deja productos por debajo del umbral', () => {
-    const p1 = producto({ id: 'p1', modoStock: 'granel', stockGranelGramos: peso(100), umbralAlertaStock: 500 });
-    const p2 = producto({ id: 'p2', modoStock: 'granel', stockGranelGramos: peso(5000) });
-    const resumenes = new Map([
-      ['p1', resumenGranel(100)],
-      ['p2', resumenGranel(5000)],
-    ]);
-
-    expect(filtrarPorAlerta([p1, p2], resumenes, 'stock_bajo')).toEqual([p1]);
+  it('stock_bajo devuelve solo los productos bajo el mínimo', () => {
+    expect(idsEnAlerta(alertas, 'stock_bajo')).toEqual(new Set(['bajo']));
   });
 
-  it('sin coincidencias: devuelve lista vacía', () => {
-    const p1 = producto({ id: 'p1', modoStock: 'granel', stockGranelGramos: peso(5000) });
-    const resumenes = new Map([['p1', resumenGranel(5000)]]);
-
-    expect(filtrarPorAlerta([p1], resumenes, 'stock_bajo')).toEqual([]);
-  });
-
-  it('toggle-equivalencia: filtrar y luego "quitar" el filtro (alerta null) devuelve la lista original completa', () => {
-    const p1 = producto({ id: 'p1', modoStock: 'fraccionado_por_pieza' });
-    const p2 = producto({ id: 'p2', modoStock: 'granel', stockGranelGramos: peso(100), umbralAlertaStock: 500 });
-    const original = [p1, p2];
-    const resumenes = new Map([
-      ['p1', resumenPiezas(AYER)],
-      ['p2', resumenGranel(100)],
-    ]);
-
-    const filtrado = filtrarPorAlerta(original, resumenes, 'por_vencer');
-    expect(filtrado).toEqual([p1]);
-
-    const sinFiltro = filtrarPorAlerta(original, resumenes, null);
-    expect(sinFiltro).toEqual(original);
-  });
-
-  it('producto sin resumen en el mapa: se excluye de cualquier filtro por alerta', () => {
-    const p1 = producto({ id: 'p1', modoStock: 'granel', stockGranelGramos: peso(100) });
-
-    expect(filtrarPorAlerta([p1], new Map(), 'stock_bajo')).toEqual([]);
-    expect(filtrarPorAlerta([p1], new Map(), 'por_vencer')).toEqual([]);
-  });
-});
-
-describe('contarAlertas + filtrarPorAlerta integrados con calcularResumen real', () => {
-  it('usa el mismo resumen que calcularResumen produce para un producto por pieza vencido', () => {
-    const p1 = producto({ id: 'p1', modoStock: 'fraccionado_por_pieza' });
-    const resumen = calcularResumen(p1, [
-      {
-        id: 'pz1',
-        productoId: 'p1',
-        pesoInicialGramos: peso(1000),
-        pesoRestanteGramos: peso(1000),
-        costoKgCents: money(1000),
-        fechaIngreso: new Date('2026-01-01'),
-        fechaVencimiento: AYER,
-        estado: 'disponible',
-      },
-    ]);
-    const resumenes = new Map([['p1', resumen]]);
-
-    expect(contarAlertas([p1], resumenes)).toEqual({ porVencer: 1, stockBajo: 0 });
-    expect(filtrarPorAlerta([p1], resumenes, 'por_vencer')).toEqual([p1]);
+  it('sin alertas de ese tipo devuelve un set vacío, no null', () => {
+    expect(idsEnAlerta(SIN_ALERTAS, 'por_vencer')).toEqual(new Set());
   });
 });

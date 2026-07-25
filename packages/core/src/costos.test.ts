@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   calcularCostoRealCents,
   calcularCostoRealKgCents,
+  calcularCostoRealUnitCents,
   nuevoCostoPromedio,
 } from './costos.js';
 import { money } from './money.js';
@@ -39,6 +40,28 @@ describe('calcularCostoRealKgCents', () => {
 
   it('el resultado es entero (sin floats)', () => {
     expect(Number.isInteger(calcularCostoRealKgCents(money(10000), peso(3000)))).toBe(true);
+  });
+});
+
+describe('calcularCostoRealUnitCents', () => {
+  it('deriva el costo por unidad de un ítem por unidad', () => {
+    // $600 por 12 unidades → $50/unidad
+    expect(calcularCostoRealUnitCents(money(60000), 12)).toBe(5000);
+  });
+
+  it('redondea half-up cuando no divide exacto', () => {
+    // 100000 / 3 = 33333.33 → 33333
+    expect(calcularCostoRealUnitCents(money(100000), 3)).toBe(33333);
+    // 200000 / 3 = 66666.66 → 66667
+    expect(calcularCostoRealUnitCents(money(200000), 3)).toBe(66667);
+  });
+
+  it('devuelve null con unidades 0 (no hay costo por unidad que derivar)', () => {
+    expect(calcularCostoRealUnitCents(money(60000), 0)).toBeNull();
+  });
+
+  it('el resultado es entero (sin floats)', () => {
+    expect(Number.isInteger(calcularCostoRealUnitCents(money(100000), 3))).toBe(true);
   });
 });
 

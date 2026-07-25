@@ -70,6 +70,20 @@ const DetalleClientePantalla = lazy(() =>
 const Reportes = lazy(() =>
   import('./pantallas/Reportes').then((m) => ({ default: m.Reportes })),
 );
+const RankingRentabilidad = lazy(() =>
+  import('./pantallas/RankingRentabilidad').then((m) => ({ default: m.RankingRentabilidad })),
+);
+const AlertasStock = lazy(() =>
+  import('./pantallas/AlertasStock').then((m) => ({ default: m.AlertasStock })),
+);
+const RendimientoCompras = lazy(() =>
+  import('./pantallas/RendimientoCompras').then((m) => ({ default: m.RendimientoCompras })),
+);
+const RendimientoCompraPantalla = lazy(() =>
+  import('./pantallas/RendimientoCompraPantalla').then((m) => ({
+    default: m.RendimientoCompraPantalla,
+  })),
+);
 const Ajustes = lazy(() => import('./pantallas/Ajustes').then((m) => ({ default: m.Ajustes })));
 const Usuarios = lazy(() =>
   import('./pantallas/Usuarios').then((m) => ({ default: m.Usuarios })),
@@ -178,6 +192,48 @@ export function App() {
             element={
               <RutaSoloAdmin>
                 <Reportes />
+              </RutaSoloAdmin>
+            }
+          />
+          {/* Drill-down de rentabilidad por producto/categoría (Fase 3,
+              tanda B2, docs/PLAN-ACTIVO.md): ruta real propia, mismo criterio
+              de protección que Reportes (docs/06-ui-ux.md §2). */}
+          <Route
+            path="reportes/rentabilidad"
+            element={
+              <RutaSoloAdmin>
+                <RankingRentabilidad />
+              </RutaSoloAdmin>
+            }
+          />
+          {/* Alertas de vencimiento y stock bajo (Fase 3, tanda B3,
+              docs/PLAN-ACTIVO.md): ruta real propia, mismo criterio de
+              protección que Reportes (docs/06-ui-ux.md §2). */}
+          <Route
+            path="reportes/alertas"
+            element={
+              <RutaSoloAdmin>
+                <AlertasStock />
+              </RutaSoloAdmin>
+            }
+          />
+          {/* Rendimiento de compra/viaje (Fase 3, tanda B4,
+              docs/PLAN-ACTIVO.md): listado de compras confirmadas + detalle
+              por compra, mismo criterio de protección que el resto de
+              Reportes. */}
+          <Route
+            path="reportes/compras"
+            element={
+              <RutaSoloAdmin>
+                <RendimientoCompras />
+              </RutaSoloAdmin>
+            }
+          />
+          <Route
+            path="reportes/compras/:id"
+            element={
+              <RutaSoloAdmin>
+                <RendimientoCompraPantalla />
               </RutaSoloAdmin>
             }
           />

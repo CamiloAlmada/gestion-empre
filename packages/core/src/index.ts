@@ -26,6 +26,9 @@ export type {
   EstadoVenta,
   TipoMovimiento,
   Rol,
+  FuenteCosteo,
+  OrigenCosteo,
+  CosteoItem,
   Categoria,
   Producto,
   Pieza,
@@ -46,6 +49,16 @@ export type {
   Compra,
 } from './tipos.js';
 export { type ItemCobrable, calcularSubtotal } from './precio.js';
+export {
+  type MagnitudCosteada,
+  type EntradaCosteo,
+  type ClaseCosteo,
+  type ConCosteo,
+  VERSION_COSTEO,
+  congelarCosteo,
+  clasificarCosteo,
+  costoCongeladoDe,
+} from './costeo.js';
 export { type PiezaElegida, elegirPieza } from './fifo.js';
 export {
   type MetodoProrrateo,
@@ -56,6 +69,7 @@ export {
 export {
   calcularCostoRealCents,
   calcularCostoRealKgCents,
+  calcularCostoRealUnitCents,
   nuevoCostoPromedio,
 } from './costos.js';
 export {
@@ -80,6 +94,33 @@ export {
   type ResultadoInactividad,
   clasificarInactividad,
 } from './fidelizacion.js';
+export {
+  type Granularidad,
+  type Periodo,
+  type BucketPeriodo,
+  type PuntoComparable,
+  type VariacionPeriodo,
+  type ConfigVariacion,
+  periodoDe,
+  periodoAnterior,
+  agruparPorPeriodo,
+  variacionPorcentual,
+  dentroDePeriodo,
+  periodoEnCurso,
+  periodoAnteriorComparable,
+} from './periodo.js';
+export {
+  type CoberturaCosto,
+  type ResumenPeriodo,
+  type ItemRanking,
+  resumenPeriodo,
+  rankingPorProducto,
+  rankingPorCategoria,
+  margenDeRanking,
+  proporcionGanancia,
+  ventasVigentes,
+} from './reporteVentas.js';
+export { type RendimientoCompra, calcularRendimientoCompra } from './rendimientoCompra.js';
 export {
   type RgbLineal,
   type ResultadoClamp,
@@ -120,3 +161,33 @@ export {
   ErrorPaletaInvalida,
   generarPaleta,
 } from './paleta.js';
+export {
+  type ResumenStock,
+  type EstadoVencimiento,
+  type EstadoVencimientoActivo,
+  type ContextoAlertas,
+  DIAS_AVISO_VENCIMIENTO_DEFAULT,
+  DIAS_AVISO_VENCIMIENTO_MIN,
+  DIAS_AVISO_VENCIMIENTO_MAX,
+  diasAvisoValido,
+  normalizarDiasAviso,
+  agruparPiezasPorProducto,
+  calcularResumen,
+  diasHastaVencimiento,
+  estadoVencimiento,
+  peorEstadoVencimiento,
+  stockBajo,
+} from './stock.js';
+export {
+  LARGO_MAX_CLAVE_CATEGORIA,
+  claveCategoria,
+  claveCategoriaValida,
+} from './categoria.js';
+export {
+  type PiezaEnAlerta,
+  type AlertaVencimiento,
+  type MagnitudStock,
+  type AlertaStockBajo,
+  type Alertas,
+  evaluarAlertas,
+} from './alertas.js';

@@ -1,6 +1,14 @@
-import { formatearMoney, type Pieza, type Producto } from '@gestion/core';
+import {
+  calcularResumen,
+  formatearMoney,
+  peorEstadoVencimiento,
+  stockBajo,
+  type ContextoAlertas,
+  type Pieza,
+  type Producto,
+} from '@gestion/core';
 import { BadgeStock } from './BadgeStock';
-import { calcularResumen, formatearFecha, peorEstadoVencimiento, stockBajo, textoResumen } from './resumen';
+import { formatearFecha, textoResumen } from './resumen';
 
 /**
  * Precio de venta con la unidad de `modoPrecio` ("$ 370,00 /kg" o "$ 50,00
@@ -18,6 +26,14 @@ export interface ListaProductosProps {
   productos: Producto[];
   /** Piezas disponibles, ya agrupadas por `productoId` (`agruparPiezasPorProducto`). */
   piezasAgrupadas: Map<string, Pieza[]>;
+  /**
+   * Instante, huso y ventana de aviso con los que se evalúa el vencimiento
+   * (`useContextoAlertas`). Es prop y no un default local A PROPÓSITO: el badge
+   * de cada fila tiene que usar exactamente la misma ventana que el conteo de
+   * `FranjaAlertas` y que el reporte de Reportes. Un default acá sería la
+   * puerta por la que la franja dice "5 por vencer" y solo 3 filas se marcan.
+   */
+  contextoAlertas: ContextoAlertas;
   onSeleccionar: (producto: Producto) => void;
   /**
    * Oculta el subtítulo de categoría de cada fila. Se usa cuando la lista se
@@ -49,6 +65,7 @@ export interface ListaProductosProps {
 export function ListaProductos({
   productos,
   piezasAgrupadas,
+  contextoAlertas,
   onSeleccionar,
   ocultarCategoria = false,
   atenuarInactivos = false,
@@ -61,7 +78,10 @@ export function ListaProductos({
         const bajo = stockBajo(producto, resumen);
         const estadoVenc =
           resumen.tipo === 'piezas'
-            ? peorEstadoVencimiento(piezasDelProducto.map((p) => p.fechaVencimiento))
+            ? peorEstadoVencimiento(
+                piezasDelProducto.map((p) => p.fechaVencimiento),
+                contextoAlertas,
+              )
             : null;
         const inactivo = atenuarInactivos && !producto.activo;
 

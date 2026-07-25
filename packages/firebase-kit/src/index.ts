@@ -62,6 +62,7 @@ export {
 } from './compras';
 export {
   guardarConfiguracionGeneral,
+  guardarDiasAvisoVencimiento,
   guardarPlantillasWhatsApp,
   type DatosConfiguracionGeneral,
 } from './configuracion';

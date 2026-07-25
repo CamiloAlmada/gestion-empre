@@ -19,6 +19,7 @@ interface ConfiguracionDoc {
   umbralPiezaAgotadaGramos?: number;
   metodoProrrateo?: MetodoProrrateo;
   codigoPaisDefault?: string;
+  diasAvisoVencimiento?: number;
 }
 
 /**
@@ -45,13 +46,19 @@ interface ConfiguracionDoc {
  */
 export const configuracionConverter: FirestoreDataConverter<Configuracion> = {
   toFirestore(configuracion: WithFieldValue<Configuracion>): DocumentData {
-    const { nombreNegocio, umbralPiezaAgotadaGramos, metodoProrrateo, codigoPaisDefault } =
-      configuracion;
+    const {
+      nombreNegocio,
+      umbralPiezaAgotadaGramos,
+      metodoProrrateo,
+      codigoPaisDefault,
+      diasAvisoVencimiento,
+    } = configuracion;
     const doc: DocumentData = {};
     if (nombreNegocio !== undefined) doc.nombreNegocio = nombreNegocio;
     if (umbralPiezaAgotadaGramos !== undefined) doc.umbralPiezaAgotadaGramos = umbralPiezaAgotadaGramos;
     if (metodoProrrateo !== undefined) doc.metodoProrrateo = metodoProrrateo;
     if (codigoPaisDefault !== undefined) doc.codigoPaisDefault = codigoPaisDefault;
+    if (diasAvisoVencimiento !== undefined) doc.diasAvisoVencimiento = diasAvisoVencimiento;
     return doc;
   },
   fromFirestore(snapshot: QueryDocumentSnapshot, options?: SnapshotOptions): Configuracion {
@@ -64,6 +71,11 @@ export const configuracionConverter: FirestoreDataConverter<Configuracion> = {
           : peso(datos.umbralPiezaAgotadaGramos),
       metodoProrrateo: datos.metodoProrrateo,
       codigoPaisDefault: datos.codigoPaisDefault,
+      // Se devuelve CRUDO, sin normalizar: el default y el rango los aplica
+      // `normalizarDiasAviso` (core) en el punto de uso, para que un documento
+      // con un valor fuera de rango no quede indistinguible de uno sin valor
+      // (y para que el formulario de Ajustes pueda mostrar lo que hay escrito).
+      diasAvisoVencimiento: datos.diasAvisoVencimiento,
     };
   },
 };

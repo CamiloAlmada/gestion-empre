@@ -234,14 +234,16 @@ describe('App - rutas', () => {
 
     renderizarEn('/reportes');
 
-    // Reportes no está mockeada (real, sin dependencias de Firestore): con
-    // el code-splitting por ruta (F2-D0) su chunk se resuelve async vía
-    // Suspense. El h1 "Reportes" aparece antes que el resto (título de
-    // fallback del tab, `TITULOS_POR_TAB` en Shell.tsx, ya visible durante
-    // el propio fallback de Suspense) — el h2 recién se monta cuando el
-    // chunk de Reportes resuelve, así que también se espera con `find`.
+    // Reportes no está mockeada (real, sin dependencias de Firestore más
+    // allá de `useCollection`, ya mockeada arriba): con el code-splitting
+    // por ruta (F2-D0) su chunk se resuelve async vía Suspense, así que se
+    // espera con `find`. El h1 "Reportes" lo pone el header de Shell
+    // (`useHeader`); la pantalla real (tanda B1) NO repite el título como
+    // h2 — mismo criterio que `Venta` (ver el comentario del test de
+    // arriba): el estado vacío del período por defecto es prueba de que la
+    // pantalla real (no el placeholder) montó.
     expect(await screen.findByRole('heading', { name: 'Reportes', level: 1 })).toBeTruthy();
-    expect(await screen.findByRole('heading', { name: 'Reportes', level: 2 })).toBeTruthy();
+    expect(await screen.findByText('Todavía no hay ventas en este período.')).toBeTruthy();
   });
 
   it('vendedor que navega a /ajustes/categorias es redirigido a Venta (UI-5c, solo admin)', () => {

@@ -54,3 +54,16 @@ export { SelectorTinte, type SelectorTinteProps } from './SelectorTinte';
 export { SliderMatiz, type SliderMatizProps } from './SliderMatiz';
 export { GaleriaPresetsTema, type GaleriaPresetsTemaProps } from './GaleriaPresetsTema';
 export { ReporteContrasteAa, type ReporteContrasteAaProps } from './ReporteContrasteAa';
+export {
+  TarjetaDelta,
+  type TarjetaDeltaProps,
+  type EstadoComparacionDelta,
+  type Tendencia,
+  type Valoracion,
+} from './TarjetaDelta';
+export { FilaRanking, type FilaRankingProps } from './FilaRanking';
+export {
+  useSwipeHorizontal,
+  type DireccionSwipeHorizontal,
+  type ManejadoresSwipeHorizontal,
+} from './useSwipeHorizontal';

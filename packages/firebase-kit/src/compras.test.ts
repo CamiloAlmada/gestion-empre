@@ -306,6 +306,147 @@ describe('confirmarCompra (efectos atómicos)', () => {
   });
 });
 
+// ── confirmarCompra: costo congelado (tarea A1b) ────────────────────────────
+
+describe('confirmarCompra: costo congelado (costeo)', () => {
+  it('ítems por pieza: base = costoRealKgCents del ítem (la pieza recién creada), con compraId', async () => {
+    await confirmarCompra(db, entradaConfirmar());
+
+    const dePieza = setsDe('movimientos')
+      .map(([, m]) => m as MovimientoStock)
+      .filter((m) => m.piezaId !== undefined);
+    expect(dePieza).toHaveLength(2);
+
+    const porGramos = new Map(dePieza.map((m) => [m.deltaGramos, m.costeo]));
+    expect(porGramos.get(peso(5000))).toEqual({
+      v: 1,
+      fuente: 'pieza',
+      origen: 'venta',
+      costoUnitCents: 31875,
+      costoItemCents: 159375, // 31875 · 5000 / 1000
+      compraId: 'compra-1',
+    });
+    expect(porGramos.get(peso(3000))).toEqual({
+      v: 1,
+      fuente: 'pieza',
+      origen: 'venta',
+      costoUnitCents: 31875,
+      costoItemCents: 95625, // 31875 · 3000 / 1000
+      compraId: 'compra-1',
+    });
+  });
+
+  // Caso que revela la diferencia (review del coordinador): había 10 kg en stock
+  // comprados a $100/kg y entran 10 kg comprados a $200/kg. El nuevo promedio
+  // ponderado es $150/kg — pero lo que ESTA compra puntual costó es $200/kg. Si
+  // el movimiento congelara el promedio, "entraron 10 kg valuados a $150/kg"
+  // ($1.500) sería un número que ninguna mercadería de esta compra costó
+  // realmente ($2.000). El test falla si `congelarCosteo` usara el promedio.
+  it('ítem granel: base = costoRealKgCents del ÍTEM, NO el promedio post-ingreso (aunque difieran)', async () => {
+    const compra = compraConfirmable({
+      items: [
+        {
+          productoId: 'prod-nuez',
+          nombreProducto: 'Nuez',
+          gramos: peso(10000),
+          costoFacturaCents: money(200000), // $2.000 por 10 kg → $200/kg real
+          gastoProrrateadoCents: money(0),
+          costoRealCents: money(200000),
+          costoRealKgCents: money(20000),
+        },
+      ],
+      gastos: [],
+      totalFacturaCents: money(200000),
+      totalGastosCents: money(0),
+      totalRealCents: money(200000),
+    });
+    await confirmarCompra(db, {
+      compra,
+      usuarioId: 'admin-1',
+      // Promedio ponderado con los 10 kg viejos a $100/kg: (10·10000 + 10·20000)/20 = 15000 ($150/kg).
+      // A PROPÓSITO distinto del costo real del ítem (20000): es lo que este test prueba.
+      efectosProducto: [{ productoId: 'prod-nuez', nuevoCostoPromedioCents: money(15000) }],
+    });
+
+    const granel = setsDe('movimientos')[0]![1] as MovimientoStock;
+    expect(granel.productoId).toBe('prod-nuez');
+    expect(granel.costeo).toEqual({
+      v: 1,
+      fuente: 'promedio',
+      origen: 'venta',
+      costoUnitCents: 20000, // el costo REAL de este ítem, no 15000 (el promedio)
+      costoItemCents: 200000, // 20000 · 10000 / 1000
+    });
+  });
+
+  // Mismo caso que revela la diferencia, para unidades: 5 unidades viejas a
+  // $1,00 y entran 10 unidades a $3,00 ($300 el ítem completo). Promedio nuevo:
+  // (5·100 + 10·300)/15 = 233,33 → 233. El costo real de ESTA compra es $3,00/u.
+  it('ítem por unidad: base = costoRealUnitCents del ÍTEM, NO el promedio post-ingreso (aunque difieran)', async () => {
+    const compra = compraConfirmable({
+      items: [
+        {
+          productoId: 'prod-miel',
+          nombreProducto: 'Miel',
+          unidades: 10,
+          costoFacturaCents: money(3000), // $30,00 por 10 unidades → $3,00/u real
+          gastoProrrateadoCents: money(0),
+          costoRealCents: money(3000),
+        },
+      ],
+      gastos: [],
+      totalFacturaCents: money(3000),
+      totalGastosCents: money(0),
+      totalRealCents: money(3000),
+    });
+    await confirmarCompra(db, {
+      compra,
+      usuarioId: 'admin-1',
+      // A PROPÓSITO distinto del costo real por unidad de este ítem (300).
+      efectosProducto: [{ productoId: 'prod-miel', nuevoCostoPromedioCents: money(233) }],
+    });
+
+    const mov = setsDe('movimientos')[0]![1] as MovimientoStock;
+    expect(mov.costeo).toEqual({
+      v: 1,
+      fuente: 'promedio',
+      origen: 'venta',
+      costoUnitCents: 300, // el costo real por unidad de este ítem, no 233 (el promedio)
+      costoItemCents: 3000, // 300 · 10
+    });
+  });
+
+  it('sin base de costo (costoRealCents del ítem en 0): fuente sin_costo, sin montos, sin importar el promedio', async () => {
+    const compra = compraConfirmable({
+      items: [
+        {
+          productoId: 'prod-miel',
+          nombreProducto: 'Miel',
+          unidades: 12,
+          costoFacturaCents: money(0),
+          gastoProrrateadoCents: money(0),
+          costoRealCents: money(0),
+        },
+      ],
+      gastos: [],
+      totalFacturaCents: money(0),
+      totalGastosCents: money(0),
+      totalRealCents: money(0),
+    });
+    await confirmarCompra(db, {
+      compra,
+      usuarioId: 'admin-1',
+      // El promedio del producto puede seguir siendo > 0 (stock viejo con costo):
+      // igual queda sin_costo, porque la base es el costo REAL de este ítem (0),
+      // no el promedio.
+      efectosProducto: [{ productoId: 'prod-miel', nuevoCostoPromedioCents: money(5000) }],
+    });
+
+    const mov = setsDe('movimientos')[0]![1] as MovimientoStock;
+    expect(mov.costeo).toEqual({ v: 1, fuente: 'sin_costo', origen: 'venta' });
+  });
+});
+
 // ── confirmarCompra: validaciones (no escribe nada) ─────────────────────────
 
 describe('confirmarCompra (validaciones antes del batch)', () => {

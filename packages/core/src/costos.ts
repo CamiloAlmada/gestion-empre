@@ -31,6 +31,26 @@ export function calcularCostoRealKgCents(costoRealCents: Money, gramos: Peso): M
 }
 
 /**
+ * Costo real por unidad de un ítem por unidad (`unidad_simple`): `costoRealCents
+ * / unidades`, redondeado half-up. Análogo a `calcularCostoRealKgCents` pero sin
+ * el factor 1000 (las unidades ya son la magnitud entera, no hace falta
+ * normalizar a un múltiplo como el kilo).
+ *
+ * Es el costo real de ESTA compra puntual (tarea A1b, congelado de movimientos):
+ * a diferencia de `Producto.costoPromedioCents` (que mezcla el costo del stock
+ * viejo con el que entra), esta es la base correcta para el movimiento
+ * `ingreso_compra` — un hecho puntual que vale lo que costó esa mercadería, no
+ * un promedio ponderado con lo que ya había.
+ *
+ * Devuelve `null` cuando `unidades <= 0` (mismo criterio anti división-por-cero
+ * que `calcularCostoRealKgCents`).
+ */
+export function calcularCostoRealUnitCents(costoRealCents: Money, unidades: number): Money | null {
+  if (unidades <= 0) return null;
+  return money(redondearHalfUp(costoRealCents / unidades));
+}
+
+/**
  * Nuevo costo promedio ponderado tras ingresar mercadería por compra.
  *
  * Media ponderada del costo unitario entre el stock existente y lo que entra:
