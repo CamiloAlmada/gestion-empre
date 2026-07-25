@@ -43,7 +43,7 @@ del módulo, y es seguro porque es aditivo, opcional y versionado.
 | A1b | Mismo congelado en **todo movimiento de stock** (merma, ajustes, ingreso por compra) | `semisenior` | **en corrección** | 6 caminos cubiertos; `venta`/`devolucion` reutilizan el costeo del `ItemVenta` en vez de recalcularlo (correcto). **Devuelto**: el `ingreso_compra` de granel/unidad congelaba el promedio post-ingreso en vez del costo real del ítem (ver abajo) |
 | ~~A2~~ | ~~Script de backfill~~ | — | **CANCELADA** | No hay historia real que rescatar: los datos de prod son de prueba y se borran (A5). Construir el backfill sería invertir la tarea más riesgosa del módulo en datos descartables |
 | A3 | Core de agregación: `periodo.ts` + `reporteVentas.ts` | `semisenior` | ✅ **hecha** | Verificado: 318 tests en core. `VariacionPeriodo` es una unión donde `sin-base` **no tiene campo numérico** (un porcentaje inexistente es irrepresentable, no un caso a recordar); anuladas filtradas en un único punto (`ventasVigentes`); la ganancia solo suma con costo conocido, el resto va a `CoberturaCosto` |
-| A4 | Índices para alertas/merma + limpiar el huérfano `productos (activo, nombre)` | `trainee` | ✅ **hecha** | Verificado por el orquestador: ninguna query combina `activo` con `orderBy('nombre')` (`DetalleProductoPantalla.tsx:90` y `CompraPantalla.tsx:123` usan una u otra); JSON válido; resto de entradas intactas |
+| A4 | Índices | `trainee` | ✅ hecha, **y después revertida en parte** | La limpieza del huérfano `productos (activo, nombre)` fue correcta. Los dos índices nuevos resultaron innecesarios cuando se construyeron sus queries y se quitaron (ver nota abajo): la regla "el índice entra con su query" vale en los dos sentidos |
 | A5 | Script de reseteo de datos de prueba (Admin SDK) | `senior` | ✅ **hecha** (pendiente de decisiones del dueño, ver abajo) | `resetPlan.mjs` puro + `reset-operativo.mjs` shell, 40 tests. Probado E2E contra el emulador: dry-run por defecto, colección desconocida aborta, projectId mal tipeado aborta, sin TTY aborta, idempotente, restauración verificada. **La ejecución la hace una persona, no un agente** |
 
 ### Diseño del congelado (decidido, no re-discutir)
@@ -89,9 +89,9 @@ después de las preguntas abiertas, para no contaminar sus respuestas).
 | B5 | `TarjetaDelta` + `FilaRanking` en `packages/ui` | `semisenior` | — | ✅ **hecha** (con una corrección, ver abajo). 205 tests verdes verificados por el orquestador |
 | A6 | Datos de demo en `quesarte-uy-dev` | `semisenior` | ✅ **hecha** (sin correr todavía) | **Extendió** el seed existente, no lo duplicó. ~4 meses, 523 docs en 8 colecciones, 162 ventas con `costeo` congelado vía `congelarCosteo`, 6 compras cuyo prorrateo se calcula con el mismo módulo puro que usa `CompraPantalla`, 1 anulada, y los 4 casos borde de UI. Mapeo byte a byte contra los converters reales, testeado. Determinista con semilla |
 | B1 | Home de Reportes: registro de reportes, hero del período, estados loading/error/vacío/offline | `semisenior` | A3, B5 | ✅ **hecha** (con una corrección, ver abajo). Criterio 1 del dueño cumplido; cobertura <100% visible; una sola query para los dos períodos, sin índice compuesto nuevo. El aviso de offline usa `useOnlineStatus` (patrón de toda la app) y no `metadata.fromCache`, que ningún hook del repo expone hoy |
-| B2 | Drill-down de rentabilidad por producto/categoría | `semisenior` | B1 | Ranking por **ganancia aportada**, no por facturación; ítems `sin_costo` en bucket rotulado |
-| B3 | Alertas: vencimientos en N días + stock bajo | `semisenior` (reglas revisadas por `senior`) | A4 | Criterio 3 (doc 04:480); **extender `configuracionGeneralValida`** (`firestore.rules:184`) en la misma tarea que agrega la clave |
-| B4 | Rendimiento de compra/viaje | `semisenior` | A1, A2, B1 | Criterio 2 (doc 04:479); una compra de dev muestra gastos vs ganancia y % vendido; parte granel rotulada "aproximada" |
+| B2 | Drill-down de rentabilidad por producto/categoría | `semisenior` | B1 | ✅ **hecha**. Ranking por ganancia aportada con el margen como valor secundario: las dos cifras juntas revelan el producto de mucho volumen y poco aporte. El período viaja desde la home por la URL |
+| B3 | Alertas: vencimientos en N días + stock bajo | `senior` | — | ✅ **hecha**. Criterio 3 del dueño. `evaluarAlertas` en core es ahora el único cálculo de alertas del proyecto (Productos y Reportes lo comparten). Umbral configurable, default 7 días. `configuracionGeneralValida` extendida y verificada por falsación |
+| B4 | Rendimiento de compra/viaje | `semisenior` | A1, B1 | ✅ **hecha**. Criterio 2 del dueño. La porción granel se excluye en vez de estimarse y `porcentajeVendidoBps` es `null` (no 0) cuando no hay nada atribuible. `estado` separa "es pronto para juzgar" de "rindió mal" |
 
 ## Pendiente de decisión del dueño — antes de correr el reseteo (A5)
 
@@ -177,6 +177,19 @@ dónde salen esas ventas es problema del hook, no del dominio. No antes.
 - El seed de demo existente cubre solo clientes + WhatsApp (doc 08) y arma ítems
   **sin** `costeo`: sin actualizarlo, toda venta sembrada en dev clasifica como
   `legado` y los reportes de ganancia no muestran nada. Va incluido en A6.
+- **Los tres criterios de aceptación de la Fase 3 (doc 04:477-480) están
+  cubiertos**: ganancia del período (B1), rendimiento del viaje (B4) y aviso de
+  vencimientos (B3). Falta validarlos con el dueño sobre datos de demo.
+- **Índices sin consumidor (2026-07-24):** A4 agregó `movimientos (tipo, fecha)`
+  y `piezas (estado, fechaVencimiento)` anticipando queries que después no los
+  necesitaron, y se quitaron. El segundo además nunca debería usarse: la query
+  de alertas NO puede ordenar por `fechaVencimiento` porque Firestore excluye
+  del `orderBy` los documentos sin ese campo, y las piezas sin vencimiento
+  (frutos secos, especias) desaparecerían del resultado, con su peso dejando de
+  contar para la alerta de stock bajo. Lección para la memoria del proyecto: la
+  regla "el índice entra en la misma tanda que su query" vale en los dos
+  sentidos — un índice sin query cuesta amplificación de escritura, y en este
+  caso escondía además un error de diseño de la query que lo justificaba.
 - **Hallazgo del review de B1 (2026-07-24):** la pantalla comparaba el período
   de calendario EN CURSO contra el anterior COMPLETO. El día 3 de un mes son
   dos días y medio de ventas contra treinta: una caída del 44% que solo dice
