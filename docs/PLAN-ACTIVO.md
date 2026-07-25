@@ -93,6 +93,52 @@ después de las preguntas abiertas, para no contaminar sus respuestas).
 | B3 | Alertas: vencimientos en N días + stock bajo | `senior` | — | ✅ **hecha**. Criterio 3 del dueño. `evaluarAlertas` en core es ahora el único cálculo de alertas del proyecto (Productos y Reportes lo comparten). Umbral configurable, default 7 días. `configuracionGeneralValida` extendida y verificada por falsación |
 | B4 | Rendimiento de compra/viaje | `semisenior` | A1, B1 | ✅ **hecha**. Criterio 2 del dueño. La porción granel se excluye en vez de estimarse y `porcentajeVendidoBps` es `null` (no 0) cuando no hay nada atribuible. `estado` separa "es pronto para juzgar" de "rindió mal" |
 
+## Tanda C — Unicidad estructural de categorías
+
+Apareció un duplicado real en dev (dos "Quesos") y al investigarlo quedó claro
+que la unicidad vivía solo en `crearCategoria`, como chequeo read-then-write:
+cualquier escritura fuera de esa función duplicaba (el seed lo hizo), y en una
+app offline-first dos dispositivos podían crear la misma categoría y sincronizar
+las dos. Diseño cerrado por `advisor`.
+
+| # | Tarea | Agente | Estado |
+| --- | --- | --- | --- |
+| C1+C2 | `claveCategoria` en core, id del documento = clave, renombrado que muda el documento de path, e invariante exigido en `firestore.rules` | `senior` | ✅ **hecha**. 175 tests de reglas |
+| C3 | Script de canonicalización de los ids existentes + deduplicación | `senior` | **en curso** |
+| C4 | Seed: ids de categoría canónicos (sin prefijo `demo-`) | `trainee` | pendiente |
+| C5 | Tests de coherencia cruzada sobre el generador puro del seed | `semisenior` | pendiente |
+
+### 🚨 ORDEN DE DESPLIEGUE — no negociable
+
+Las reglas nuevas exigen el campo `clave` y que el id coincida con él. Los
+documentos que ya existen en prod y en dev tienen id autogenerado y no tienen
+`clave`. Con las reglas desplegadas y sin migrar, **renombrar o reordenar una
+categoría existente falla con `permission-denied`** (el alta de categorías
+nuevas funciona igual).
+
+1. Correr la migración C3 (Admin SDK, bypassea reglas) en dev y en prod.
+2. Deployar las reglas nuevas.
+3. Recién después, el reseteo operativo (A5).
+4. Entrega.
+
+### Hallazgo verificado: `lower()` de firestore.rules es solo ASCII
+
+El diseño original comparaba el id contra `nombre.trim().lower()` dentro de la
+regla. Probado contra el emulador: **el `lower()` del lenguaje de reglas baja
+solo A–Z ASCII y deja intactas la `Ñ` y las vocales acentuadas**. Dar de alta
+"Ñoquis" o "CAFÉ" habría dado `permission-denied` en producción. Por eso la
+clave se calcula en `packages/core` (el `toLowerCase()` de JS sí es
+Unicode-completo), se persiste como campo y la regla exige igualdad exacta
+contra él. Se pierde que la regla verifique que el campo deriva honestamente
+del nombre; está documentado en las reglas y en el doc 02.
+
+### Seguimiento anotado
+
+`crearProveedor` (`packages/firebase-kit/src/proveedores.ts:69`) **no tiene
+ningún chequeo de duplicados**, ni siquiera el débil de aplicación que tenía
+`crearCategoria`. Menos grave —los productos referencian proveedor por id, así
+que un homónimo es fealdad y no ambigüedad de identidad— pero está abierto.
+
 ## Reseteo de datos de prueba (A5) — decidido, pendiente de ejecutar
 
 El script está listo y NO se corrió. **El dueño confirmó las cinco decisiones
