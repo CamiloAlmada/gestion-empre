@@ -4,24 +4,8 @@
       "collectionGroup": "movimientos",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "tipo", "order": "ASCENDING" },
-        { "fieldPath": "fecha", "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "movimientos",
-      "queryScope": "COLLECTION",
-      "fields": [
         { "fieldPath": "productoId", "order": "ASCENDING" },
         { "fieldPath": "fecha", "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "piezas",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "estado", "order": "ASCENDING" },
-        { "fieldPath": "fechaVencimiento", "order": "ASCENDING" }
       ]
     },
     {
