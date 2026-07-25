@@ -936,6 +936,58 @@ describe('configuracion', () => {
     await assertSucceeds(
       updateDoc(doc(db(ADMIN), 'configuracion', 'general'), { codigoPaisDefault: '54' }),
     );
+    await assertSucceeds(
+      updateDoc(doc(db(ADMIN), 'configuracion', 'general'), { diasAvisoVencimiento: 14 }),
+    );
+  });
+
+  // `diasAvisoVencimiento` (tarea B3): la clave que habilita las alertas de
+  // vencimiento configurables. Sin su entrada en `configuracionGeneralValida`,
+  // el guardado pasa todos los tests de UI y falla SOLO en producción, que es
+  // exactamente lo que estos casos existen para impedir.
+  it('admin guarda diasAvisoVencimiento en los extremos del rango', async () => {
+    await assertSucceeds(
+      updateDoc(doc(db(ADMIN), 'configuracion', 'general'), { diasAvisoVencimiento: 1 }),
+    );
+    await assertSucceeds(
+      updateDoc(doc(db(ADMIN), 'configuracion', 'general'), { diasAvisoVencimiento: 90 }),
+    );
+  });
+
+  it('vendedor NO guarda diasAvisoVencimiento', async () => {
+    await assertFails(
+      updateDoc(doc(db(VENDEDOR), 'configuracion', 'general'), { diasAvisoVencimiento: 14 }),
+    );
+  });
+
+  it('admin NO pone diasAvisoVencimiento en 0 (avisaría el día del vencimiento)', async () => {
+    await assertFails(
+      updateDoc(doc(db(ADMIN), 'configuracion', 'general'), { diasAvisoVencimiento: 0 }),
+    );
+  });
+
+  it('admin NO pone diasAvisoVencimiento negativo', async () => {
+    await assertFails(
+      updateDoc(doc(db(ADMIN), 'configuracion', 'general'), { diasAvisoVencimiento: -3 }),
+    );
+  });
+
+  it('admin NO pone diasAvisoVencimiento por encima del máximo', async () => {
+    await assertFails(
+      updateDoc(doc(db(ADMIN), 'configuracion', 'general'), { diasAvisoVencimiento: 91 }),
+    );
+  });
+
+  it('admin NO pone diasAvisoVencimiento float (rompería el conteo de días)', async () => {
+    await assertFails(
+      updateDoc(doc(db(ADMIN), 'configuracion', 'general'), { diasAvisoVencimiento: 7.5 }),
+    );
+  });
+
+  it('admin NO pone diasAvisoVencimiento como texto', async () => {
+    await assertFails(
+      updateDoc(doc(db(ADMIN), 'configuracion', 'general'), { diasAvisoVencimiento: '14' }),
+    );
   });
 
   it('admin NO agrega una clave desconocida a general', async () => {

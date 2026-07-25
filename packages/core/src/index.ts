@@ -159,3 +159,28 @@ export {
   ErrorPaletaInvalida,
   generarPaleta,
 } from './paleta.js';
+export {
+  type ResumenStock,
+  type EstadoVencimiento,
+  type EstadoVencimientoActivo,
+  type ContextoAlertas,
+  DIAS_AVISO_VENCIMIENTO_DEFAULT,
+  DIAS_AVISO_VENCIMIENTO_MIN,
+  DIAS_AVISO_VENCIMIENTO_MAX,
+  diasAvisoValido,
+  normalizarDiasAviso,
+  agruparPiezasPorProducto,
+  calcularResumen,
+  diasHastaVencimiento,
+  estadoVencimiento,
+  peorEstadoVencimiento,
+  stockBajo,
+} from './stock.js';
+export {
+  type PiezaEnAlerta,
+  type AlertaVencimiento,
+  type MagnitudStock,
+  type AlertaStockBajo,
+  type Alertas,
+  evaluarAlertas,
+} from './alertas.js';

@@ -1,8 +1,22 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { money, peso, type Categoria, type Producto } from '@gestion/core';
+import {
+  DIAS_AVISO_VENCIMIENTO_DEFAULT,
+  money,
+  peso,
+  type Categoria,
+  type ContextoAlertas,
+  type Producto,
+} from '@gestion/core';
 import { agruparPorCategoria, SIN_CATEGORIA } from './agrupacion';
 import { ListaProductosAgrupada } from './ListaProductosAgrupada';
+
+/** Se pasa tal cual a `ListaProductos`; estos casos no ejercitan vencimientos. */
+const CTX: ContextoAlertas = {
+  ahora: new Date(),
+  offsetMinutos: -new Date().getTimezoneOffset(),
+  diasAviso: DIAS_AVISO_VENCIMIENTO_DEFAULT,
+};
 
 function producto(over: Partial<Producto> & Pick<Producto, 'nombre' | 'categoria'>): Producto {
   return {
@@ -29,7 +43,7 @@ describe('ListaProductosAgrupada', () => {
     const productos = [producto({ nombre: 'Nuez', categoria: 'Frutos secos' })];
     const grupos = agruparPorCategoria(productos, []);
 
-    render(<ListaProductosAgrupada grupos={grupos} piezasAgrupadas={new Map()} onSeleccionar={() => {}} />);
+    render(<ListaProductosAgrupada grupos={grupos} piezasAgrupadas={new Map()} contextoAlertas={CTX} onSeleccionar={() => {}} />);
 
     expect(screen.getByText('Nuez')).toBeTruthy();
     expect(screen.getByText('Frutos secos')).toBeTruthy(); // subtítulo de la fila, no encabezado
@@ -49,7 +63,7 @@ describe('ListaProductosAgrupada', () => {
     ];
     const grupos = agruparPorCategoria(productos, categorias);
 
-    render(<ListaProductosAgrupada grupos={grupos} piezasAgrupadas={new Map()} onSeleccionar={() => {}} />);
+    render(<ListaProductosAgrupada grupos={grupos} piezasAgrupadas={new Map()} contextoAlertas={CTX} onSeleccionar={() => {}} />);
 
     const encabezados = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
     expect(encabezados).toEqual(['Quesos', 'Miel', 'Embutidos']);
@@ -63,7 +77,7 @@ describe('ListaProductosAgrupada', () => {
     ];
     const grupos = agruparPorCategoria(productos, categorias);
 
-    render(<ListaProductosAgrupada grupos={grupos} piezasAgrupadas={new Map()} onSeleccionar={() => {}} />);
+    render(<ListaProductosAgrupada grupos={grupos} piezasAgrupadas={new Map()} contextoAlertas={CTX} onSeleccionar={() => {}} />);
 
     const encabezados = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
     expect(encabezados).toEqual(['Quesos', SIN_CATEGORIA]);
@@ -74,7 +88,7 @@ describe('ListaProductosAgrupada', () => {
     const productos = [producto({ nombre: 'Queso Colonia', categoria: 'Quesos' })];
     const grupos = agruparPorCategoria(productos, categorias);
 
-    render(<ListaProductosAgrupada grupos={grupos} piezasAgrupadas={new Map()} onSeleccionar={() => {}} />);
+    render(<ListaProductosAgrupada grupos={grupos} piezasAgrupadas={new Map()} contextoAlertas={CTX} onSeleccionar={() => {}} />);
 
     // El nombre de categoría solo aparece una vez: en el encabezado h2.
     expect(screen.getAllByText('Quesos').length).toBe(1);
@@ -95,7 +109,7 @@ describe('ListaProductosAgrupada', () => {
     const filtrados = productos.filter((p) => p.nombre.toLowerCase().includes('colonia'));
     const grupos = agruparPorCategoria(filtrados, categorias);
 
-    render(<ListaProductosAgrupada grupos={grupos} piezasAgrupadas={new Map()} onSeleccionar={() => {}} />);
+    render(<ListaProductosAgrupada grupos={grupos} piezasAgrupadas={new Map()} contextoAlertas={CTX} onSeleccionar={() => {}} />);
 
     const encabezados = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
     expect(encabezados).toEqual(['Quesos']);
@@ -109,7 +123,7 @@ describe('ListaProductosAgrupada', () => {
     const prod = producto({ nombre: 'Queso Colonia', categoria: 'Quesos' });
     const grupos = agruparPorCategoria([prod], categorias);
 
-    render(<ListaProductosAgrupada grupos={grupos} piezasAgrupadas={new Map()} onSeleccionar={onSeleccionar} />);
+    render(<ListaProductosAgrupada grupos={grupos} piezasAgrupadas={new Map()} contextoAlertas={CTX} onSeleccionar={onSeleccionar} />);
     fireEvent.click(screen.getByRole('button', { name: /Queso Colonia/ }));
 
     expect(onSeleccionar).toHaveBeenCalledWith(prod);

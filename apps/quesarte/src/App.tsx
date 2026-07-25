@@ -73,6 +73,9 @@ const Reportes = lazy(() =>
 const RankingRentabilidad = lazy(() =>
   import('./pantallas/RankingRentabilidad').then((m) => ({ default: m.RankingRentabilidad })),
 );
+const AlertasStock = lazy(() =>
+  import('./pantallas/AlertasStock').then((m) => ({ default: m.AlertasStock })),
+);
 const Ajustes = lazy(() => import('./pantallas/Ajustes').then((m) => ({ default: m.Ajustes })));
 const Usuarios = lazy(() =>
   import('./pantallas/Usuarios').then((m) => ({ default: m.Usuarios })),
@@ -192,6 +195,17 @@ export function App() {
             element={
               <RutaSoloAdmin>
                 <RankingRentabilidad />
+              </RutaSoloAdmin>
+            }
+          />
+          {/* Alertas de vencimiento y stock bajo (Fase 3, tanda B3,
+              docs/PLAN-ACTIVO.md): ruta real propia, mismo criterio de
+              protección que Reportes (docs/06-ui-ux.md §2). */}
+          <Route
+            path="reportes/alertas"
+            element={
+              <RutaSoloAdmin>
+                <AlertasStock />
               </RutaSoloAdmin>
             }
           />

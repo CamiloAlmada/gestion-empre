@@ -8,12 +8,21 @@ import { Reportes } from './Reportes';
 
 const mocks = vi.hoisted(() => ({
   useCollection: vi.fn(),
+  useDoc: vi.fn(() => ({ datos: null, cargando: false, error: null })),
   useOnlineStatus: vi.fn(),
 }));
 
 vi.mock('@gestion/firebase-kit', () => ({
   useCollection: mocks.useCollection,
+  // `useAlertasStock`/`useContextoAlertas` (tarea B3): la home ahora también
+  // suscribe `productos`, `piezas` y `configuracion/general` para el bloque de
+  // alertas. Con las colecciones vacías y sin config, ese bloque cae en su
+  // estado de "todo en orden" y no interfiere con lo que testea este archivo.
+  useDoc: mocks.useDoc,
   useOnlineStatus: mocks.useOnlineStatus,
+  configuracionConverter: {},
+  piezaConverter: {},
+  productoConverter: {},
   ventaConverter: {},
 }));
 
@@ -31,6 +40,7 @@ function crearRef(path: string): RefFalsa {
 
 vi.mock('firebase/firestore', () => ({
   collection: (_db: unknown, path: string) => crearRef(path),
+  doc: (_db: unknown, coleccion: string, id: string) => crearRef(`${coleccion}/${id}`),
   query: (ref: RefFalsa, ...clausulas: unknown[]) => ({ ...ref, __clausulas: clausulas }),
   orderBy: (...args: unknown[]) => ({ __tipo: 'orderBy', args }),
   where: (...args: unknown[]) => ({ __tipo: 'where', args }),

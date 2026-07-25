@@ -1,8 +1,25 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { money, peso, type Pieza, type Producto } from '@gestion/core';
+import {
+  DIAS_AVISO_VENCIMIENTO_DEFAULT,
+  agruparPiezasPorProducto,
+  money,
+  peso,
+  type ContextoAlertas,
+  type Pieza,
+  type Producto,
+} from '@gestion/core';
 import { ListaProductos } from './ListaProductos';
-import { agruparPiezasPorProducto } from './resumen';
+
+// Contexto de alertas con el "hoy" y el huso reales del entorno de test: los
+// casos de vencimiento de abajo construyen sus fechas relativas a hoy, así que
+// tienen que compartir la misma referencia. La ventana es el default de core
+// (7 días), el mismo con el que estos casos fueron escritos.
+const CTX: ContextoAlertas = {
+  ahora: new Date(),
+  offsetMinutos: -new Date().getTimezoneOffset(),
+  diasAviso: DIAS_AVISO_VENCIMIENTO_DEFAULT,
+};
 
 function producto(over: Partial<Producto> & Pick<Producto, 'modoStock'>): Producto {
   return {
@@ -45,6 +62,7 @@ describe('ListaProductos - agrupación por modoStock', () => {
       <ListaProductos
         productos={[prod]}
         piezasAgrupadas={agruparPiezasPorProducto(piezas)}
+        contextoAlertas={CTX}
         onSeleccionar={() => {}}
       />,
     );
@@ -61,6 +79,7 @@ describe('ListaProductos - agrupación por modoStock', () => {
       <ListaProductos
         productos={[prod]}
         piezasAgrupadas={agruparPiezasPorProducto(piezas)}
+        contextoAlertas={CTX}
         onSeleccionar={() => {}}
       />,
     );
@@ -71,7 +90,7 @@ describe('ListaProductos - agrupación por modoStock', () => {
   it('granel: muestra el total en peso, sin piezas', () => {
     const prod = producto({ id: 'p1', nombre: 'Nuez mariposa', modoStock: 'granel', stockGranelGramos: peso(3200) });
 
-    render(<ListaProductos productos={[prod]} piezasAgrupadas={new Map()} onSeleccionar={() => {}} />);
+    render(<ListaProductos productos={[prod]} piezasAgrupadas={new Map()} contextoAlertas={CTX} onSeleccionar={() => {}} />);
 
     expect(screen.getByText('3,2 kg')).toBeTruthy();
   });
@@ -85,7 +104,7 @@ describe('ListaProductos - agrupación por modoStock', () => {
       stockUnidades: 7,
     });
 
-    render(<ListaProductos productos={[prod]} piezasAgrupadas={new Map()} onSeleccionar={() => {}} />);
+    render(<ListaProductos productos={[prod]} piezasAgrupadas={new Map()} contextoAlertas={CTX} onSeleccionar={() => {}} />);
 
     expect(screen.getByText('7 unidades')).toBeTruthy();
   });
@@ -102,6 +121,7 @@ describe('ListaProductos - alertas visuales', () => {
       <ListaProductos
         productos={[prod]}
         piezasAgrupadas={agruparPiezasPorProducto(piezas)}
+        contextoAlertas={CTX}
         onSeleccionar={() => {}}
       />,
     );
@@ -120,6 +140,7 @@ describe('ListaProductos - alertas visuales', () => {
       <ListaProductos
         productos={[prod]}
         piezasAgrupadas={agruparPiezasPorProducto(piezas)}
+        contextoAlertas={CTX}
         onSeleccionar={() => {}}
       />,
     );
@@ -135,7 +156,7 @@ describe('ListaProductos - alertas visuales', () => {
       umbralAlertaStock: 500,
     });
 
-    render(<ListaProductos productos={[prod]} piezasAgrupadas={new Map()} onSeleccionar={() => {}} />);
+    render(<ListaProductos productos={[prod]} piezasAgrupadas={new Map()} contextoAlertas={CTX} onSeleccionar={() => {}} />);
 
     expect(screen.getByText('Stock bajo')).toBeTruthy();
   });
@@ -143,7 +164,7 @@ describe('ListaProductos - alertas visuales', () => {
   it('sin alertas: no muestra ningún badge', () => {
     const prod = producto({ id: 'p1', modoStock: 'granel', stockGranelGramos: peso(5000) });
 
-    render(<ListaProductos productos={[prod]} piezasAgrupadas={new Map()} onSeleccionar={() => {}} />);
+    render(<ListaProductos productos={[prod]} piezasAgrupadas={new Map()} contextoAlertas={CTX} onSeleccionar={() => {}} />);
 
     expect(screen.queryByText('Vence pronto')).toBeNull();
     expect(screen.queryByText('Vencida')).toBeNull();
@@ -155,7 +176,7 @@ describe('ListaProductos - ocultarCategoria', () => {
   it('por defecto muestra el subtítulo de categoría de cada fila', () => {
     const prod = producto({ id: 'p1', nombre: 'Queso Colonia', categoria: 'Quesos', modoStock: 'granel' });
 
-    render(<ListaProductos productos={[prod]} piezasAgrupadas={new Map()} onSeleccionar={() => {}} />);
+    render(<ListaProductos productos={[prod]} piezasAgrupadas={new Map()} contextoAlertas={CTX} onSeleccionar={() => {}} />);
 
     expect(screen.getByText('Quesos')).toBeTruthy();
   });
@@ -164,7 +185,7 @@ describe('ListaProductos - ocultarCategoria', () => {
     const prod = producto({ id: 'p1', nombre: 'Queso Colonia', categoria: 'Quesos', modoStock: 'granel' });
 
     render(
-      <ListaProductos productos={[prod]} piezasAgrupadas={new Map()} onSeleccionar={() => {}} ocultarCategoria />,
+      <ListaProductos productos={[prod]} piezasAgrupadas={new Map()} contextoAlertas={CTX} onSeleccionar={() => {}} ocultarCategoria />,
     );
 
     expect(screen.queryByText('Quesos')).toBeNull();
@@ -183,7 +204,7 @@ describe('ListaProductos - precio de venta', () => {
       stockGranelGramos: peso(1000),
     });
 
-    render(<ListaProductos productos={[prod]} piezasAgrupadas={new Map()} onSeleccionar={() => {}} />);
+    render(<ListaProductos productos={[prod]} piezasAgrupadas={new Map()} contextoAlertas={CTX} onSeleccionar={() => {}} />);
 
     expect(screen.getByText('$ 370,00 /kg')).toBeTruthy();
   });
@@ -198,7 +219,7 @@ describe('ListaProductos - precio de venta', () => {
       stockUnidades: 3,
     });
 
-    render(<ListaProductos productos={[prod]} piezasAgrupadas={new Map()} onSeleccionar={() => {}} />);
+    render(<ListaProductos productos={[prod]} piezasAgrupadas={new Map()} contextoAlertas={CTX} onSeleccionar={() => {}} />);
 
     expect(screen.getByText('$ 1.200,00 /u')).toBeTruthy();
   });
@@ -213,6 +234,7 @@ describe('ListaProductos - vencimiento próximo', () => {
       <ListaProductos
         productos={[prod]}
         piezasAgrupadas={agruparPiezasPorProducto(piezas)}
+        contextoAlertas={CTX}
         onSeleccionar={() => {}}
       />,
     );
@@ -228,6 +250,7 @@ describe('ListaProductos - vencimiento próximo', () => {
       <ListaProductos
         productos={[prod]}
         piezasAgrupadas={agruparPiezasPorProducto(piezas)}
+        contextoAlertas={CTX}
         onSeleccionar={() => {}}
       />,
     );
@@ -238,7 +261,7 @@ describe('ListaProductos - vencimiento próximo', () => {
   it('producto granel/unidad: nunca muestra línea de vencimiento (no aplica)', () => {
     const prod = producto({ id: 'p1', nombre: 'Nuez mariposa', modoStock: 'granel', stockGranelGramos: peso(1000) });
 
-    render(<ListaProductos productos={[prod]} piezasAgrupadas={new Map()} onSeleccionar={() => {}} />);
+    render(<ListaProductos productos={[prod]} piezasAgrupadas={new Map()} contextoAlertas={CTX} onSeleccionar={() => {}} />);
 
     expect(screen.queryByText(/Vence/)).toBeNull();
   });
@@ -249,7 +272,7 @@ describe('ListaProductos - interacción', () => {
     const onSeleccionar = vi.fn();
     const prod = producto({ id: 'p1', nombre: 'Queso Colonia', modoStock: 'granel', stockGranelGramos: peso(1000) });
 
-    render(<ListaProductos productos={[prod]} piezasAgrupadas={new Map()} onSeleccionar={onSeleccionar} />);
+    render(<ListaProductos productos={[prod]} piezasAgrupadas={new Map()} contextoAlertas={CTX} onSeleccionar={onSeleccionar} />);
     fireEvent.click(screen.getByRole('button', { name: /Queso Colonia/ }));
 
     expect(onSeleccionar).toHaveBeenCalledWith(prod);

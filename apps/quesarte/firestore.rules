@@ -184,14 +184,24 @@ service cloud.firestore {
     function configuracionGeneralValida() {
       let d = request.resource.data;
       return d.keys().hasOnly(
-          ['nombreNegocio', 'umbralPiezaAgotadaGramos', 'metodoProrrateo', 'codigoPaisDefault'])
+          ['nombreNegocio', 'umbralPiezaAgotadaGramos', 'metodoProrrateo', 'codigoPaisDefault',
+           'diasAvisoVencimiento'])
         && (!('nombreNegocio' in d)
             || (d.nombreNegocio is string && d.nombreNegocio.size() >= 1 && d.nombreNegocio.size() <= 80))
         && (!('umbralPiezaAgotadaGramos' in d)
             || (d.umbralPiezaAgotadaGramos is int && d.umbralPiezaAgotadaGramos > 0))
         && (!('metodoProrrateo' in d) || d.metodoProrrateo in ['por_valor', 'por_peso'])
         && (!('codigoPaisDefault' in d)
-            || (d.codigoPaisDefault is string && d.codigoPaisDefault.matches('^[0-9]{1,4}$')));
+            || (d.codigoPaisDefault is string && d.codigoPaisDefault.matches('^[0-9]{1,4}$')))
+        // Días de anticipación del aviso de vencimiento (tarea B3). Entero en
+        // [1, 90], espejo de DIAS_AVISO_VENCIMIENTO_MIN/MAX en
+        // packages/core/src/stock.ts: 0 avisaría el día del vencimiento (tarde)
+        // y más de un trimestre marcaría el inventario entero. `is int` rechaza
+        // el float que rompería la comparación de días de calendario.
+        && (!('diasAvisoVencimiento' in d)
+            || (d.diasAvisoVencimiento is int
+                && d.diasAvisoVencimiento >= 1
+                && d.diasAvisoVencimiento <= 90));
     }
 
     // Shape estricto de `configuracion/tema` (doc 06 §4, tanda TM): la SEMILLA del

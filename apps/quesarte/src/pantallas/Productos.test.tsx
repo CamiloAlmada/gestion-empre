@@ -11,6 +11,11 @@ const mocks = vi.hoisted(() => ({
   useAuth: vi.fn(),
   useOnlineStatus: vi.fn(() => true),
   useCollection: vi.fn(),
+  // `useContextoAlertas` (tarea B3) lee `configuracion/general` para la
+  // ventana de aviso de vencimiento. Sin config el hook cae al default de
+  // core (7 días), la misma ventana con la que están escritos los casos de
+  // vencimiento de acá.
+  useDoc: vi.fn(() => ({ datos: null, cargando: false, error: null })),
   addDoc: vi.fn(),
 }));
 
@@ -29,6 +34,7 @@ vi.mock('@gestion/firebase-kit', async (importOriginal) => {
     useAuth: mocks.useAuth,
     useOnlineStatus: mocks.useOnlineStatus,
     useCollection: mocks.useCollection,
+    useDoc: mocks.useDoc,
   };
 });
 

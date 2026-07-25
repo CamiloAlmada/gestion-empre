@@ -80,6 +80,26 @@ describe('configuracionConverter.fromFirestore', () => {
     expect(configuracion.codigoPaisDefault).toBeUndefined();
   });
 
+  it('reconstruye diasAvisoVencimiento (tarea B3) cuando está presente', () => {
+    const conAviso = { ...docCompleto, diasAvisoVencimiento: 14 };
+    const configuracion = configuracionConverter.fromFirestore(snapshotDe('general', conAviso), {});
+    expect(configuracion.diasAvisoVencimiento).toBe(14);
+  });
+
+  it('diasAvisoVencimiento ausente (config previa a B3) queda undefined, no 7', () => {
+    // El default NO lo pone el converter: lo pone `normalizarDiasAviso` (core)
+    // en el punto de uso, para no confundir "no configurado" con "configurado
+    // en 7" — el formulario de Ajustes necesita distinguirlos.
+    const configuracion = configuracionConverter.fromFirestore(snapshotDe('general', docCompleto), {});
+    expect(configuracion.diasAvisoVencimiento).toBeUndefined();
+  });
+
+  it('diasAvisoVencimiento fuera de rango se devuelve CRUDO (no lo normaliza el converter)', () => {
+    const corrupto = { ...docCompleto, diasAvisoVencimiento: 500 };
+    const configuracion = configuracionConverter.fromFirestore(snapshotDe('general', corrupto), {});
+    expect(configuracion.diasAvisoVencimiento).toBe(500);
+  });
+
   it('umbral PRESENTE pero float sigue explotando aunque el resto falte (tipo inválido)', () => {
     // Presente-pero-inválido conserva el comportamiento anterior: falla al leer.
     expect(() =>
@@ -113,6 +133,19 @@ describe('configuracionConverter.toFirestore', () => {
     expect(doc.codigoPaisDefault).toBe('598');
     const reconstruido = configuracionConverter.fromFirestore(snapshotDe('general', doc), {});
     expect(reconstruido).toEqual(conCodigo);
+  });
+
+  it('round-trip con diasAvisoVencimiento presente', () => {
+    const conAviso: Configuracion = { ...configuracion, diasAvisoVencimiento: 21 };
+    const doc = configuracionConverter.toFirestore(conAviso);
+    expect(doc.diasAvisoVencimiento).toBe(21);
+    expect(configuracionConverter.fromFirestore(snapshotDe('general', doc), {})).toEqual(conAviso);
+  });
+
+  it('omite diasAvisoVencimiento del doc cuando es undefined (nunca null)', () => {
+    expect(configuracionConverter.toFirestore(configuracion)).not.toHaveProperty(
+      'diasAvisoVencimiento',
+    );
   });
 
   it('config PARCIAL solo escribe las claves presentes (omite las undefined)', () => {

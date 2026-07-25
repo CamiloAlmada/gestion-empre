@@ -1,7 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { addDoc, collection, orderBy, query, where } from 'firebase/firestore';
-import { money, peso, type Categoria, type Pieza, type Producto } from '@gestion/core';
+import {
+  agruparPiezasPorProducto,
+  evaluarAlertas,
+  money,
+  peso,
+  type Categoria,
+  type Pieza,
+  type Producto,
+} from '@gestion/core';
 import {
   categoriaConverter,
   piezaConverter,
@@ -12,11 +20,11 @@ import {
 } from '@gestion/firebase-kit';
 import { Button, CampoBusqueda, Chip, ChipsFiltro, normalizarBusqueda, useToasts } from '@gestion/ui';
 import { db } from '../firebase';
+import { useContextoAlertas } from '../componentes/alertas/useContextoAlertas';
 import { agruparPorCategoria, categoriasVisibles } from '../componentes/stock/agrupacion';
-import { contarAlertas, filtrarPorAlerta, type TipoAlerta } from '../componentes/stock/alertas';
+import { conteoDeAlertas, idsEnAlerta, type TipoAlerta } from '../componentes/stock/alertas';
 import { FranjaAlertas } from '../componentes/stock/FranjaAlertas';
 import { ListaProductosAgrupada } from '../componentes/stock/ListaProductosAgrupada';
-import { agruparPiezasPorProducto, calcularResumen, type ResumenStock } from '../componentes/stock/resumen';
 import { IconoFiltros } from '../componentes/iconos';
 import { useHeader } from '../componentes/header/ContextoHeader';
 import { ModalProducto, type DatosAltaProducto, type DatosProductoFormulario } from './ModalProducto';
@@ -137,29 +145,27 @@ export function Productos() {
   const productos = useCollection<Producto>(productosQuery);
   const piezas = useCollection<Pieza>(piezasQuery);
   const categorias = useCollection<Categoria>(categoriasQuery);
+  // Ventana de aviso de vencimiento del negocio (Ajustes → Alertas de stock),
+  // compartida con Reportes y con los badges de cada fila.
+  const { contexto: contextoAlertas, cargando: cargandoAlertas } = useContextoAlertas();
 
   const piezasAgrupadas = useMemo(() => agruparPiezasPorProducto(piezas.datos), [piezas.datos]);
 
-  // Resumen por producto (activo O inactivo — una fila inactiva también
-  // muestra sus existencias), base tanto de las filas como de la franja de
-  // alertas: se calcula UNA vez acá y se reutiliza.
-  const resumenesPorProducto = useMemo(() => {
-    const mapa = new Map<string, ResumenStock>();
-    for (const producto of productos.datos) {
-      mapa.set(producto.id, calcularResumen(producto, piezasAgrupadas.get(producto.id) ?? []));
-    }
-    return mapa;
-  }, [productos.datos, piezasAgrupadas]);
-
   const productosActivos = useMemo(() => productos.datos.filter((p) => p.activo), [productos.datos]);
 
-  // Conteo de alertas: SIEMPRE sobre productos activos (contrato,
-  // docs/06-ui-ux.md §2/§3) — nunca se ve afectado por el chip "Inactivos" ni
-  // por la búsqueda/categoría elegidas.
-  const conteoAlertas = useMemo(
-    () => contarAlertas(productosActivos, resumenesPorProducto),
-    [productosActivos, resumenesPorProducto],
+  // Alertas: SIEMPRE sobre productos activos (contrato, docs/06-ui-ux.md §2/§3)
+  // — nunca se ven afectadas por el chip "Inactivos" ni por la
+  // búsqueda/categoría elegidas.
+  //
+  // `evaluarAlertas` (packages/core) es la MISMA función que usa el reporte de
+  // Reportes, con el MISMO `ContextoAlertas` (la ventana de días la configura
+  // el admin en Ajustes): las dos pantallas no pueden dar números distintos
+  // sobre la misma mercadería — riesgo anotado en `docs/PLAN-ACTIVO.md`.
+  const alertas = useMemo(
+    () => evaluarAlertas(productosActivos, piezasAgrupadas, contextoAlertas),
+    [productosActivos, piezasAgrupadas, contextoAlertas],
   );
+  const conteoAlertas = useMemo(() => conteoDeAlertas(alertas), [alertas]);
 
   function alternarAlerta(alerta: TipoAlerta) {
     setAlertaActiva((actual) => (actual === alerta ? null : alerta));
@@ -176,18 +182,12 @@ export function Productos() {
     if (cantidad === 0) setAlertaActiva(null);
   }, [alertaActiva, conteoAlertas]);
 
-  // Ids de los productos ACTIVOS que cumplen la alerta activa (`null` sin
-  // alerta activa): reusa `filtrarPorAlerta` tal cual pero solo sobre
-  // `productosActivos` — un producto inactivo nunca "cumple" una alerta,
-  // aunque su resumen numérico la satisfaga (las alertas son un concepto de
-  // catálogo vivo, mismo contrato que `conteoAlertas` arriba).
-  const idsBajoAlerta = useMemo(
-    () =>
-      alertaActiva === null
-        ? null
-        : new Set(filtrarPorAlerta(productosActivos, resumenesPorProducto, alertaActiva).map((p) => p.id)),
-    [alertaActiva, productosActivos, resumenesPorProducto],
-  );
+  // Ids de los productos que cumplen la alerta activa (`null` sin alerta
+  // activa). Salen del MISMO `alertas` que el conteo, que ya se calculó solo
+  // sobre activos: un producto inactivo nunca "cumple" una alerta aunque su
+  // resumen numérico la satisfaga (las alertas son un concepto de catálogo
+  // vivo, mismo contrato que `conteoAlertas` arriba).
+  const idsBajoAlerta = useMemo(() => idsEnAlerta(alertas, alertaActiva), [alertas, alertaActiva]);
 
   // Filtro compuesto de estado (activo, o inactivo con el chip "Inactivos") +
   // alerta, en UN solo pase sobre `productos.datos` (ya ordenado por
@@ -281,7 +281,10 @@ export function Productos() {
     }
   }
 
-  const cargando = productos.cargando || piezas.cargando || categorias.cargando;
+  // `cargandoAlertas` entra al gate para no mostrar un conteo con la ventana
+  // por defecto y corregirlo un instante después: un número que cambia solo,
+  // en una pantalla de decisión, es peor que esperar 100 ms.
+  const cargando = productos.cargando || piezas.cargando || categorias.cargando || cargandoAlertas;
   const error = productos.error ?? piezas.error ?? categorias.error;
 
   // Único filtro "extra" (panel del botón de filtros, WA-H3) hoy — gatea el
@@ -324,6 +327,7 @@ export function Productos() {
       <ListaProductosAgrupada
         grupos={gruposPorCategoria}
         piezasAgrupadas={piezasAgrupadas}
+        contextoAlertas={contextoAlertas}
         onSeleccionar={(producto) => navigate(`/stock/producto/${producto.id}`)}
         atenuarInactivos
       />

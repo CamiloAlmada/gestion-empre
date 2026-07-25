@@ -22,6 +22,8 @@ import {
   type OpcionGrupoSegmentado,
 } from '@gestion/ui';
 import { db } from '../firebase';
+import { ResumenAlertas } from '../componentes/alertas/ResumenAlertas';
+import { useAlertasStock } from '../componentes/alertas/useAlertasStock';
 import { useHeader } from '../componentes/header/ContextoHeader';
 import { REGISTRO_REPORTES } from '../componentes/reportes/registro';
 import {
@@ -124,6 +126,10 @@ const OPCIONES_PERIODO: readonly OpcionGrupoSegmentado<Granularidad>[] = [
 export function Reportes() {
   useHeader({ titulo: 'Reportes' });
   const enLinea = useOnlineStatus();
+  // Alertas de stock (tarea B3): mismo cálculo y misma ventana de días que la
+  // franja de Productos y que el drill-down `/reportes/alertas` — un único
+  // `evaluarAlertas` en `packages/core`, nunca dos criterios en paralelo.
+  const alertas = useAlertasStock();
 
   // Default 'mes' (antes 'dia'): es la granularidad que nombra el criterio
   // del dueño (doc 04:478, "cuánto ganó el mes pasado") y el cierre natural
@@ -273,6 +279,20 @@ export function Reportes() {
         </p>
       )}
       {contenido}
+      {/* Alertas de vencimiento y stock bajo (tarea B3): se ven SIN navegar,
+          que es el criterio 3 del dueño (doc 04:480). Van acá, después del
+          hero de ganancia y antes del catálogo: el hero responde el criterio 1
+          ("cuánto ganó") y no se lo desplaza, pero esto queda igual de visible
+          al abrir la pantalla. NO dependen del período elegido arriba —una
+          pieza vence cuando vence, no "en el mes"— así que viven fuera de
+          `contenido` y siguen ahí aunque el período no tenga ventas. */}
+      <ResumenAlertas
+        alertas={alertas.alertas}
+        cargando={alertas.cargando}
+        hayError={alertas.hayError}
+        onReintentar={alertas.reintentar}
+        diasAviso={alertas.diasAviso}
+      />
       {REGISTRO_REPORTES.length > 0 && (
         <div className="flex flex-col gap-2">
           <h2 className="text-sm font-semibold text-texto-secundario">Para mirar</h2>

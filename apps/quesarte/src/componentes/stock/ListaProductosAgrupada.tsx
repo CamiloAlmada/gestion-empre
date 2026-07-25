@@ -1,4 +1,4 @@
-import type { Pieza, Producto } from '@gestion/core';
+import type { ContextoAlertas, Pieza, Producto } from '@gestion/core';
 import type { GrupoProductos } from './agrupacion';
 import { ListaProductos } from './ListaProductos';
 
@@ -6,6 +6,8 @@ export interface ListaProductosAgrupadaProps {
   /** Ya calculados por `agruparPorCategoria` — ver `Productos.tsx`. */
   grupos: GrupoProductos[];
   piezasAgrupadas: Map<string, Pieza[]>;
+  /** Pasado tal cual a `ListaProductos` — ver su JSDoc. */
+  contextoAlertas: ContextoAlertas;
   onSeleccionar: (producto: Producto) => void;
   /** Pasado tal cual a `ListaProductos` — ver su JSDoc (UI-5, fusión
    * Stock+Catálogo). Por defecto `false`. */
@@ -25,6 +27,7 @@ export interface ListaProductosAgrupadaProps {
 export function ListaProductosAgrupada({
   grupos,
   piezasAgrupadas,
+  contextoAlertas,
   onSeleccionar,
   atenuarInactivos = false,
 }: ListaProductosAgrupadaProps) {
@@ -35,6 +38,7 @@ export function ListaProductosAgrupada({
       <ListaProductos
         productos={unico.productos}
         piezasAgrupadas={piezasAgrupadas}
+        contextoAlertas={contextoAlertas}
         onSeleccionar={onSeleccionar}
         atenuarInactivos={atenuarInactivos}
       />
@@ -66,6 +70,7 @@ export function ListaProductosAgrupada({
             <ListaProductos
               productos={grupo.productos}
               piezasAgrupadas={piezasAgrupadas}
+              contextoAlertas={contextoAlertas}
               onSeleccionar={onSeleccionar}
               ocultarCategoria
               atenuarInactivos={atenuarInactivos}

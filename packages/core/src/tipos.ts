@@ -300,6 +300,13 @@ export interface Configuracion {
    * default `'598'` (Uruguay). No es un umbral ni dinero: es una cadena de dígitos.
    */
   codigoPaisDefault?: string;
+  /**
+   * Con cuántos días de anticipación se avisa que una pieza está por vencer
+   * (entero, `DIAS_AVISO_VENCIMIENTO_MIN`..`MAX` — ver `stock.ts`). Lo edita el
+   * admin en Ajustes → Alertas de stock. Ausente ⇒ el consumidor usa
+   * `normalizarDiasAviso`, que cae al default de core.
+   */
+  diasAvisoVencimiento?: number;
 }
 
 /**

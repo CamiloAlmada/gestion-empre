@@ -38,8 +38,13 @@ export interface DefinicionReporte {
   readonly ruta: string;
 }
 
-/** B3/B4 agregan su entrada acá. Ver el JSDoc de arriba. */
 export const REGISTRO_REPORTES: readonly DefinicionReporte[] = [
+  {
+    id: 'alertas',
+    titulo: 'Vencimientos y stock bajo',
+    descripcion: 'Qué rematar antes de perderlo y qué reponer.',
+    ruta: '/reportes/alertas',
+  },
   {
     id: 'rentabilidad',
     titulo: 'Rentabilidad por producto y categoría',

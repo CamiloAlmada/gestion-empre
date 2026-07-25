@@ -1,7 +1,15 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { collection, doc, orderBy, query, where } from 'firebase/firestore';
-import type { Categoria, Cliente, MedioPago, Peso, Pieza, Producto } from '@gestion/core';
+import {
+  agruparPiezasPorProducto,
+  type Categoria,
+  type Cliente,
+  type MedioPago,
+  type Peso,
+  type Pieza,
+  type Producto,
+} from '@gestion/core';
 import {
   ItemInvalidoError,
   StockInsuficienteError,
@@ -23,7 +31,6 @@ import {
 import { Button, useToasts } from '@gestion/ui';
 import { db } from '../firebase';
 import { IconoHistorial } from '../componentes/iconos';
-import { agruparPiezasPorProducto } from '../componentes/stock/resumen';
 import { Carrito } from '../componentes/venta/Carrito';
 import { useCarrito } from '../componentes/venta/ContextoCarrito';
 import { GrillaProductos } from '../componentes/venta/GrillaProductos';

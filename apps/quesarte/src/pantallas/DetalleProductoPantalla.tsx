@@ -1,7 +1,14 @@
 import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { collection, deleteField, doc, limit, orderBy, query, updateDoc, where, type UpdateData } from 'firebase/firestore';
-import type { Categoria, MovimientoStock, Pieza, Producto } from '@gestion/core';
+import {
+  agruparPiezasPorProducto,
+  calcularResumen,
+  type Categoria,
+  type MovimientoStock,
+  type Pieza,
+  type Producto,
+} from '@gestion/core';
 import {
   categoriaConverter,
   movimientoConverter,
@@ -17,7 +24,7 @@ import { DetalleProducto } from '../componentes/stock/DetalleProducto';
 import { ModalAjusteNegativo } from '../componentes/stock/ModalAjusteNegativo';
 import { ModalIngresarPiezas } from '../componentes/stock/ModalIngresarPiezas';
 import { ModalSumarStock } from '../componentes/stock/ModalSumarStock';
-import { agruparPiezasPorProducto, calcularResumen } from '../componentes/stock/resumen';
+import { useContextoAlertas } from '../componentes/alertas/useContextoAlertas';
 import { useHeader } from '../componentes/header/ContextoHeader';
 import { ModalProducto, type DatosEdicionProducto, type DatosProductoFormulario } from './ModalProducto';
 
@@ -107,6 +114,11 @@ export function DetalleProductoPantalla() {
   const productos = useCollection<Producto>(productosQuery);
   const piezas = useCollection<Pieza>(piezasQuery);
   const categorias = useCollection<Categoria>(categoriasQuery);
+
+  // Misma ventana de aviso que la franja de Productos y que Reportes: los
+  // badges de vencimiento de las piezas de esta ficha no pueden decir algo
+  // distinto de lo que dice el conteo de la pantalla anterior.
+  const { contexto: contextoAlertas } = useContextoAlertas();
 
   const piezasAgrupadas = useMemo(() => agruparPiezasPorProducto(piezas.datos), [piezas.datos]);
   const producto = productos.datos.find((p) => p.id === id) ?? null;
@@ -244,6 +256,7 @@ export function DetalleProductoPantalla() {
         producto={producto}
         piezasDelProducto={piezasAgrupadas.get(producto.id) ?? []}
         resumen={calcularResumen(producto, piezasAgrupadas.get(producto.id) ?? [])}
+        contextoAlertas={contextoAlertas}
         estadoMovimientos={movimientos}
         esAdmin={esAdmin}
         onAjustarPieza={abrirAjustePieza}

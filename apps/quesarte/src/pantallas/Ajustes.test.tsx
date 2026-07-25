@@ -33,6 +33,12 @@ vi.mock('../componentes/ajustes/SeccionPlantillasWhatsApp', () => ({
 vi.mock('../componentes/ajustes/SeccionColoresNegocio', () => ({
   SeccionColoresNegocio: () => <div data-testid="seccion-colores-negocio" />,
 }));
+// Ídem para `SeccionAlertas` (tarea B3): su propia suite
+// (`componentes/ajustes/SeccionAlertas.test.tsx`) cubre el formulario y la
+// escritura; acá solo importa el gateo por rol.
+vi.mock('../componentes/ajustes/SeccionAlertas', () => ({
+  SeccionAlertas: () => <div data-testid="seccion-alertas" />,
+}));
 
 function configurarAuth(overrides: Partial<ReturnType<typeof authPorDefecto>> = {}) {
   const valor = { ...authPorDefecto(), ...overrides };
@@ -215,6 +221,24 @@ describe('Ajustes', () => {
     expect(screen.queryByText('Plantillas de WhatsApp')).toBeNull();
     expect(screen.queryByTestId('seccion-negocio')).toBeNull();
     expect(screen.queryByTestId('seccion-plantillas-whatsapp')).toBeNull();
+  });
+
+  it('vendedor no ve "Alertas de stock" (tarea B3: config del negocio, no personal)', () => {
+    configurarAuth();
+
+    renderizar();
+
+    expect(screen.queryByText('Alertas de stock')).toBeNull();
+    expect(screen.queryByTestId('seccion-alertas')).toBeNull();
+  });
+
+  it('admin ve "Alertas de stock" (tarea B3)', () => {
+    configurarAuth({ perfil: { ...authPorDefecto().perfil, rol: 'admin' } });
+
+    renderizar();
+
+    expect(screen.getByText('Alertas de stock')).toBeTruthy();
+    expect(screen.getByTestId('seccion-alertas')).toBeTruthy();
   });
 
   it('admin ve las secciones "Negocio" y "Plantillas de WhatsApp" (doc 08)', () => {

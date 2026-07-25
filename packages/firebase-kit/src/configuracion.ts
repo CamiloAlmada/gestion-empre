@@ -1,5 +1,10 @@
 import { doc, setDoc, type Firestore } from 'firebase/firestore';
-import type { PlantillaWhatsApp } from '@gestion/core';
+import {
+  DIAS_AVISO_VENCIMIENTO_MAX,
+  DIAS_AVISO_VENCIMIENTO_MIN,
+  diasAvisoValido,
+  type PlantillaWhatsApp,
+} from '@gestion/core';
 import { plantillasWhatsAppConverter } from './converters/plantillasWhatsApp';
 import { ConfiguracionInvalidaError } from './errores';
 
@@ -84,6 +89,35 @@ export async function guardarConfiguracionGeneral(
     { codigoPaisDefault, nombreNegocio },
     { merge: true },
   );
+}
+
+/**
+ * Guarda `configuracion/general.diasAvisoVencimiento` con MERGE no destructivo:
+ * con cuántos días de anticipación avisa la app que una pieza está por vencer
+ * (tarea B3, `docs/PLAN-ACTIVO.md`).
+ *
+ * Escritura APARTE de `guardarConfiguracionGeneral` a propósito: aquella exige
+ * `nombreNegocio` + `codigoPaisDefault` juntos (es el formulario de "Negocio"),
+ * y obligar a reescribir el nombre del negocio para cambiar la ventana de aviso
+ * sería acoplar dos ajustes que no tienen nada que ver. El merge garantiza que
+ * ninguna de las dos escrituras pise a la otra.
+ *
+ * El rango vive en `packages/core` (`diasAvisoValido`) y lo revalidan las
+ * reglas de Firestore (`configuracionGeneralValida`): las tres capas dicen lo
+ * mismo porque las dos primeras usan la MISMA constante.
+ *
+ * @throws {ConfiguracionInvalidaError} si no es un entero dentro del rango.
+ */
+export async function guardarDiasAvisoVencimiento(
+  db: Firestore,
+  diasAvisoVencimiento: number,
+): Promise<void> {
+  if (!diasAvisoValido(diasAvisoVencimiento)) {
+    throw new ConfiguracionInvalidaError(
+      `Los días de aviso deben ser un número entero entre ${DIAS_AVISO_VENCIMIENTO_MIN} y ${DIAS_AVISO_VENCIMIENTO_MAX}.`,
+    );
+  }
+  await setDoc(doc(db, 'configuracion', 'general'), { diasAvisoVencimiento }, { merge: true });
 }
 
 /**

@@ -1,15 +1,22 @@
-import { formatearPeso, peso, type MovimientoStock, type Pieza, type Producto } from '@gestion/core';
+import {
+  estadoVencimiento,
+  formatearPeso,
+  peso,
+  type ContextoAlertas,
+  type MovimientoStock,
+  type Pieza,
+  type Producto,
+  type ResumenStock,
+} from '@gestion/core';
 import type { EstadoCollection } from '@gestion/firebase-kit';
 import { DataTable, type ColumnaDataTable } from '@gestion/ui';
 import { BadgeStock } from './BadgeStock';
 import { ETIQUETAS_MODO_PRECIO, ETIQUETAS_MODO_STOCK } from './etiquetasProducto';
 import {
-  estadoVencimiento,
   etiquetaTipoMovimiento,
   formatearDeltaMovimiento,
   formatearFecha,
   textoResumen,
-  type ResumenStock,
 } from './resumen';
 
 export interface DetalleProductoProps {
@@ -17,6 +24,12 @@ export interface DetalleProductoProps {
   /** Piezas disponibles de ESTE producto (ya filtradas por el llamador). */
   piezasDelProducto: Pieza[];
   resumen: ResumenStock;
+  /**
+   * Ventana de aviso de vencimiento compartida con el resto de la app
+   * (`useContextoAlertas`): los badges "Vencida"/"Vence pronto" de esta ficha
+   * no pueden usar otro criterio que la franja de Productos y Reportes.
+   */
+  contextoAlertas: ContextoAlertas;
   /** Últimos movimientos del producto. Solo se usa (y solo se pide arriba) para granel/unidad_simple. */
   estadoMovimientos: EstadoCollection<MovimientoStock>;
   esAdmin: boolean;
@@ -129,6 +142,7 @@ export function DetalleProducto({
   producto,
   piezasDelProducto,
   resumen,
+  contextoAlertas,
   estadoMovimientos,
   esAdmin,
   onAjustarPieza,
@@ -155,7 +169,7 @@ export function DetalleProducto({
       titulo: 'Vencimiento',
       render: (p) => {
         if (p.fechaVencimiento === undefined) return '—';
-        const estado = estadoVencimiento(p.fechaVencimiento);
+        const estado = estadoVencimiento(p.fechaVencimiento, contextoAlertas);
         return (
           <span className="flex flex-wrap items-center gap-2">
             {formatearFecha(p.fechaVencimiento)}
@@ -203,7 +217,7 @@ export function DetalleProducto({
    * (`onAjustarPieza`), con el mismo `aria-label` descriptivo.
    */
   function filaCompactaPieza(p: Pieza) {
-    const estado = estadoVencimiento(p.fechaVencimiento);
+    const estado = estadoVencimiento(p.fechaVencimiento, contextoAlertas);
     const contenido = (
       <div className="flex flex-1 flex-col gap-1">
         <div className="flex items-baseline justify-between gap-2">

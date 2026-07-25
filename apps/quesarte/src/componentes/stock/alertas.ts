@@ -1,16 +1,20 @@
-import type { Producto } from '@gestion/core';
-import { estadoVencimiento, stockBajo, type ResumenStock } from './resumen';
+import type { Alertas } from '@gestion/core';
 
 /**
- * Alertas de la franja superior de Stock: conteo y filtrado por tipo, sobre
- * los `ResumenStock` ya calculados por producto (`calcularResumen`, ver
- * `Stock.tsx`). Sin React, sin Firebase: solo transforma datos ya calculados
- * por la pantalla — misma filosofía que `resumen.ts` y `agrupacion.ts`.
+ * Adaptación de las alertas de dominio (`evaluarAlertas`, `packages/core`) a lo
+ * que necesita la franja de chips de la pantalla Productos: un conteo y el
+ * conjunto de ids a filtrar.
  *
- * "Por vencer" agrupa ambos estados de `estadoVencimiento` ('vencida' y
+ * Acá NO se decide qué está en alerta — eso ya lo decidió core, una sola vez,
+ * para esta pantalla y para Reportes (tarea B3 de `docs/PLAN-ACTIVO.md`). Estas
+ * dos funciones solo proyectan ese resultado; si alguna vez difieren de lo que
+ * muestra Reportes, es porque se le pasó otro `ContextoAlertas`, nunca porque
+ * el criterio sea otro.
+ *
+ * "Por vencer" agrupa los dos estados de vencimiento ('vencida' y
  * 'vence_pronto'): al dueño le interesa la lista de productos a mirar, no
- * distinguir el matiz en la franja (el matiz sigue estando en el badge de
- * cada fila).
+ * distinguir el matiz en la franja (el matiz sigue estando en el badge de cada
+ * fila, y desglosado en el reporte de Reportes).
  */
 export type TipoAlerta = 'por_vencer' | 'stock_bajo';
 
@@ -19,53 +23,18 @@ export interface ConteoAlertas {
   stockBajo: number;
 }
 
-/**
- * `true` si el producto (a través de su `resumen`) dispara la alerta de
- * vencimiento. Solo aplica a `modoStock` por pieza (`resumen.tipo ===
- * 'piezas'`); granel/unidad no tienen vencimiento.
- *
- * Usa `resumen.vencimientoProximo` (la fecha MÁS PRÓXIMA entre las piezas del
- * producto, ya calculada por `calcularResumen`) en vez de recorrer piezas de
- * nuevo: al estar ordenada ascendente, esa fecha es siempre la más urgente, y
- * su `estadoVencimiento` coincide exactamente con `peorEstadoVencimiento` de
- * todas las piezas (fechas más próximas ⇒ estados más severos).
- */
-function tieneAlertaVencimiento(resumen: ResumenStock): boolean {
-  return resumen.tipo === 'piezas' && estadoVencimiento(resumen.vencimientoProximo ?? undefined) !== null;
+/** Cuántos productos dispara cada tipo de alerta. */
+export function conteoDeAlertas(alertas: Alertas): ConteoAlertas {
+  return { porVencer: alertas.porVencer.length, stockBajo: alertas.bajoUmbral.length };
 }
 
 /**
- * Cuenta cuántos `productos` disparan cada tipo de alerta, según sus
- * `resumenes` (mapa `producto.id` → `ResumenStock`, calculado por el
- * llamador). Productos sin resumen en el mapa se ignoran (no deberían
- * ocurrir: el llamador arma el mapa a partir de los mismos `productos`).
+ * Ids de los productos que disparan `alerta`, para filtrar la lista maestra.
+ * `alerta === null` es la señal de "sin filtro": devuelve `null` (permite
+ * implementar el toggle on/off de los chips sin una rama aparte en el llamador).
  */
-export function contarAlertas(productos: Producto[], resumenes: Map<string, ResumenStock>): ConteoAlertas {
-  let porVencer = 0;
-  let bajo = 0;
-  for (const producto of productos) {
-    const resumen = resumenes.get(producto.id);
-    if (resumen === undefined) continue;
-    if (tieneAlertaVencimiento(resumen)) porVencer++;
-    if (stockBajo(producto, resumen)) bajo++;
-  }
-  return { porVencer, stockBajo: bajo };
-}
-
-/**
- * Filtra `productos` a los que disparan `alerta`. `alerta === null` es la
- * señal de "sin filtro": devuelve `productos` tal cual (permite implementar
- * el toggle on/off de los chips sin una rama aparte en el llamador).
- */
-export function filtrarPorAlerta(
-  productos: Producto[],
-  resumenes: Map<string, ResumenStock>,
-  alerta: TipoAlerta | null,
-): Producto[] {
-  if (alerta === null) return productos;
-  return productos.filter((producto) => {
-    const resumen = resumenes.get(producto.id);
-    if (resumen === undefined) return false;
-    return alerta === 'por_vencer' ? tieneAlertaVencimiento(resumen) : stockBajo(producto, resumen);
-  });
+export function idsEnAlerta(alertas: Alertas, alerta: TipoAlerta | null): Set<string> | null {
+  if (alerta === null) return null;
+  const lista = alerta === 'por_vencer' ? alertas.porVencer : alertas.bajoUmbral;
+  return new Set(lista.map((a) => a.productoId));
 }

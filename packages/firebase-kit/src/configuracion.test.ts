@@ -1,6 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { PLANTILLAS_SEED, type PlantillaWhatsApp } from '@gestion/core';
-import { guardarConfiguracionGeneral, guardarPlantillasWhatsApp } from './configuracion';
+import {
+  DIAS_AVISO_VENCIMIENTO_MAX,
+  DIAS_AVISO_VENCIMIENTO_MIN,
+  PLANTILLAS_SEED,
+  type PlantillaWhatsApp,
+} from '@gestion/core';
+import {
+  guardarConfiguracionGeneral,
+  guardarDiasAvisoVencimiento,
+  guardarPlantillasWhatsApp,
+} from './configuracion';
 import { ConfiguracionInvalidaError } from './errores';
 
 // Mismo patrón que clientes.test.ts: capturamos `setDoc` para afirmar el doc y las
@@ -76,6 +85,48 @@ describe('guardarConfiguracionGeneral', () => {
     await expect(
       guardarConfiguracionGeneral(db, { codigoPaisDefault: '598', nombreNegocio: 'x'.repeat(81) }),
     ).rejects.toThrow(ConfiguracionInvalidaError);
+  });
+});
+
+describe('guardarDiasAvisoVencimiento', () => {
+  it('escribe SOLO su clave, con MERGE (no pisa el resto de configuracion/general)', async () => {
+    await guardarDiasAvisoVencimiento(db, 14);
+    const [ref, datos, opciones] = mocks.setDoc.mock.calls[0] as [
+      RefFalsa,
+      Record<string, unknown>,
+      unknown,
+    ];
+    expect(ref.path).toBe('configuracion/general');
+    expect(datos).toEqual({ diasAvisoVencimiento: 14 });
+    expect(opciones).toEqual({ merge: true });
+  });
+
+  it('acepta los extremos del rango', async () => {
+    await guardarDiasAvisoVencimiento(db, DIAS_AVISO_VENCIMIENTO_MIN);
+    await guardarDiasAvisoVencimiento(db, DIAS_AVISO_VENCIMIENTO_MAX);
+    expect(mocks.setDoc).toHaveBeenCalledTimes(2);
+  });
+
+  it('rechaza 0 y negativos', async () => {
+    await expect(guardarDiasAvisoVencimiento(db, 0)).rejects.toThrow(ConfiguracionInvalidaError);
+    await expect(guardarDiasAvisoVencimiento(db, -1)).rejects.toThrow(ConfiguracionInvalidaError);
+    expect(mocks.setDoc).not.toHaveBeenCalled();
+  });
+
+  it('rechaza por encima del máximo', async () => {
+    await expect(
+      guardarDiasAvisoVencimiento(db, DIAS_AVISO_VENCIMIENTO_MAX + 1),
+    ).rejects.toThrow(ConfiguracionInvalidaError);
+    expect(mocks.setDoc).not.toHaveBeenCalled();
+  });
+
+  it('rechaza un decimal (rompería el conteo de días de calendario)', async () => {
+    await expect(guardarDiasAvisoVencimiento(db, 7.5)).rejects.toThrow(ConfiguracionInvalidaError);
+    expect(mocks.setDoc).not.toHaveBeenCalled();
+  });
+
+  it('el mensaje de error nombra el rango, en español', async () => {
+    await expect(guardarDiasAvisoVencimiento(db, 500)).rejects.toThrow(/entre 1 y 90/);
   });
 });
 
