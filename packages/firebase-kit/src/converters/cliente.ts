@@ -67,9 +67,12 @@ function statsDeDoc(doc: StatsClienteDoc): StatsCliente {
  *   (nunca `null`).
  * - `telefonoE164` es DERIVADO de `telefono` (no lo escribe una pantalla): lo
  *   calcula `crearCliente` / `actualizarCliente` con `normalizarTelefono` (doc 08).
- *   El converter solo lo transporta (omite `undefined` como el resto). El BORRADO
- *   del campo en un update (teléfono no normalizable) NO pasa por acá: va como
- *   `deleteField()` en el `updateDoc` parcial de `actualizarCliente`.
+ *   El converter solo lo transporta (omite `undefined` como el resto). Los
+ *   BORRADOS de campos en un update NO pasan por acá: van como `deleteField()`
+ *   en el `updateDoc` parcial de `actualizarCliente`, que borra el `telefonoE164`
+ *   tanto si el teléfono no es normalizable como si se vació —y, por su contrato
+ *   de reemplazo total, borra también cualquier campo de contacto que llegue
+ *   vacío—.
  *
  * IMPORTANTE: los increments de `stats` en la venta/anulación NO pasan por este
  * converter (usan `batch.update` sobre rutas de campo `stats.x` con
