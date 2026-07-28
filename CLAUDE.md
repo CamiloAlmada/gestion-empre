@@ -14,11 +14,12 @@ infraestructura.
 
 La sesión principal de Claude Code (Opus 5) es el **orquestador**, no el
 implementador. Su trabajo es: descomponer, delegar, verificar lo que vuelve,
-reintentar con mejor brief, y mantener el plan vivo en `docs/PLAN-ACTIVO.md`
-—en el repo, nunca solo en el contexto de la sesión—.
+reintentar con mejor brief, y mantener el plan en `.claude/plan.md` —en el
+repo, nunca solo en el contexto de la sesión, que se compacta—.
 
-El orquestador **no implementa**, salvo cambios triviales de una línea (un typo,
-un import, el valor de una constante). Todo lo demás se delega.
+El orquestador **no implementa**, salvo cambios triviales de una línea (un
+typo, un import, el valor de una constante). Todo lo demás se delega, incluido
+el trabajo mecánico que parece más rápido hacer a mano.
 
 ### Equipo de agentes (`.claude/agents/`)
 
@@ -29,19 +30,79 @@ un import, el valor de una constante). Todo lo demás se delega.
 | `semisenior` | Sonnet 5 | El grueso: features estándar, pantallas, hooks, endpoints, tests de integración. |
 | `trainee` | Haiku 4.5 | Mecánico: renames, correr tests, grepear logs, boilerplate, formateo, imports. |
 
-### Cuándo se invoca a `advisor`
+El campo `model:` del frontmatter toma `fable` / `opus` / `sonnet` / `haiku`,
+no `fable-5` ni `opus-5`. Verificado: con otro valor el agente no se registra.
 
-SOLO en estos cuatro casos —no es un revisor de rutina—:
+### Protocolo del `advisor`
 
-1. Diseño del plan inicial de una feature grande.
-2. Review de arquitectura **antes** de escribir código.
-3. Desempate cuando dos agentes devuelven soluciones contradictorias.
-4. Post-mortem de un bug que ya falló 2+ intentos de arreglo.
+El `advisor` no escribe código. Devuelve decisiones.
+
+#### Cuándo llamarlo
+
+**Piso: dos llamadas en toda tarea de más de unos pocos pasos.**
+
+1. **Temprano** — después de orientarse (leer archivos, entender el terreno)
+   pero **antes** de comprometerse con un enfoque. Orientarse no es trabajo
+   sustantivo; escribir, editar y afirmar una respuesta sí lo son. Esta es la
+   llamada que más rinde, porque el `advisor` aporta su mayor valor antes de
+   que el enfoque cristalice. No escatimarla.
+2. **Al cierre** — antes de declarar la tarea terminada. **Antes de esta
+   llamada hay que hacer durable el entregable**: escribir los archivos, correr
+   los tests, commitear. Si la sesión muere durante la consulta, un resultado
+   escrito persiste y uno sin escribir no.
+
+Llamadas adicionales cuando corresponda: trabado (errores que se repiten,
+enfoque que no converge), cambio de enfoque en consideración, desempate entre
+agentes con soluciones contradictorias, post-mortem de un bug con 2+ intentos
+fallidos, o reconciliación de un conflicto entre su consejo y la evidencia.
+
+#### El brief
+
+A partir de la **segunda** llamada en una misma tarea, el brief abre con:
+
+```
+CONSULTAS PREVIAS EN ESTA TAREA:
+- Llamada N (motivo): [recomendación textual del advisor]
+- Implementado desde entonces: [resumen]
+- Diferencias con lo que el advisor asumió: [qué cambió]
+```
+
+Es obligatorio: el `advisor` **no recuerda sus consultas previas**. Cada
+invocación arranca en frío y puede contradecirse a sí mismo sin notarlo. El
+hilo lo lleva el orquestador, y lo lleva en `.claude/advisor-log.md` —no en el
+contexto de la sesión— para que sobreviva a una compactación.
+
+Todo brief cierra con esta línea:
+
+```
+(Advisor: RECOMENDACIÓN y POR QUÉ, bajo 120 palabras entre ambos.
+ SUPUESTOS y BLOQUEANTES sin límite — no los recortes.
+ Excepción: en post-mortems escribí lo que necesites, ahí el
+ análisis completo es el entregable.)
+```
+
+#### Qué hacer con lo que devuelve
+
+- **BLOQUEANTES con contenido** → ir a buscar eso al repo y volver a llamar con
+  la respuesta. Esa es una llamada legítima, no ruido.
+- **SUPUESTOS con algo falso sobre el código** → corregirlo y volver a llamar.
+  Un plan perfecto sobre una arquitectura que no tenemos es un plan
+  inaplicable, y el `senior` se entera a mitad de camino.
+- **Dale peso serio.** Se adapta el consejo solo si un paso falla
+  empíricamente, o si hay evidencia de primera mano que lo contradice (el
+  archivo dice X, el test devuelve Y).
+- **Un self-test que pasa NO es evidencia de que el consejo esté mal.** Es
+  evidencia de que ese test no chequea lo que el consejo chequea.
+- **Conflicto entre datos propios y el consejo → no cambiar en silencio.**
+  Volver a llamarlo explicitando el conflicto: "encontré X, sugerís Y, ¿qué
+  restricción rompe el empate?". Vio la evidencia, pero pudo haberla
+  subponderado.
 
 ### Reglas de delegación
 
-1. **Brief autosuficiente.** El subagente arranca con contexto vacío y no ve
-   nada de la conversación del orquestador. Todo prompt de delegación incluye:
+1. **Brief autosuficiente.** El subagente arranca con contexto vacío: no ve la
+   conversación del orquestador, ni los archivos que leyó, ni las skills que se
+   invocaron. El único canal es el brief. Todo brief incluye:
    - **Objetivo**: qué hay que lograr y por qué.
    - **Archivos relevantes**: rutas concretas —dónde leer, dónde escribir, qué
      patrón existente copiar—.
@@ -49,13 +110,14 @@ SOLO en estos cuatro casos —no es un revisor de rutina—:
    - **Criterio de aceptación**: definition of done verificable, punto por punto,
      incluyendo el comando que tiene que quedar en verde.
    - **Formato de salida**: el bloque estructurado de abajo.
-2. Antes de delegar la implementación de algo no trivial, consultar a `advisor`.
-3. **Dos fallas en la misma tarea → no reintentar con el mismo prompt.** Escalar
-   a `advisor` con el historial del fallo: qué se pidió, qué devolvió el agente,
-   qué falló exactamente.
-4. El orquestador **verifica lo que vuelve**: nunca da por buena la respuesta de
-   un agente sin comprobar el diff y el resultado de los comandos.
-5. Después de cada tanda, actualizar `docs/PLAN-ACTIVO.md` (hecho / en curso /
+2. **Dos fallas en la misma tarea → no reintentar con el mismo prompt.**
+   Escalar al `advisor` con el historial del fallo: qué se pidió, qué devolvió
+   el agente, qué falló exactamente.
+3. El orquestador **verifica lo que vuelve**: nunca da por buena la respuesta
+   de un agente sin comprobar el diff y el resultado de los comandos.
+4. **El trabajo mecánico va a `trainee`**, aunque parezca más rápido hacerlo a
+   mano.
+5. Después de cada tanda, actualizar `.claude/plan.md` (hecho / en curso /
    bloqueado / decisiones tomadas).
 
 ### Formato de salida de todo subagente
@@ -68,9 +130,23 @@ SOLO en estos cuatro casos —no es un revisor de rutina—:
 ## Verificación
 ```
 
+### Lo que deliberadamente NO está en esta configuración
+
+No agregar ninguna de estas dos cosas; se probaron y el efecto neto es
+negativo con Opus orquestando:
+
+- **Regla dura del tipo "toda escritura requiere `advisor` previo".** Produce
+  sobre-consulta en tareas cuya primera acción no necesita planificación. Los
+  dos checkpoints de arriba alcanzan.
+- **Recordatorios automáticos de "todavía no consultaste al `advisor`" en los
+  turnos tempranos.** Están pensados para ejecutores Haiku y Sonnet; con Opus
+  bajan el rendimiento.
+
 ## Documentación de referencia (leer antes de implementar)
 
-- `docs/PLAN-ACTIVO.md` — plan de trabajo en curso; lo mantiene el orquestador
+- `.claude/plan.md` — plan de trabajo en curso; lo mantiene el orquestador
+- `.claude/advisor-log.md` — historial de consultas al advisor (él no las recuerda)
+- `docs/PLAN-ACTIVO.md` — archivo de la Fase 3, cerrada; citado desde comentarios de código
 - `docs/01-arquitectura.md` — estructura del monorepo, stack, CI/CD, Firebase
 - `docs/02-dominio-quesarte.md` — modelo de dominio y colecciones Firestore de la quesería
 - `docs/03-compras-costos-precios.md` — módulo de compras, prorrateo de gastos, márgenes
@@ -119,14 +195,29 @@ pnpm turbo lint                       # lint de todo
 
 ## Estado actual
 
-Fases 0, 1, 1.5 y 2 CERRADAS (Fase 2 el 2026-07-14, los 4 criterios validados
-por el dueño en producción: https://quesarte-uy.web.app). Operativo: POS con
+Fases 0, 1, 1.5, 2 y 3 CERRADAS (Fase 2 el 2026-07-14, los 4 criterios
+validados por el dueño en producción: https://quesarte-uy.web.app; Fase 3
+mergeada como `eaaf263` el 2026-07-27 y desplegada). Operativo: POS con
 FIFO + override + pieza entera + cobro offline + cliente opcional, sección
 única Productos en el tab Stock (fusión UI-5: existencias + catálogo + alta;
 edición en el detalle, SIN precio — precios solo en la sección Precios),
 Compras con prorrateo de gastos y márgenes (doc 03), Clientes con WhatsApp
 por links wa.me e inactividad comercial (doc 08), Proveedores y Categorías
 (en Ajustes) solo admin, Historial con anulación (cuelga de Venta), Usuarios
-por invitación, dos estilos de tema (Minimalista/Cálido). 967 tests + 134 de
-reglas. PRÓXIMO: sesión de elicitación con Adrián (doc 10) → repriorización
-del roadmap (docs/10b); Fase 3 en cola. Entorno de demo: quesarte-uy-dev.
+por invitación, dos estilos de tema (Minimalista/Cálido).
+
+De la Fase 3: **costo congelado** (`CosteoItem` versionado embebido en cada
+`ItemVenta` y en cada movimiento de stock — sin eso no hay ganancia calculable
+hacia atrás), y Reportes solo admin: resumen del período con swipe día/semana/
+mes, rentabilidad por producto y categoría, vencimientos y stock bajo, y
+rendimiento de compra/viaje. Las categorías pasaron a tener su id canónico
+igual a su nombre normalizado, lo que hace **estructuralmente imposible** tener
+dos con el mismo nombre.
+
+2765 tests (`pnpm turbo test`) + 175 de reglas (`pnpm test:rules`).
+
+PRÓXIMO: (1) el **reseteo operativo** de los datos de prueba de producción, que
+es el último paso antes de entregarle el sistema a Adrián y lo corre una
+persona, no un agente; (2) sesión de elicitación con Adrián (doc 10) →
+repriorización del roadmap (docs/10b). Detalle en `.claude/plan.md`.
+Entorno de demo: quesarte-uy-dev.

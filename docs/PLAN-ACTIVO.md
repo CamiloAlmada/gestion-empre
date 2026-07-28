@@ -1,9 +1,17 @@
-# Plan activo
+# Fase 3 — Reportes (ARCHIVO, cerrada)
 
-Estado de trabajo en curso. Lo mantiene el **orquestador** (sesión principal de
-Claude Code): se actualiza después de cada tanda de delegación, no al final.
+> **Este archivo ya no es el plan vivo.** El plan en curso está en
+> `.claude/plan.md`.
+>
+> Queda acá, sin renombrar, porque ~26 comentarios de código repartidos en 21
+> archivos citan `docs/PLAN-ACTIVO.md` como procedencia del trabajo de la Fase 3
+> ("tanda B2, docs/PLAN-ACTIVO.md" y similares). Mover o borrar este archivo
+> dejaría esas citas apuntando a la nada.
+>
+> Registro de la Fase 3, mergeada en `main` como `eaaf263` el 2026-07-27.
 
-Este archivo es la memoria del plan. Si no está acá, no existe.
+Lo mantuvo el **orquestador** (sesión principal de Claude Code): se actualizaba
+después de cada tanda de delegación, no al final.
 
 Convenciones:
 - Cada tarea lleva agente asignado (`advisor` / `senior` / `semisenior` / `trainee`).
