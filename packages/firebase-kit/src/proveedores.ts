@@ -282,14 +282,13 @@ export async function crearProveedor(
  * `pagos` sin cuentas se persiste como campo AUSENTE, nunca como `[]`
  * (ver `pagosOBorrado`).
  *
- * ### Por qué acá diverge de `actualizarCliente`
+ * ### Misma política que `actualizarCliente`
  *
- * `actualizarCliente` usa el mismo mecanismo (`deleteField()`) pero SOLO para el
- * derivado `telefonoE164`, y deliberadamente NO modela el vaciado de sus campos
- * de contacto: ahí el caller es el POS, que edita al cliente con formularios
- * parciales y de paso, y borrar por omisión sería una trampa. Son dos políticas
- * distintas porque son dos superficies de edición distintas; no unificar sin
- * revisar antes los callers de clientes.
+ * `actualizarCliente` sigue hoy el mismo contrato de reemplazo total, por el
+ * mismo motivo y sobre el mismo tipo de caller (un modal de edición completo que
+ * manda siempre la foto entera). Antes divergían —clientes solo usaba
+ * `deleteField()` para el derivado `telefonoE164`—, y ese era el bug simétrico a
+ * este. Si se toca una de las dos, revisar la otra.
  *
  * El chequeo de duplicados excluye al propio `proveedorId`, de modo que corregir
  * solo el uso de mayúsculas ("la rural" → "La Rural") es válido. No exige que el

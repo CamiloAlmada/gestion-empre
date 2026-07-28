@@ -124,6 +124,25 @@ describe('crearCliente', () => {
     expect(cliente.telefonoE164).toBeUndefined();
   });
 
+  it('OMITE los campos en blanco (undefined), nunca deleteField: el doc todavía no existe', () => {
+    // Contracara del reemplazo total de `actualizarCliente`: acá `undefined`
+    // significa "campo ausente" y el converter no lo escribe. Un `deleteField()`
+    // sobre un documento inexistente sería un error de Firestore.
+    crearCliente(db, {
+      nombre: 'Marta',
+      alias: '   ',
+      telefono: '',
+      email: '  ',
+      direccion: '',
+      notas: '   ',
+    });
+    const [, cliente] = mocks.setDoc.mock.calls[0] as [RefFalsa, Record<string, unknown>];
+    for (const campo of ['alias', 'telefono', 'telefonoE164', 'email', 'direccion', 'notas']) {
+      expect(cliente[campo], `${campo} debe quedar undefined`).toBeUndefined();
+    }
+    expect(Object.values(cliente)).not.toContain(mocks.borrar);
+  });
+
   it('rechaza nombre vacío tras trim SINCRÓNICAMENTE y no escribe', () => {
     expect(() => crearCliente(db, { nombre: '   ' })).toThrow(ClienteInvalidoError);
     expect(mocks.setDoc).not.toHaveBeenCalled();
@@ -131,6 +150,9 @@ describe('crearCliente', () => {
 });
 
 describe('actualizarCliente', () => {
+  // Contrato de reemplazo total: `datos` es la foto completa de los cinco campos
+  // de contacto, así que el payload SIEMPRE los trae a los seis (los cinco más el
+  // derivado `telefonoE164`), con la sentinela de borrado en los que van vacíos.
   it('actualiza contacto sin tocar stats ni activo, y deriva telefonoE164 del telefono escrito', async () => {
     await actualizarCliente(db, 'cli-1', { nombre: 'Marta', telefono: '098 000 111' });
     const [ref, cambios] = mocks.updateDoc.mock.calls[0] as [RefFalsa, Record<string, unknown>];
@@ -139,30 +161,117 @@ describe('actualizarCliente', () => {
       nombre: 'Marta',
       telefono: '098 000 111',
       telefonoE164: '59898000111',
+      // Los no provistos se BORRAN (antes se omitían y sobrevivía el valor viejo).
+      alias: mocks.borrar,
+      email: mocks.borrar,
+      direccion: mocks.borrar,
+      notas: mocks.borrar,
     });
     expect(cambios).not.toHaveProperty('stats');
     expect(cambios).not.toHaveProperty('activo');
   });
 
-  it('no toca telefonoE164 si el update no escribe telefono (queda intacto en el doc)', async () => {
-    await actualizarCliente(db, 'cli-1', { nombre: 'Marta', email: 'm@x.uy' });
+  it('BORRA cada campo de contacto que se vacía, uno por uno', async () => {
+    const completo = {
+      nombre: 'Marta',
+      alias: 'La Marta',
+      telefono: '098 000 111',
+      email: 'm@x.uy',
+      direccion: 'Rivera 1234',
+      notas: 'Sábados',
+    };
+    const opcionales = ['alias', 'telefono', 'email', 'direccion', 'notas'] as const;
+
+    for (const campo of opcionales) {
+      mocks.updateDoc.mockClear();
+      // Se vacía UNO (string en blanco, que es lo que manda el modal tras `trim()`
+      // → `undefined`; acá se prueban las dos formas: ausente y '   ').
+      await actualizarCliente(db, 'cli-1', { ...completo, [campo]: '   ' });
+      const [, cambios] = mocks.updateDoc.mock.calls[0] as [RefFalsa, Record<string, unknown>];
+      expect(cambios[campo], `${campo} vaciado debe borrarse`).toBe(mocks.borrar);
+      // Los demás sobreviven con su valor.
+      for (const otro of opcionales) {
+        if (otro !== campo) expect(cambios[otro], `${otro} no debía tocarse`).toBe(completo[otro]);
+      }
+    }
+  });
+
+  it('vaciar el telefono BORRA telefono Y telefonoE164 (no queda un E164 huérfano)', async () => {
+    await actualizarCliente(db, 'cli-1', { nombre: 'Marta', alias: 'La Marta' });
     const [, cambios] = mocks.updateDoc.mock.calls[0] as [RefFalsa, Record<string, unknown>];
-    expect(cambios).toEqual({ nombre: 'Marta', email: 'm@x.uy' });
-    expect(cambios).not.toHaveProperty('telefonoE164');
+    expect(cambios.telefono).toBe(mocks.borrar);
+    // Sin display no hay E164: si sobreviviera, los links wa.me (doc 08) seguirían
+    // apuntando a un número que el admin dio de baja.
+    expect(cambios.telefonoE164).toBe(mocks.borrar);
+  });
+
+  it('vaciar el telefono con un string en blanco también borra los dos', async () => {
+    await actualizarCliente(db, 'cli-1', { nombre: 'Marta', telefono: '   ' });
+    const [, cambios] = mocks.updateDoc.mock.calls[0] as [RefFalsa, Record<string, unknown>];
+    expect(cambios.telefono).toBe(mocks.borrar);
+    expect(cambios.telefonoE164).toBe(mocks.borrar);
   });
 
   it('BORRA telefonoE164 (deleteField) si el telefono se reescribe a algo no normalizable', async () => {
     await actualizarCliente(db, 'cli-1', { nombre: 'Marta', telefono: 'sin numero' });
     const [, cambios] = mocks.updateDoc.mock.calls[0] as [RefFalsa, Record<string, unknown>];
+    // El display SÍ se escribe (el admin anotó algo); el E.164 viejo no debe
+    // quedar apuntando a otro número.
     expect(cambios.telefono).toBe('sin numero');
-    // Marca de borrado: el E.164 viejo no debe quedar apuntando a otro número.
     expect(cambios.telefonoE164).toBe(mocks.borrar);
   });
 
   it('respeta el codigoPais provisto por el caller al derivar en el update', async () => {
     await actualizarCliente(db, 'cli-1', { nombre: 'Juan', telefono: '011 4123 4567' }, '54');
     const [, cambios] = mocks.updateDoc.mock.calls[0] as [RefFalsa, Record<string, unknown>];
+    expect(cambios.telefono).toBe('011 4123 4567');
     expect(cambios.telefonoE164).toBe('541141234567');
+  });
+
+  it('un update que solo cambia el nombre y remanda el resto igual no borra nada', async () => {
+    await actualizarCliente(db, 'cli-1', {
+      nombre: 'Marta González',
+      alias: 'La Marta',
+      telefono: '098 000 111',
+      email: 'm@x.uy',
+      direccion: 'Rivera 1234',
+      notas: 'Sábados',
+    });
+    const [, cambios] = mocks.updateDoc.mock.calls[0] as [RefFalsa, Record<string, unknown>];
+    expect(cambios).toEqual({
+      nombre: 'Marta González',
+      alias: 'La Marta',
+      telefono: '098 000 111',
+      telefonoE164: '59898000111',
+      email: 'm@x.uy',
+      direccion: 'Rivera 1234',
+      notas: 'Sábados',
+    });
+    // Ninguna sentinela de borrado en el payload.
+    expect(Object.values(cambios)).not.toContain(mocks.borrar);
+  });
+
+  it('nunca manda stats, activo ni fechaAlta en el payload', async () => {
+    // Ni siquiera cuando el update es el "mínimo" (solo nombre) ni el completo:
+    // esos tres campos son de otras superficies (el POS escribe `stats`,
+    // `desactivarCliente` escribe `activo`, y `fechaAlta` la fija el alta).
+    for (const datos of [
+      { nombre: 'Marta' },
+      { nombre: 'Marta', telefono: '098 000 111', alias: 'La Marta' },
+    ]) {
+      mocks.updateDoc.mockClear();
+      await actualizarCliente(db, 'cli-1', datos);
+      const [, cambios] = mocks.updateDoc.mock.calls[0] as [RefFalsa, Record<string, unknown>];
+      expect(Object.keys(cambios).sort()).toEqual([
+        'alias',
+        'direccion',
+        'email',
+        'nombre',
+        'notas',
+        'telefono',
+        'telefonoE164',
+      ]);
+    }
   });
 
   it('rechaza nombre vacío y no escribe', async () => {

@@ -5,6 +5,7 @@ import {
   setDoc,
   updateDoc,
   type DocumentData,
+  type FieldValue,
   type Firestore,
 } from 'firebase/firestore';
 import { money, normalizarTelefono, type Cliente } from '@gestion/core';
@@ -21,6 +22,19 @@ import { ClienteInvalidoError } from './errores';
  * `anularVenta` con `FieldValue.increment()` en el batch de la venta (doc 07,
  * decisión 5). `crearCliente` lo inicializa en cero y `actualizarCliente` lo
  * deja intacto (las reglas de vendedor y admin dependen de esa separación).
+ *
+ * ## El alta OMITE los campos vacíos; la edición los BORRA
+ *
+ * Las dos superficies interpretan distinto un campo de contacto ausente o vacío
+ * en `DatosCliente`, y es a propósito (misma división que en `proveedores.ts`):
+ *
+ * - `crearCliente` construye el documento entero y lo escribe con `setDoc` a
+ *   través del converter: un campo vacío simplemente no se escribe. Ahí
+ *   `deleteField()` sería además un error (no se puede borrar un campo de un
+ *   documento que todavía no existe).
+ * - `actualizarCliente` hace un `updateDoc` parcial, donde un campo ausente
+ *   quedaría con su valor viejo. Por eso traduce "ausente o vacío" a
+ *   `deleteField()`: ver el contrato de reemplazo total en su propio doc.
  */
 
 /**
@@ -50,19 +64,13 @@ function exigirNombre(nombre: string): string {
 }
 
 /**
- * Copia a `doc` los campos de contacto opcionales que vengan definidos, ya
- * recortados. Omite los `undefined` (Firestore los rechaza; coherente con los
- * converters). Un opcional en blanco tras `trim()` se omite en el alta y se deja
- * como está en la edición: limpiar un campo es una acción explícita que esta
- * superficie no modela (Fase 1.5 no lo pide).
+ * Valor de un campo de texto opcional en el update: el texto recortado si trae
+ * contenido, y si no la sentinela de borrado. Solo la usa `actualizarCliente`
+ * (el alta arma el documento por su cuenta, ver el doc del módulo).
  */
-function copiarContacto(datos: DatosCliente, destino: DocumentData): void {
-  const { alias, telefono, email, direccion, notas } = datos;
-  if (alias !== undefined && alias.trim().length > 0) destino.alias = alias.trim();
-  if (telefono !== undefined && telefono.trim().length > 0) destino.telefono = telefono.trim();
-  if (email !== undefined && email.trim().length > 0) destino.email = email.trim();
-  if (direccion !== undefined && direccion.trim().length > 0) destino.direccion = direccion.trim();
-  if (notas !== undefined && notas.trim().length > 0) destino.notas = notas.trim();
+function textoOBorrado(valor: string | undefined): string | FieldValue {
+  const limpio = valor?.trim() ?? '';
+  return limpio.length > 0 ? limpio : deleteField();
 }
 
 /**
@@ -120,22 +128,55 @@ export function crearCliente(
 }
 
 /**
- * Actualiza los datos de contacto de un cliente. NO toca `stats` (cache de ventas)
- * ni `activo` (usar `desactivarCliente`). Escribe solo los campos provistos y no
- * pasa por el converter: es un update parcial, no un reemplazo del doc.
+ * Actualiza los datos de contacto de un cliente. NO toca `stats` (cache de ventas),
+ * ni `activo` (usar `desactivarCliente`), ni `fechaAlta`. Update parcial: escribe
+ * `nombre`, los cinco campos de contacto y el derivado `telefonoE164`, y no pasa
+ * por el converter (no reemplaza el documento).
  *
- * `telefonoE164` (derivado, doc 08) espeja el `telefono` display que este update
- * escribe: solo se recalcula cuando el update efectivamente escribe `telefono`
- * (i.e. viene no vacío tras `trim()`, misma condición que el resto del contacto en
- * `copiarContacto`). Reescribir el teléfono a algo NO normalizable ELIMINA el
- * `telefonoE164` viejo con `deleteField()` (un link a un número que ya no coincide
- * es peor que ninguno). Dejar el teléfono sin tocar deja su E164 intacto: limpiar
- * el teléfono display no lo modela esta superficie (igual que en Fase 1.5).
+ * ## Reemplazo TOTAL de los campos de contacto
+ *
+ * `datos` es la foto completa de los campos de contacto editables, no un delta: un
+ * campo ausente o vacío en `DatosCliente` **borra** el valor guardado
+ * (`deleteField()`). Vaciar el alias, el teléfono, el email, la dirección o las
+ * notas en el modal los borra de verdad.
+ *
+ * El caller DEBE, entonces, mandar SIEMPRE todos los campos que quiere conservar.
+ * El único caller es `DetalleClientePantalla`, que pasa el payload de
+ * `ModalCliente` —un formulario de edición completo, precargado con el cliente
+ * entero—, y por eso la condición se cumple.
+ *
+ * La alternativa (omitir lo ausente, que es lo que esta función hacía) es
+ * incompatible con esa UI: `DatosCliente` no distingue "no lo toqué" de "lo
+ * vacié", el formulario manda `undefined` en los dos casos, y el resultado era que
+ * vaciar un campo no borraba nada mientras la pantalla informaba "Cliente
+ * actualizado".
+ *
+ * El alcance del reemplazo total son SOLO esos cinco campos más `telefonoE164`;
+ * `nombre` se reescribe siempre, y `fechaAlta`, `activo` y `stats` ni aparecen en
+ * el payload (`stats` lo escribe el POS al cobrar, doc 07 decisión 5).
+ *
+ * ## `telefonoE164` sigue al teléfono display
+ *
+ * `telefonoE164` (derivado, doc 08) espeja el `telefono` que este update escribe:
+ * - teléfono con contenido y normalizable → se escriben los dos;
+ * - teléfono con contenido pero NO normalizable (p. ej. `'sin numero'`) → se
+ *   escribe el display y se BORRA el E164 (un link a un número que ya no coincide
+ *   es peor que ninguno);
+ * - teléfono ausente o vacío → se borran LOS DOS. Un E164 huérfano seguiría
+ *   alimentando los links `wa.me` (doc 08) hacia un número que el admin dio de baja.
+ *
+ * `normalizarTelefono` solo corre cuando hay un teléfono de verdad.
+ *
+ * NOTA: hasta este cambio la política era la opuesta —"limpiar el teléfono display
+ * no lo modela esta superficie (igual que en Fase 1.5)"— y estaba documentada como
+ * deliberada. Ya no aplica: la UI ofrece la acción de vaciar el campo, y no hacer
+ * nada mientras se informa "guardado" es peor que no ofrecerla.
  *
  * `codigoPais` (default `'598'`): igual que en `crearCliente`, lo pasa la UI desde
  * la config en pantalla; no se lee de Firestore.
  *
- * @throws {ClienteInvalidoError} si el nombre queda vacío tras `trim()`.
+ * @throws {ClienteInvalidoError} si el nombre queda vacío tras `trim()`. Falla
+ *   antes de escribir nada.
  */
 export async function actualizarCliente(
   db: Firestore,
@@ -143,12 +184,27 @@ export async function actualizarCliente(
   datos: DatosCliente,
   codigoPais: string = '598',
 ): Promise<void> {
-  const cambios: DocumentData = { nombre: exigirNombre(datos.nombre) };
-  copiarContacto(datos, cambios);
-  if (cambios.telefono !== undefined) {
-    const e164 = normalizarTelefono(cambios.telefono as string, codigoPais);
-    cambios.telefonoE164 = e164 ?? deleteField();
-  }
+  const nombre = exigirNombre(datos.nombre);
+
+  // Se deriva del display recortado, no de `cambios.telefono`: ahí el valor puede
+  // ser ya la sentinela de borrado, y pasársela a `normalizarTelefono` exigiría un
+  // cast que miente.
+  const telefono = datos.telefono?.trim() ?? '';
+  const telefonoE164: string | FieldValue =
+    telefono.length > 0
+      ? (normalizarTelefono(telefono, codigoPais) ?? deleteField())
+      : deleteField();
+
+  const cambios: DocumentData = {
+    nombre,
+    alias: textoOBorrado(datos.alias),
+    telefono: textoOBorrado(telefono),
+    telefonoE164,
+    email: textoOBorrado(datos.email),
+    direccion: textoOBorrado(datos.direccion),
+    notas: textoOBorrado(datos.notas),
+  };
+
   await updateDoc(doc(db, 'clientes', clienteId), cambios);
 }
 

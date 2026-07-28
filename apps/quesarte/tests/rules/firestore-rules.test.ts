@@ -202,10 +202,17 @@ beforeEach(async () => {
     // Compras (doc 03): una en borrador (editable) y una confirmada (inmutable).
     await setDoc(doc(seed, 'compras', 'compra-1'), compraSeed('borrador'));
     await setDoc(doc(seed, 'compras', 'compra-conf'), compraSeed('confirmada'));
-    // Cliente con historial (stats no en cero) para probar los updates.
+    // Cliente con historial (stats no en cero) para probar los updates. Trae
+    // `telefonoE164` derivado (doc 08) para poder probar que el admin lo BORRA
+    // junto con el display.
     await setDoc(doc(seed, 'clientes', 'cli-1'), {
       nombre: 'Marta',
       telefono: '099111222',
+      telefonoE164: '59899111222',
+      alias: 'La Marta',
+      email: 'marta@x.uy',
+      direccion: 'Rivera 1234',
+      notas: 'Sábados',
       fechaAlta: Date.now(),
       activo: true,
       stats: {
@@ -873,6 +880,51 @@ describe('clientes', () => {
   it('admin NO setea un telefonoE164 con letras', async () => {
     await assertFails(
       updateDoc(doc(db(ADMIN), 'clientes', 'cli-1'), { telefonoE164: 'ABC12345' }),
+    );
+  });
+
+  // `actualizarCliente` pasó a un contrato de REEMPLAZO TOTAL de los campos de
+  // contacto: vaciar uno en el modal lo borra con `deleteField()`. Estos casos
+  // fijan que las reglas dejan pasar ese payload —si no, el arreglo rompería solo
+  // en producción con `permission-denied`—. Pasa porque en un update
+  // `request.resource.data` es el documento RESULTANTE: un campo borrado no está,
+  // `hasOnly` se satisface con la ausencia y `telefonoE164ValidoSiPresente` corta
+  // por su primera rama.
+  it('admin BORRA telefono y telefonoE164 juntos (el display vaciado se lleva su E164)', async () => {
+    await assertSucceeds(
+      updateDoc(doc(db(ADMIN), 'clientes', 'cli-1'), {
+        telefono: deleteField(),
+        telefonoE164: deleteField(),
+      }),
+    );
+  });
+
+  it('admin BORRA los cinco campos de contacto de una (payload de reemplazo total)', async () => {
+    await assertSucceeds(
+      updateDoc(doc(db(ADMIN), 'clientes', 'cli-1'), {
+        nombre: 'Marta',
+        alias: deleteField(),
+        telefono: deleteField(),
+        telefonoE164: deleteField(),
+        email: deleteField(),
+        direccion: deleteField(),
+        notas: deleteField(),
+      }),
+    );
+  });
+
+  it('admin BORRA solo telefonoE164 dejando el display (teléfono no normalizable)', async () => {
+    await assertSucceeds(
+      updateDoc(doc(db(ADMIN), 'clientes', 'cli-1'), {
+        telefono: 'sin numero',
+        telefonoE164: deleteField(),
+      }),
+    );
+  });
+
+  it('vendedor NO borra el telefono de un cliente (solo toca stats)', async () => {
+    await assertFails(
+      updateDoc(doc(db(VENDEDOR), 'clientes', 'cli-1'), { telefono: deleteField() }),
     );
   });
 
