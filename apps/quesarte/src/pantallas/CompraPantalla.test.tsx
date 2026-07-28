@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { ProveedorToasts } from '@gestion/ui';
 import { money, peso, type Compra, type Producto, type Proveedor } from '@gestion/core';
+import { ProveedorDuplicadoError } from '@gestion/firebase-kit';
 import { CompraPantalla } from './CompraPantalla';
 import { ProveedorHeader, useHeaderActual } from '../componentes/header/ContextoHeader';
 
@@ -405,5 +406,107 @@ describe('CompraPantalla', () => {
     const [, datos] = mocks.guardarBorradorCompra.mock.calls[0] as [unknown, { proveedorNombre: string }];
     expect(datos.proveedorNombre).toBe('Quesos del Norte');
     expect(await screen.findByText('Borrador guardado.')).toBeTruthy();
+  });
+
+  describe('alta de proveedor inline ("+ Nuevo")', () => {
+    beforeEach(() => {
+      estadoCompra = { datos: compraBorrador(), cargando: false, error: null };
+      mocks.actualizarBorradorCompra.mockResolvedValue(undefined);
+    });
+
+    it('offline: cierra el modal, deja el proveedor seleccionado en la compra (se puede seguir armando) y avisa sin conexión', async () => {
+      mocks.useOnlineStatus.mockReturnValue(false);
+      let resolverSincronizacion!: () => void;
+      mocks.crearProveedor.mockResolvedValue({
+        proveedorId: 'nuevo-prov',
+        sincronizacion: new Promise<void>((resolve) => {
+          resolverSincronizacion = resolve;
+        }),
+      });
+      renderizar();
+
+      fireEvent.click(screen.getByRole('button', { name: '+ Nuevo' }));
+      fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'La Rural' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+      expect(await screen.findByText('Guardado sin conexión. Se sincronizará al reconectar.')).toBeTruthy();
+      // CompraPantalla monta varios `<dialog>` (selector de producto, ítem,
+      // gasto, proveedor, borrar borrador): ninguno debe quedar abierto.
+      expect(document.querySelector('dialog[open]')).toBeNull();
+
+      // El proveedor recién creado queda seleccionado (el id ya está disponible
+      // offline): "Guardar borrador" lo confirma, sin necesitar reconexión.
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar borrador' }));
+      expect(mocks.actualizarBorradorCompra).toHaveBeenCalledTimes(1);
+      const [, , datos] = mocks.actualizarBorradorCompra.mock.calls[0] as [
+        unknown,
+        string,
+        { proveedorId?: string; proveedorNombre: string },
+      ];
+      expect(datos.proveedorId).toBe('nuevo-prov');
+      expect(datos.proveedorNombre).toBe('La Rural');
+
+      resolverSincronizacion();
+    });
+
+    it('duplicado: el toast muestra el mensaje del error y el modal sigue abierto', async () => {
+      mocks.crearProveedor.mockRejectedValue(
+        new ProveedorDuplicadoError('Ya existe un proveedor llamado "La Rural".'),
+      );
+      renderizar();
+
+      fireEvent.click(screen.getByRole('button', { name: '+ Nuevo' }));
+      fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'La Rural' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+      expect(await screen.findByText('Ya existe un proveedor llamado "La Rural".')).toBeTruthy();
+      // El modal de proveedor (el único que puede estar abierto acá) sigue abierto.
+      expect(document.querySelector('dialog[open]')).not.toBeNull();
+      expect(screen.getByRole('heading', { name: 'Nuevo proveedor' })).toBeTruthy();
+    });
+
+    it('la sincronización (ack) que rechaza avisa con un toast en vez de quedar como unhandled rejection', async () => {
+      mocks.crearProveedor.mockResolvedValue({
+        proveedorId: 'nuevo-prov',
+        sincronizacion: Promise.reject(new Error('boom')),
+      });
+      renderizar();
+
+      fireEvent.click(screen.getByRole('button', { name: '+ Nuevo' }));
+      fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Quesos del Sur' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+      expect(await screen.findByText('No se pudo crear el proveedor. Intentá de nuevo.')).toBeTruthy();
+    });
+
+    it('online: crea el proveedor, lo deja seleccionado en la compra y cierra con éxito', async () => {
+      mocks.crearProveedor.mockResolvedValue({ proveedorId: 'nuevo-prov', sincronizacion: Promise.resolve() });
+      renderizar();
+
+      fireEvent.click(screen.getByRole('button', { name: '+ Nuevo' }));
+      fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Quesos del Sur' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+      expect(await screen.findByText('Proveedor creado.')).toBeTruthy();
+      expect(document.querySelector('dialog[open]')).toBeNull();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar borrador' }));
+      await waitFor(() => expect(mocks.actualizarBorradorCompra).toHaveBeenCalledTimes(1));
+      const [, , datos] = mocks.actualizarBorradorCompra.mock.calls[0] as [
+        unknown,
+        string,
+        { proveedorId?: string; proveedorNombre: string },
+      ];
+      expect(datos.proveedorId).toBe('nuevo-prov');
+      expect(datos.proveedorNombre).toBe('Quesos del Sur');
+    });
+
+    it('el botón "+ Nuevo" ya no se deshabilita sin conexión (la creación funciona offline) y no queda el aviso viejo', () => {
+      mocks.useOnlineStatus.mockReturnValue(false);
+      renderizar();
+
+      expect(screen.getByRole('button', { name: '+ Nuevo' }).hasAttribute('disabled')).toBe(false);
+      expect(screen.queryByText('Necesitás conexión para crear un proveedor nuevo.')).toBeNull();
+    });
   });
 });

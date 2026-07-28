@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Button, Input, Modal } from '@gestion/ui';
 import type { DatosPago, Proveedor } from '@gestion/core';
-import { type DatosProveedor } from '@gestion/firebase-kit';
+import { LARGO_MAX_NOMBRE_PROVEEDOR, type DatosProveedor } from '@gestion/firebase-kit';
 
 export interface ModalProveedorProps {
   abierto: boolean;
@@ -164,7 +164,13 @@ export function ModalProveedor({ abierto, proveedor, guardando, onGuardar, onCer
       }
     >
       <div className="flex flex-col gap-4">
-        <Input label="Nombre" value={nombre} onChange={setNombre} error={errores.nombre} />
+        <Input
+          label="Nombre"
+          value={nombre}
+          onChange={setNombre}
+          error={errores.nombre}
+          maxLength={LARGO_MAX_NOMBRE_PROVEEDOR}
+        />
         <Input label="Contacto (opcional)" value={contactoNombre} onChange={setContactoNombre} />
         <Input label="Teléfono (opcional)" value={telefono} onChange={setTelefono} />
         <Input label="Correo (opcional)" type="email" value={email} onChange={setEmail} />

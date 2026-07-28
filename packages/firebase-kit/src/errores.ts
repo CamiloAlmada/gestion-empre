@@ -143,11 +143,34 @@ export class ClienteInvalidoError extends ErrorCliente {
 
 export abstract class ErrorProveedor extends Error {}
 
-/** El nombre del proveedor es inválido: vacío tras `trim()`. */
+/**
+ * El nombre del proveedor es inválido: vacío tras `trim()`, o más largo que
+ * `LARGO_MAX_NOMBRE_PROVEEDOR`.
+ */
 export class ProveedorInvalidoError extends ErrorProveedor {
   constructor(message: string) {
     super(message);
     this.name = 'ProveedorInvalidoError';
+  }
+}
+
+/**
+ * Ya existe un proveedor con ese nombre (comparación case-insensitive, ver
+ * `proveedores.ts`). Cuenta también el homónimo INACTIVO: el camino correcto ahí
+ * es reactivarlo, no crear una ficha nueva, porque duplicar la ficha fragmenta el
+ * historial de compras (`Compra.proveedorId`) que la unicidad busca proteger.
+ *
+ * A diferencia de `CategoriaDuplicadaError` —donde el chequeo es solo el mensaje
+ * amigable y la garantía dura la dan las reglas vía id canónico—, acá este error
+ * es la ÚNICA defensa: `proveedores/{id}` usa id autogenerado a propósito (un
+ * renombre no puede mover el documento de path sin dejar huérfanas las compras
+ * confirmadas, que son inmutables por reglas). Es best-effort: queda una carrera
+ * residual que se acepta porque la colección es solo-admin.
+ */
+export class ProveedorDuplicadoError extends ErrorProveedor {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ProveedorDuplicadoError';
   }
 }
 

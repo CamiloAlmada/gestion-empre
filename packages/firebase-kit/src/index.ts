@@ -41,6 +41,7 @@ export {
   actualizarProveedor,
   desactivarProveedor,
   reactivarProveedor,
+  LARGO_MAX_NOMBRE_PROVEEDOR,
   type DatosProveedor,
 } from './proveedores';
 export {
@@ -93,6 +94,7 @@ export {
   ClienteInvalidoError,
   ErrorProveedor,
   ProveedorInvalidoError,
+  ProveedorDuplicadoError,
   ErrorConfiguracion,
   ConfiguracionInvalidaError,
   ErrorCompra,

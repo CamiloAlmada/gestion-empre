@@ -3,6 +3,8 @@ import { Link, useNavigate, useParams } from 'react-router';
 import { doc } from 'firebase/firestore';
 import type { DatosPago } from '@gestion/core';
 import {
+  ProveedorDuplicadoError,
+  ProveedorInvalidoError,
   actualizarProveedor,
   proveedorConverter,
   reactivarProveedor,
@@ -17,6 +19,19 @@ import { ModalConfirmarDesactivarProveedor } from './ModalConfirmarDesactivarPro
 import { useHeader } from '../componentes/header/ContextoHeader';
 
 type Modal = 'editar' | 'desactivar' | null;
+
+/**
+ * Mensaje del `catch` de `actualizarProveedor`: duplicado e inválido traen su
+ * propio mensaje en español; cualquier otro error (p. ej. el ack de
+ * `sincronizacion` rechazado estando online) usa el genérico. Mismo patrón que
+ * `mensajeErrorProveedor` de `Proveedores.tsx`.
+ */
+function mensajeErrorProveedor(error: unknown): string {
+  if (error instanceof ProveedorDuplicadoError || error instanceof ProveedorInvalidoError) {
+    return error.message;
+  }
+  return 'No se pudo actualizar el proveedor. Intentá de nuevo.';
+}
 
 /** Fila etiqueta/valor, solo si el valor está presente (campos opcionales del
  * proveedor: docs/07-clientes-proveedores.md). */
@@ -110,28 +125,37 @@ export function DetalleProveedorPantalla() {
     navigate('/stock/proveedores');
   }
 
-  /** Mismo patrón híbrido de escrituras offline del proyecto (docs/06-ui-ux.md
-   * §8), delegado a `actualizarProveedor` (packages/firebase-kit). */
+  /**
+   * Mismo patrón híbrido de escrituras offline del proyecto (docs/06-ui-ux.md
+   * §8), delegado a `actualizarProveedor` (packages/firebase-kit).
+   *
+   * Contrato en dos fases (ver el JSDoc del módulo): se awaitea SIEMPRE la
+   * fase 1 (valida el nombre y detecta el duplicado; resuelve también
+   * offline), con el modal abierto por si tira `ProveedorDuplicadoError`/
+   * `ProveedorInvalidoError` y el admin necesita corregir el nombre. Recién
+   * resuelta la fase 1 se decide, según `enLinea`, qué hacer con la fase 2
+   * (`sincronizacion`, el ack).
+   */
   async function handleGuardar(datos: DatosProveedor) {
     if (proveedor === null) return;
-    const escritura = actualizarProveedor(db, proveedor.id, datos);
-
-    if (!enLinea) {
-      cerrarModal();
-      mostrarToast('Guardado sin conexión. Se sincronizará al reconectar.', 'info');
-      escritura.catch(() => {
-        mostrarToast('No se pudo sincronizar la edición del proveedor.', 'error');
-      });
-      return;
-    }
-
     setGuardando(true);
     try {
-      await escritura;
+      const { sincronizacion } = await actualizarProveedor(db, proveedor.id, datos);
+
+      if (!enLinea) {
+        cerrarModal();
+        mostrarToast('Guardado sin conexión. Se sincronizará al reconectar.', 'info');
+        sincronizacion.catch(() => {
+          mostrarToast('No se pudo sincronizar la edición del proveedor.', 'error');
+        });
+        return;
+      }
+
+      await sincronizacion;
       mostrarToast('Proveedor actualizado.', 'exito');
       cerrarModal();
-    } catch {
-      mostrarToast('No se pudo actualizar el proveedor. Intentá de nuevo.', 'error');
+    } catch (error) {
+      mostrarToast(mensajeErrorProveedor(error), 'error');
     } finally {
       setGuardando(false);
     }

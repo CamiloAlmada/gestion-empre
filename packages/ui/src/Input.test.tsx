@@ -45,4 +45,16 @@ describe('Input', () => {
     expect(input).not.toHaveAttribute('aria-invalid');
     expect(input).not.toHaveAttribute('aria-describedby');
   });
+
+  it('con maxLength, lo propaga al input nativo', () => {
+    render(<Input label="Nombre" value="" onChange={vi.fn()} maxLength={120} />);
+
+    expect(inputByLabel('Nombre')).toHaveAttribute('maxLength', '120');
+  });
+
+  it('sin maxLength, el input no lo restringe', () => {
+    render(<Input label="Nombre" value="" onChange={vi.fn()} />);
+
+    expect(inputByLabel('Nombre')).not.toHaveAttribute('maxLength');
+  });
 });

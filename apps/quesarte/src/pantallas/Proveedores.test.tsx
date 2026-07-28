@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { MemoryRouter, Route, Routes, useParams } from 'react-router';
 import { ProveedorToasts } from '@gestion/ui';
 import type { Proveedor } from '@gestion/core';
+import { ProveedorDuplicadoError } from '@gestion/firebase-kit';
 import { Proveedores } from './Proveedores';
 import { StockLayout } from '../componentes/stock/StockLayout';
 import { ProveedorHeader, useHeaderActual } from '../componentes/header/ContextoHeader';
@@ -294,7 +295,7 @@ describe('Proveedores', () => {
 
     it('crea un proveedor con los datos básicos y cierra con éxito', async () => {
       configurarCollection({ datos: [] });
-      mocks.crearProveedor.mockResolvedValue({ proveedorId: 'nuevo' });
+      mocks.crearProveedor.mockResolvedValue({ proveedorId: 'nuevo', sincronizacion: Promise.resolve() });
 
       renderizar();
       fireEvent.click(screen.getAllByRole('button', { name: 'Agregar proveedor' })[0]!);
@@ -305,6 +306,37 @@ describe('Proveedores', () => {
       const [, datos] = mocks.crearProveedor.mock.calls[0] as [unknown, { nombre: string }];
       expect(datos.nombre).toBe('Quesos del Norte');
       expect(await screen.findByText('Proveedor creado.')).toBeTruthy();
+    });
+
+    it('duplicado: el toast muestra el mensaje del error y el modal sigue abierto', async () => {
+      configurarCollection({ datos: [] });
+      mocks.crearProveedor.mockRejectedValue(
+        new ProveedorDuplicadoError('Ya existe un proveedor llamado "La Rural".'),
+      );
+
+      renderizar();
+      fireEvent.click(screen.getAllByRole('button', { name: 'Agregar proveedor' })[0]!);
+      fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'La Rural' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+      expect(await screen.findByText('Ya existe un proveedor llamado "La Rural".')).toBeTruthy();
+      const dialog = document.querySelector('dialog') as HTMLDialogElement;
+      expect(dialog.open).toBe(true);
+    });
+
+    it('la sincronización (ack) que rechaza avisa con un toast en vez de quedar como unhandled rejection', async () => {
+      configurarCollection({ datos: [] });
+      mocks.crearProveedor.mockResolvedValue({
+        proveedorId: 'nuevo',
+        sincronizacion: Promise.reject(new Error('offline')),
+      });
+
+      renderizar();
+      fireEvent.click(screen.getAllByRole('button', { name: 'Agregar proveedor' })[0]!);
+      fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Quesos del Norte' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+      expect(await screen.findByText('No se pudo crear el proveedor. Intentá de nuevo.')).toBeTruthy();
     });
 
     it('agregar una cuenta de pago sin banco/cuenta bloquea el guardado', () => {
@@ -357,20 +389,45 @@ describe('Proveedores', () => {
       expect(datos.pagos).toBeUndefined();
     });
 
-    it('sin conexión: guarda sin esperar el ack, cierra al instante y avisa que falta sincronizar', async () => {
+    it('sin conexión: la fase 1 igual resuelve (id ya asignado), cierra el modal y avisa sin esperar el ack', async () => {
       configurarCollection({ datos: [] });
       mocks.useOnlineStatus.mockReturnValue(false);
-      mocks.crearProveedor.mockResolvedValue({ proveedorId: 'nuevo' });
+      let resolverSincronizacion!: () => void;
+      mocks.crearProveedor.mockResolvedValue({
+        proveedorId: 'nuevo',
+        sincronizacion: new Promise<void>((resolve) => {
+          resolverSincronizacion = resolve;
+        }),
+      });
 
       renderizar();
       fireEvent.click(screen.getAllByRole('button', { name: 'Agregar proveedor' })[0]!);
       fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Quesos del Norte' } });
       fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
 
+      // No espera el ack (sigue sin resolver) para cerrar el modal ni avisar.
+      expect(await screen.findByText('Guardado sin conexión. Se sincronizará al reconectar.')).toBeTruthy();
       const dialog = document.querySelector('dialog') as HTMLDialogElement;
       expect(dialog.open).toBe(false);
       expect(mocks.crearProveedor).toHaveBeenCalledTimes(1);
-      expect(await screen.findByText('Guardado sin conexión. Se sincronizará al reconectar.')).toBeTruthy();
+
+      resolverSincronizacion();
+    });
+
+    it('sin conexión: si la sincronización rechaza después, avisa con un toast de fallo (no queda como unhandled rejection)', async () => {
+      configurarCollection({ datos: [] });
+      mocks.useOnlineStatus.mockReturnValue(false);
+      mocks.crearProveedor.mockResolvedValue({
+        proveedorId: 'nuevo',
+        sincronizacion: Promise.reject(new Error('offline')),
+      });
+
+      renderizar();
+      fireEvent.click(screen.getAllByRole('button', { name: 'Agregar proveedor' })[0]!);
+      fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Quesos del Norte' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+      expect(await screen.findByText('No se pudo sincronizar el proveedor creado.')).toBeTruthy();
     });
   });
 });

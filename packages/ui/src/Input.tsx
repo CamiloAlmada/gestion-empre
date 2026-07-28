@@ -8,6 +8,7 @@ export interface InputProps {
   placeholder?: string;
   error?: string;
   disabled?: boolean;
+  maxLength?: number;
 }
 
 export function Input({
@@ -18,6 +19,7 @@ export function Input({
   placeholder,
   error,
   disabled = false,
+  maxLength,
 }: InputProps) {
   const id = useId();
   const idError = `${id}-error`;
@@ -33,6 +35,7 @@ export function Input({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         disabled={disabled}
+        maxLength={maxLength}
         aria-invalid={error !== undefined ? true : undefined}
         aria-describedby={error !== undefined ? idError : undefined}
         className={`rounded-control border bg-superficie px-3 py-2 text-texto outline-none focus-visible:ring-2 focus-visible:ring-primary-600 disabled:bg-fondo disabled:text-texto-secundario ${

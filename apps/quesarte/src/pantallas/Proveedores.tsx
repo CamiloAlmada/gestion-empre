@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router';
 import { collection, orderBy, query } from 'firebase/firestore';
 import type { Proveedor } from '@gestion/core';
 import {
+  ProveedorDuplicadoError,
+  ProveedorInvalidoError,
   crearProveedor,
   proveedorConverter,
   useCollection,
@@ -21,6 +23,19 @@ import { useHeader } from '../componentes/header/ContextoHeader';
 // el botón del estado vacío, más abajo).
 const CLASE_ACCION_PRIMARIA =
   'inline-flex min-h-[48px] min-w-[48px] items-center justify-center gap-1.5 rounded-control bg-primary-600 px-3 font-medium text-white hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2 focus-visible:ring-offset-superficie';
+
+/**
+ * Mensaje del `catch` de `crearProveedor`: duplicado e inválido traen su propio
+ * mensaje en español (ver `packages/firebase-kit/src/proveedores.ts`); cualquier
+ * otro error (p. ej. el ack de `sincronizacion` rechazado estando online) usa el
+ * genérico. Mismo patrón que `mensajeErrorConfirmar` de `CompraPantalla.tsx`.
+ */
+function mensajeErrorProveedor(error: unknown): string {
+  if (error instanceof ProveedorDuplicadoError || error instanceof ProveedorInvalidoError) {
+    return error.message;
+  }
+  return 'No se pudo crear el proveedor. Intentá de nuevo.';
+}
 
 /** Segunda línea de la fila: contacto y/o teléfono, unidos si hay ambos. */
 function textoContacto(proveedor: Proveedor): string {
@@ -138,26 +153,36 @@ export function Proveedores() {
    * proyecto (docs/06-ui-ux.md §8) que `Productos.tsx` — acá delegado a
    * `crearProveedor` (packages/firebase-kit), que ya arma el documento y
    * valida el nombre.
+   *
+   * Contrato en dos fases (ver el JSDoc del módulo): la fase 1 (la promesa que
+   * devuelve `crearProveedor`) se awaitea SIEMPRE, incluso offline — es la que
+   * valida el nombre y detecta el duplicado, y sin conexión igual resuelve
+   * (lee de la caché de persistencia). El modal se mantiene abierto si tira
+   * `ProveedorDuplicadoError`/`ProveedorInvalidoError`, para que el admin
+   * pueda corregir el nombre. Recién con la fase 1 resuelta se decide, según
+   * `enLinea`, qué hacer con la fase 2 (`sincronizacion`, el ack): offline se
+   * dispara sin esperar (con su propio `.catch`, para no dejar un unhandled
+   * rejection); online se espera antes de avisar éxito.
    */
   async function handleCrear(datos: DatosProveedor) {
-    const escritura = crearProveedor(db, datos);
-
-    if (!enLinea) {
-      setModalAltaAbierto(false);
-      mostrarToast('Guardado sin conexión. Se sincronizará al reconectar.', 'info');
-      escritura.catch(() => {
-        mostrarToast('No se pudo sincronizar el proveedor creado.', 'error');
-      });
-      return;
-    }
-
     setGuardando(true);
     try {
-      await escritura;
+      const { sincronizacion } = await crearProveedor(db, datos);
+
+      if (!enLinea) {
+        setModalAltaAbierto(false);
+        mostrarToast('Guardado sin conexión. Se sincronizará al reconectar.', 'info');
+        sincronizacion.catch(() => {
+          mostrarToast('No se pudo sincronizar el proveedor creado.', 'error');
+        });
+        return;
+      }
+
+      await sincronizacion;
       mostrarToast('Proveedor creado.', 'exito');
       setModalAltaAbierto(false);
-    } catch {
-      mostrarToast('No se pudo crear el proveedor. Intentá de nuevo.', 'error');
+    } catch (error) {
+      mostrarToast(mensajeErrorProveedor(error), 'error');
     } finally {
       setGuardando(false);
     }

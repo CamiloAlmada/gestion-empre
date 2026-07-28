@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import type { FirestoreError } from 'firebase/firestore';
 import { ProveedorToasts } from '@gestion/ui';
 import type { Proveedor } from '@gestion/core';
+import { ProveedorDuplicadoError } from '@gestion/firebase-kit';
 import { DetalleProveedorPantalla } from './DetalleProveedorPantalla';
 import { ProveedorHeader, useHeaderActual } from '../componentes/header/ContextoHeader';
 
@@ -229,7 +230,7 @@ describe('DetalleProveedorPantalla', () => {
 
     it('guarda la edición delegando en actualizarProveedor', async () => {
       configurarProveedor(estadoOkDoc(proveedorDe({ id: 'p1', nombre: 'Quesos del Norte' })));
-      mocks.actualizarProveedor.mockResolvedValue(undefined);
+      mocks.actualizarProveedor.mockResolvedValue({ sincronizacion: Promise.resolve() });
 
       renderizar('p1');
       fireEvent.click(screen.getByRole('button', { name: 'Editar' }));
@@ -243,6 +244,54 @@ describe('DetalleProveedorPantalla', () => {
       expect(await screen.findByText('Proveedor actualizado.')).toBeTruthy();
     });
 
+    it('duplicado: el toast muestra el mensaje del error (con el homónimo inactivo) y el modal sigue abierto', async () => {
+      configurarProveedor(estadoOkDoc(proveedorDe({ id: 'p1', nombre: 'Quesos del Norte' })));
+      mocks.actualizarProveedor.mockRejectedValue(
+        new ProveedorDuplicadoError(
+          'Ya existe un proveedor llamado "La Rural" (está inactivo, podés reactivarlo).',
+        ),
+      );
+
+      renderizar('p1');
+      fireEvent.click(screen.getByRole('button', { name: 'Editar' }));
+      fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'La Rural' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+      expect(
+        await screen.findByText('Ya existe un proveedor llamado "La Rural" (está inactivo, podés reactivarlo).'),
+      ).toBeTruthy();
+      const dialog = document.querySelector('dialog') as HTMLDialogElement;
+      expect(dialog.open).toBe(true);
+    });
+
+    it('la sincronización (ack) que rechaza avisa con un toast en vez de quedar como unhandled rejection', async () => {
+      configurarProveedor(estadoOkDoc(proveedorDe({ id: 'p1', nombre: 'Quesos del Norte' })));
+      mocks.actualizarProveedor.mockResolvedValue({ sincronizacion: Promise.reject(new Error('boom')) });
+
+      renderizar('p1');
+      fireEvent.click(screen.getByRole('button', { name: 'Editar' }));
+      fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Quesos del Norte SRL' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+      expect(await screen.findByText('No se pudo actualizar el proveedor. Intentá de nuevo.')).toBeTruthy();
+    });
+
+    it('sin conexión: cierra el modal sin esperar el ack y, si la sincronización rechaza después, avisa con un toast', async () => {
+      configurarProveedor(estadoOkDoc(proveedorDe({ id: 'p1', nombre: 'Quesos del Norte' })));
+      mocks.useOnlineStatus.mockReturnValue(false);
+      mocks.actualizarProveedor.mockResolvedValue({ sincronizacion: Promise.reject(new Error('offline')) });
+
+      renderizar('p1');
+      fireEvent.click(screen.getByRole('button', { name: 'Editar' }));
+      fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Quesos del Norte SRL' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+      expect(await screen.findByText('Guardado sin conexión. Se sincronizará al reconectar.')).toBeTruthy();
+      const dialog = document.querySelector('dialog') as HTMLDialogElement;
+      expect(dialog.open).toBe(false);
+      expect(await screen.findByText('No se pudo sincronizar la edición del proveedor.')).toBeTruthy();
+    });
+
     it('agregar y quitar una cuenta de pago en la edición', async () => {
       configurarProveedor(
         estadoOkDoc(
@@ -253,7 +302,7 @@ describe('DetalleProveedorPantalla', () => {
           }),
         ),
       );
-      mocks.actualizarProveedor.mockResolvedValue(undefined);
+      mocks.actualizarProveedor.mockResolvedValue({ sincronizacion: Promise.resolve() });
 
       renderizar('p1');
       fireEvent.click(screen.getByRole('button', { name: 'Editar' }));

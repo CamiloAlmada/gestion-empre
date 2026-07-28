@@ -7,6 +7,7 @@ import {
   CompraVaciaError,
   EstadoCompraInvalidoError,
   ProrateoIncoherenteError,
+  ProveedorDuplicadoError,
   ProveedorInvalidoError,
   actualizarBorradorCompra,
   compraConverter,
@@ -62,6 +63,20 @@ function mensajeErrorConfirmar(error: unknown): string {
     return 'Esta compra ya no se puede confirmar (puede haberse confirmado o borrado desde otro lugar).';
   }
   return 'No se pudo confirmar la compra. Intentá de nuevo.';
+}
+
+/**
+ * Mensaje del `catch` de `crearProveedor` (alta inline, ver
+ * `handleCrearProveedorInline`): duplicado e inválido traen su propio mensaje
+ * en español; cualquier otro error usa el genérico. No confundir con
+ * `mensajeErrorGuardar`, cuyo `ProveedorInvalidoError` es otro caso (no se
+ * eligió proveedor para la compra, no que el nombre de uno nuevo sea inválido).
+ */
+function mensajeErrorProveedorInline(error: unknown): string {
+  if (error instanceof ProveedorDuplicadoError || error instanceof ProveedorInvalidoError) {
+    return error.message;
+  }
+  return 'No se pudo crear el proveedor. Intentá de nuevo.';
 }
 
 /**
@@ -294,21 +309,40 @@ export function CompraPantalla() {
     }
   }
 
+  /**
+   * Alta de proveedor EN MEDIO de armar una compra (botón "+ Nuevo" junto al
+   * selector de proveedor). Mismo contrato en dos fases que `Proveedores.tsx`/
+   * `DetalleProveedorPantalla.tsx`: se awaitea siempre la fase 1 (valida y
+   * detecta duplicado, resuelve también offline), con el modal abierto si
+   * tira error para que el admin corrija el nombre.
+   *
+   * Una vez resuelta la fase 1 el id ya existe: en AMBOS caminos (offline y
+   * online) se deja el proveedor seleccionado en la compra
+   * (`setProveedor(...)`), que es lo que permite seguir armándola sin
+   * conexión — a diferencia de la versión anterior, que le decía al usuario
+   * que la creación había fallado mientras la escritura quedaba encolada
+   * igual, empujándolo a reintentar y duplicar la ficha al reconectar.
+   */
   async function handleCrearProveedorInline(datos: DatosProveedor) {
-    const escritura = crearProveedor(db, datos);
-    if (!enLinea) {
-      setModalProveedorAbierto(false);
-      mostrarToast('Necesitás conexión para crear un proveedor nuevo.', 'error');
-      return;
-    }
     setGuardandoProveedor(true);
     try {
-      const { proveedorId } = await escritura;
+      const { proveedorId, sincronizacion } = await crearProveedor(db, datos);
       setProveedor({ id: proveedorId, nombre: datos.nombre.trim() });
+
+      if (!enLinea) {
+        setModalProveedorAbierto(false);
+        mostrarToast('Guardado sin conexión. Se sincronizará al reconectar.', 'info');
+        sincronizacion.catch(() => {
+          mostrarToast('No se pudo sincronizar el proveedor creado.', 'error');
+        });
+        return;
+      }
+
+      await sincronizacion;
       mostrarToast('Proveedor creado.', 'exito');
       setModalProveedorAbierto(false);
-    } catch {
-      mostrarToast('No se pudo crear el proveedor. Intentá de nuevo.', 'error');
+    } catch (error) {
+      mostrarToast(mensajeErrorProveedorInline(error), 'error');
     } finally {
       setGuardandoProveedor(false);
     }
@@ -482,15 +516,11 @@ export function CompraPantalla() {
             <Button
               variante="secundaria"
               onClick={() => setModalProveedorAbierto(true)}
-              disabled={!enLinea}
               className="min-h-11"
             >
               + Nuevo
             </Button>
           </div>
-        )}
-        {!esConfirmada && !enLinea && (
-          <p className="text-sm text-advertencia">Necesitás conexión para crear un proveedor nuevo.</p>
         )}
       </section>
 
