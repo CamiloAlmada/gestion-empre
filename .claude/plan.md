@@ -154,7 +154,7 @@ común del formulario. Sin eso el fix no funcionaba con el payload real.
 Verificado por el orquestador: `init.ts:48` efectivamente no lo setea, y
 `converters/proveedor.ts:37` hace la misma omisión en el alta.
 
-### 🔴 Mismo bug en CLIENTES, sin arreglar
+### Mismo bug en CLIENTES — ✅ arreglado en `ed1ed6e`
 
 Reportado por el `senior` como nota fuera de alcance y **verificado por el
 orquestador**: `actualizarCliente` tiene exactamente el mismo defecto.
@@ -175,7 +175,32 @@ documentado no lo hace correcto — solo lo hace conocido.
 
 Menos grave que en proveedores: no hay datos bancarios. Pero un teléfono viejo
 que no se puede borrar sí importa, porque de ahí salen los links de WhatsApp
-(doc 08). **Decisión pendiente del dueño.**
+(doc 08).
+
+**Arreglado por `senior` a pedido del dueño.** Tres diferencias con proveedores
+hacían esta más delicada, y las tres se resolvieron:
+
+1. **`telefonoE164` es derivado, y había una trampa.** Con reemplazo total,
+   `cambios.telefono` está siempre definido (string o sentinela), así que la
+   condición vieja le habría pasado un `FieldValue` a `normalizarTelefono` con un
+   `as string` tapándole la boca a TypeScript. Se resolvió derivando el E164 del
+   display recortado ANTES de armar el payload; el cast ya no existe. Vaciar el
+   teléfono borra también su E164: uno huérfano seguiría generando links de
+   WhatsApp a un número dado de baja.
+2. **Las reglas de clientes SÍ validan shape** (`clienteClavesConocidas` usa
+   `hasOnly`), a diferencia de proveedores. El `senior` lo **verificó contra el
+   emulador** en vez de asumirlo: en un update `request.resource.data` es el
+   documento resultante y un campo borrado no está, así que pasa. 4 tests de
+   reglas nuevos (175 → 179), incluido el negativo de que el vendedor no puede
+   borrar el teléfono.
+3. **`stats` lo escribe el POS** y no se toca: hay test de las siete claves
+   exactas del payload.
+
+Se actualizó además el JSDoc de `actualizarProveedor`, que explicaba una
+divergencia con `actualizarCliente` que después de este cambio ya no existe.
+
+Verificado por el orquestador: `pnpm turbo lint test build --force` 12/12,
+365 tests en firebase-kit (eran 360), 179 de reglas, 1820 en la app.
 
 ### Verificación manual pendiente (no bloquea el merge)
 
