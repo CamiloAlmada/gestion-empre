@@ -282,6 +282,54 @@ service cloud.firestore {
         && (d.plantillas.size() == 0 || plantillaWhatsAppValida(d.plantillas[0]));
     }
 
+    // Shape de UNA cuenta de pago de proveedor (doc 07): { banco, cuenta,
+    // titular?, moneda? }, strings no vacíos. Espejo de `plantillaWhatsAppValida`
+    // (arriba): se aplica solo al PRIMER elemento de `pagos` (ver
+    // `proveedorValido`), mismo límite práctico —el lenguaje de reglas no itera
+    // listas de largo arbitrario— y mismas razones documentadas ahí.
+    function pagoValido(p) {
+      return p is map
+        && p.keys().hasOnly(['banco', 'cuenta', 'titular', 'moneda'])
+        && p.keys().hasAll(['banco', 'cuenta'])
+        && p.banco is string && p.banco.size() >= 1
+        && p.cuenta is string && p.cuenta.size() >= 1
+        && (!('titular' in p) || p.titular is string)
+        && (!('moneda' in p) || p.moneda is string);
+    }
+
+    // Shape estricto de `proveedores/{id}` (doc 07), compartida por create y
+    // update. El SUPERSET de las 10 claves conocidas de `DatosProveedor`
+    // (packages/firebase-kit/src/proveedores.ts) más `fechaAlta`/`activo`;
+    // `nombre`/`fechaAlta`/`activo` obligatorias, el resto opcional. El tope de
+    // 120 en `nombre` espeja `LARGO_MAX_NOMBRE_PROVEEDOR` del kit (mismo patrón
+    // que `configuracionGeneralValida` documentando sus constantes de `core`).
+    //
+    // `pagos`: lista de ≤ 10 cuentas, validando solo el PRIMER elemento con
+    // `pagoValido` (misma limitación práctica que `plantillasWhatsAppValidas`,
+    // documentada ahí). La lista VACÍA se tolera a propósito: `crearProveedor`
+    // (packages/firebase-kit/src/proveedores.ts:246) escribe `pagos: datos.pagos`
+    // sin normalizar, así que un alta con `pagos: []` es posible; exigir
+    // `size() >= 1` rompería ese create en producción (verificado).
+    function proveedorValido() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(
+          ['nombre', 'contactoNombre', 'telefono', 'email', 'direccion', 'rut',
+           'pagos', 'notas', 'fechaAlta', 'activo'])
+        && d.keys().hasAll(['nombre', 'fechaAlta', 'activo'])
+        && d.nombre is string && d.nombre.size() >= 1 && d.nombre.size() <= 120
+        && d.activo is bool
+        && d.fechaAlta is timestamp
+        && (!('contactoNombre' in d) || d.contactoNombre is string)
+        && (!('telefono' in d) || d.telefono is string)
+        && (!('email' in d) || d.email is string)
+        && (!('direccion' in d) || d.direccion is string)
+        && (!('rut' in d) || d.rut is string)
+        && (!('notas' in d) || d.notas is string)
+        && (!('pagos' in d)
+            || (d.pagos is list && d.pagos.size() <= 10
+                && (d.pagos.size() == 0 || pagoValido(d.pagos[0]))));
+    }
+
     // --- Colecciones ---
 
     match /usuarios/{uid} {
@@ -410,7 +458,17 @@ service cloud.firestore {
       // Solo admin: el vendedor no ve datos bancarios ni costos de proveedor
       // (criterio de aceptación del doc 07, verificado por reglas — no solo UI).
       allow read: if esAdmin();
-      allow create, update: if esAdmin();
+      // El alta (`crearProveedor`) nace SIEMPRE activa; un create con
+      // `activo: false` sería un proveedor "fantasma" sin caso de uso legítimo.
+      allow create: if esAdmin() && proveedorValido() && request.resource.data.activo == true;
+      // La edición (`actualizarProveedor`) hace REEMPLAZO TOTAL de los 7 campos
+      // opcionales (ver el doc del módulo en el kit), pero `fechaAlta` queda
+      // INMUTABLE a propósito: falsear el alta de un proveedor no tiene caso de
+      // uso legítimo. `activo` sí puede cambiar acá porque
+      // `desactivarProveedor`/`reactivarProveedor` lo tocan con este mismo update.
+      allow update: if esAdmin() && proveedorValido()
+        && soloCambian(['nombre', 'contactoNombre', 'telefono', 'email', 'direccion',
+                         'rut', 'pagos', 'notas', 'activo']);
       // No se borran: se desactivan (activo:false).
       allow delete: if false;
     }

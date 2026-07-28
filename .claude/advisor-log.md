@@ -160,3 +160,49 @@ preexistente y excede "unicidad de proveedores".
 
 **Divergencias:** ninguna. El hallazgo es adyacente a la tarea, no una objeción a
 lo implementado — las cuatro divergencias las aprobó explícitamente.
+
+---
+
+## R4 endurecer las reglas de proveedores — llamada 1 (temprano)
+Fecha: 2026-07-28
+
+**Se le preguntó:** cómo validar el shape de `proveedores` en `firestore.rules`,
+con dos problemas concretos: (a) `pagos` es un array de MAPAS y el lenguaje de
+reglas no tiene iteración; (b) si conviene hacer `fechaAlta` inmutable en los
+updates.
+
+**RECOMENDACIÓN:** "Para `pagos`: el patrón `plantillasWhatsApp` ya existente —
+`pagos is list && size() <= 10 && (size() == 0 || pagoValido(pagos[0]))`, con
+`pagoValido(p)` espejo de `plantillaWhatsAppValida`. Para el resto: una
+`proveedorValido()` compartida (`hasOnly` de las 10 claves,
+`hasAll(['nombre','fechaAlta','activo'])`, `nombre` string 1–120, `activo is
+bool`, `fechaAlta is timestamp`, opcionales `is string` si presentes). Create
+agrega `activo == true`; update agrega `soloCambian([todo menos fechaAlta])`, que
+hace `fechaAlta` inmutable."
+
+Plan: T1 reglas + T2 tests (`semisenior`, secuenciales), T3 auditoría de docs
+existentes (`trainee`, en paralelo, **bloquea el deploy**), T4 cierre.
+
+**SUPUESTOS:** (1) El modal puede mandar `pagos: []` en el alta; no leyó el
+componente, por eso la regla tolera lista vacía. (2) `affectedKeys()` incluye las
+claves eliminadas con `deleteField()`; hay que confirmarlo contra el emulador.
+(3) 10 es tope suficiente de cuentas. (4) Ningún proveedor YA persistido viola el
+shape nuevo. (5) `fechaAlta` se escribe siempre como Timestamp real, nunca
+`serverTimestamp()`.
+
+**BLOQUEANTES:** (1) El supuesto 4: auditar los docs existentes en dev y prod
+antes de deployar. Un doc legado con claves extra dejaría al admin sin poder
+editarlo NUNCA MÁS — el falso positivo que más importa evitar. (2) Confirmar el
+supuesto 2 contra el emulador; queda cubierto si el test del update de reemplazo
+total se escribe primero.
+
+**Qué se hizo después:** verificado el precedente `plantillasWhatsAppValidas`
+(`firestore.rules`), que es exactamente como lo describió: representante en el
+primer elemento, tope de 20, y `size() == 0 ||`. Verificado también que
+`crearProveedor:246` pasa `pagos: datos.pagos` SIN normalizar, así que tolerar
+`[]` es correcto y no teórico. Se delega T1+T2 y T3 en paralelo.
+
+**Divergencias:** una imprecisión menor suya: citó `usuarioUpdateValido` usando
+`soloCambian` para hacer inmutable el `email`, y eso no existe en el repo —
+`soloCambian` se usa en stats, categorías, productos, piezas y ventas—. No
+cambia la recomendación: el mecanismo está bien precedentado igual.

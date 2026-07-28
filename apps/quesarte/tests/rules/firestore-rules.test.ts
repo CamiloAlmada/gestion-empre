@@ -84,6 +84,30 @@ function plantillaWa(sobre: Record<string, unknown> = {}) {
   return { id: 'p1', nombre: 'Pedido listo', contexto: 'venta', texto: 'Hola {cliente}', ...sobre };
 }
 
+// Proveedor con shape válido (doc 07), réplica del documento que escribe
+// `crearProveedor` (packages/firebase-kit/src/proveedores.ts): los 7 opcionales
+// presentes y `pagos` con DOS cuentas (una con `titular`/`moneda`, otra sin),
+// para probar que validar solo `pagos[0]` no rechaza la segunda. `sobre` permite
+// romper el shape.
+function proveedorCompleto(sobre: Record<string, unknown> = {}) {
+  return {
+    nombre: 'Lácteos del Sur',
+    contactoNombre: 'Juan Pérez',
+    telefono: '099111222',
+    email: 'juan@lacteosdelsur.uy',
+    direccion: 'Ruta 5 km 100',
+    rut: '210000000012',
+    pagos: [
+      { banco: 'BROU', cuenta: '001234567', titular: 'Lácteos del Sur SRL', moneda: 'UYU' },
+      { banco: 'Itaú', cuenta: '009876543' },
+    ],
+    notas: 'Entrega los martes',
+    fechaAlta: new Date(),
+    activo: true,
+    ...sobre,
+  };
+}
+
 // Doc `configuracion/plantillasWhatsApp` con la lista dada (default: una válida).
 function plantillasWaDoc(plantillas: unknown[] = [plantillaWa()]) {
   return { plantillas };
@@ -226,7 +250,15 @@ beforeEach(async () => {
       nombre: 'Lácteos Colonia',
       rut: '210000000012',
       pagos: [{ banco: 'BROU', cuenta: '001234567' }],
-      fechaAlta: Date.now(),
+      // `new Date()`, no `Date.now()`: la tanda de endurecimiento exige
+      // `fechaAlta is timestamp` (ver `proveedorValido` en firestore.rules).
+      // `Date.now()` escribe un NÚMERO plano (milisegundos), no un `Timestamp` de
+      // Firestore, y ese tipo lo rechaza. Además es fiel a la escritura real:
+      // `crearProveedor` persiste `new Date()`, que el SDK sí convierte a
+      // `Timestamp`. Si copiás este patrón para otro seed de `proveedores`, usá
+      // `new Date()` acá — el resto de los seeds del archivo sigue con
+      // `Date.now()` porque ninguna otra colección valida el tipo de la fecha.
+      fechaAlta: new Date(),
       activo: true,
     });
     await setDoc(doc(seed, 'configuracion', 'general'), {
@@ -939,10 +971,14 @@ describe('proveedores (solo admin)', () => {
   });
 
   it('vendedor NO crea proveedores', async () => {
+    // `fechaAlta: new Date()`, no `Date.now()`: con `proveedorValido()` exigiendo
+    // `fechaAlta is timestamp`, un `number` ya hace que el documento sea inválido
+    // por SHAPE, y este test dejaría de probar lo que dice su nombre (que el
+    // vendedor no tiene permiso) para pasar por la razón equivocada.
     await assertFails(
       setDoc(doc(db(VENDEDOR), 'proveedores', 'prov-x'), {
         nombre: 'X',
-        fechaAlta: Date.now(),
+        fechaAlta: new Date(),
         activo: true,
       }),
     );
@@ -953,7 +989,7 @@ describe('proveedores (solo admin)', () => {
     await assertSucceeds(
       setDoc(doc(db(ADMIN), 'proveedores', 'prov-x'), {
         nombre: 'Nuevo proveedor',
-        fechaAlta: Date.now(),
+        fechaAlta: new Date(),
         activo: true,
       }),
     );
@@ -967,6 +1003,143 @@ describe('proveedores (solo admin)', () => {
 
   it('nadie borra proveedores (ni el admin)', async () => {
     await assertFails(deleteDoc(doc(db(ADMIN), 'proveedores', 'prov-1')));
+  });
+
+  // --- Shape estricto (tanda de endurecimiento) ---
+
+  // Positivos primero: protegen al dueño de un falso rechazo en el ABM real.
+
+  it('create réplica exacta de crearProveedor (7 opcionales + pagos de 2 cuentas)', async () => {
+    await assertSucceeds(
+      setDoc(doc(db(ADMIN), 'proveedores', 'prov-completo'), proveedorCompleto()),
+    );
+  });
+
+  it('create mínimo (solo nombre, fechaAlta, activo)', async () => {
+    await assertSucceeds(
+      setDoc(doc(db(ADMIN), 'proveedores', 'prov-minimo'), {
+        nombre: 'Mínimo SRL',
+        fechaAlta: new Date(),
+        activo: true,
+      }),
+    );
+  });
+
+  it('update réplica exacta de actualizarProveedor (reemplazo total, deleteField en los vacíos)', async () => {
+    // Confirma empíricamente que `soloCambian` (affectedKeys) cuenta las claves
+    // borradas con `deleteField()` como afectadas, no como ausentes.
+    await assertSucceeds(
+      updateDoc(doc(db(ADMIN), 'proveedores', 'prov-1'), {
+        nombre: 'Lácteos Colonia SRL',
+        contactoNombre: deleteField(),
+        telefono: deleteField(),
+        email: deleteField(),
+        direccion: deleteField(),
+        rut: deleteField(),
+        pagos: deleteField(),
+        notas: deleteField(),
+      }),
+    );
+  });
+
+  it('update de activo (desactivarProveedor / reactivarProveedor)', async () => {
+    await assertSucceeds(updateDoc(doc(db(ADMIN), 'proveedores', 'prov-1'), { activo: false }));
+    await assertSucceeds(updateDoc(doc(db(ADMIN), 'proveedores', 'prov-1'), { activo: true }));
+  });
+
+  it('create con pagos: [] (lista vacía tolerada, ver crearProveedor)', async () => {
+    await assertSucceeds(
+      setDoc(doc(db(ADMIN), 'proveedores', 'prov-sin-pagos'), proveedorCompleto({ pagos: [] })),
+    );
+  });
+
+  it('create con nombre de exactamente 120 caracteres (borde válido)', async () => {
+    await assertSucceeds(
+      setDoc(
+        doc(db(ADMIN), 'proveedores', 'prov-120'),
+        proveedorCompleto({ nombre: 'a'.repeat(120) }),
+      ),
+    );
+  });
+
+  // Negativos.
+
+  it('create con clave desconocida → falla', async () => {
+    await assertFails(
+      setDoc(doc(db(ADMIN), 'proveedores', 'prov-x'), proveedorCompleto({ extra: 'nope' })),
+    );
+  });
+
+  it('create con nombre no-string → falla', async () => {
+    await assertFails(
+      setDoc(doc(db(ADMIN), 'proveedores', 'prov-x'), proveedorCompleto({ nombre: 42 })),
+    );
+  });
+
+  it('create con nombre de 121 caracteres (supera el máximo) → falla', async () => {
+    await assertFails(
+      setDoc(
+        doc(db(ADMIN), 'proveedores', 'prov-x'),
+        proveedorCompleto({ nombre: 'a'.repeat(121) }),
+      ),
+    );
+  });
+
+  it('create con nombre vacío → falla', async () => {
+    await assertFails(
+      setDoc(doc(db(ADMIN), 'proveedores', 'prov-x'), proveedorCompleto({ nombre: '' })),
+    );
+  });
+
+  it('create con activo no-bool → falla', async () => {
+    await assertFails(
+      setDoc(doc(db(ADMIN), 'proveedores', 'prov-x'), proveedorCompleto({ activo: 'si' })),
+    );
+  });
+
+  it('create con activo: false → falla (el alta nace siempre activa)', async () => {
+    await assertFails(
+      setDoc(doc(db(ADMIN), 'proveedores', 'prov-x'), proveedorCompleto({ activo: false })),
+    );
+  });
+
+  it('update que cambia fechaAlta → falla (inmutable)', async () => {
+    await assertFails(updateDoc(doc(db(ADMIN), 'proveedores', 'prov-1'), { fechaAlta: new Date() }));
+  });
+
+  it('create con pagos no-lista → falla', async () => {
+    await assertFails(
+      setDoc(doc(db(ADMIN), 'proveedores', 'prov-x'), proveedorCompleto({ pagos: 'x' })),
+    );
+  });
+
+  it('create con pagos: ["basura"] (elemento no-mapa) → falla', async () => {
+    await assertFails(
+      setDoc(doc(db(ADMIN), 'proveedores', 'prov-x'), proveedorCompleto({ pagos: ['basura'] })),
+    );
+  });
+
+  it('create con pago sin cuenta → falla', async () => {
+    await assertFails(
+      setDoc(
+        doc(db(ADMIN), 'proveedores', 'prov-x'),
+        proveedorCompleto({ pagos: [{ banco: 'BROU' }] }),
+      ),
+    );
+  });
+
+  it('create con pago con clave desconocida → falla', async () => {
+    await assertFails(
+      setDoc(
+        doc(db(ADMIN), 'proveedores', 'prov-x'),
+        proveedorCompleto({ pagos: [{ banco: 'BROU', cuenta: '001', extra: 1 }] }),
+      ),
+    );
+  });
+
+  it('create con 11 cuentas de pago (supera el máximo) → falla', async () => {
+    const pagos = Array.from({ length: 11 }, (_, i) => ({ banco: 'Banco', cuenta: `cta-${i}` }));
+    await assertFails(setDoc(doc(db(ADMIN), 'proveedores', 'prov-x'), proveedorCompleto({ pagos })));
   });
 });
 
