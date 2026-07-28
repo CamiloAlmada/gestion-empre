@@ -6,6 +6,7 @@ import {
   desactivarProveedor,
   reactivarProveedor,
   LARGO_MAX_NOMBRE_PROVEEDOR,
+  type DatosProveedor,
 } from './proveedores';
 import { ProveedorDuplicadoError, ProveedorInvalidoError } from './errores';
 
@@ -19,6 +20,10 @@ const mocks = vi.hoisted(() => ({
   updateDoc: vi.fn(),
   estado: { proveedores: [] as Proveedor[] },
   contador: { n: 0 },
+  // Sentinela de `deleteField()`: el mock devuelve SIEMPRE esta misma referencia,
+  // así los tests afirman que un campo se marca para borrado comparando identidad
+  // (mismo patrón que clientes.test.ts).
+  borrar: { __op: 'deleteField' } as const,
 }));
 
 interface RefFalsa {
@@ -60,9 +65,29 @@ vi.mock('firebase/firestore', () => ({
   },
   setDoc: (ref: RefFalsa, datos: unknown) => mocks.setDoc(ref, datos),
   updateDoc: (ref: RefFalsa, datos: unknown) => mocks.updateDoc(ref, datos),
+  deleteField: () => mocks.borrar,
 }));
 
 const db = {} as never;
+
+/** Payload del `updateDoc` que se disparó (falla si no hubo ninguno). */
+function cambiosEscritos(): Record<string, unknown> {
+  const llamada = mocks.updateDoc.mock.calls[0] as [RefFalsa, Record<string, unknown>] | undefined;
+  if (llamada === undefined) throw new Error('no se llamó a updateDoc');
+  return llamada[1];
+}
+
+/** Datos completos de un proveedor, para los tests de reemplazo total. */
+const DATOS_COMPLETOS: DatosProveedor = {
+  nombre: 'Lácteos Colonia',
+  contactoNombre: 'Ana',
+  telefono: '099111222',
+  email: 'ana@lacteos.uy',
+  direccion: 'Ruta 1 km 60',
+  rut: '210000000012',
+  notas: 'Entrega los martes',
+  pagos: [{ banco: 'BROU', cuenta: '001234567' }],
+};
 
 function proveedor(over: Partial<Proveedor> & Pick<Proveedor, 'id' | 'nombre'>): Proveedor {
   return { fechaAlta: new Date('2026-01-01'), activo: true, ...over };
@@ -98,6 +123,27 @@ describe('crearProveedor', () => {
   it('devuelve una sincronizacion que resuelve con el ack del servidor', async () => {
     const { sincronizacion } = await crearProveedor(db, { nombre: 'La Rural' });
     await expect(sincronizacion).resolves.toBeUndefined();
+  });
+
+  it('el alta OMITE los campos vacíos, sin deleteField (sería un error en un setDoc)', async () => {
+    // El alta no cambió con el reemplazo total de la edición: acá `undefined`
+    // significa "campo ausente" y el converter no lo escribe. `deleteField()`
+    // sobre un documento que todavía no existe es inválido.
+    await crearProveedor(db, {
+      nombre: 'La Rural',
+      telefono: '   ',
+      email: '',
+    });
+
+    const [, prov] = mocks.setDoc.mock.calls[0] as [RefFalsa, Record<string, unknown>];
+    expect(prov.nombre).toBe('La Rural');
+    expect(prov.contactoNombre).toBeUndefined();
+    expect(prov.telefono).toBeUndefined();
+    expect(prov.email).toBeUndefined();
+    expect(prov.direccion).toBeUndefined();
+    expect(prov.rut).toBeUndefined();
+    expect(prov.notas).toBeUndefined();
+    expect(Object.values(prov)).not.toContain(mocks.borrar);
   });
 
   it('resuelve con el id aunque el ack nunca llegue (sin conexión)', async () => {
@@ -222,15 +268,19 @@ describe('crearProveedor', () => {
 });
 
 describe('actualizarProveedor', () => {
-  it('actualiza datos sin tocar activo', async () => {
+  it('actualiza datos sin tocar activo ni fechaAlta', async () => {
     await actualizarProveedor(db, 'prov-1', {
       nombre: 'Lácteos Colonia',
       telefono: '099999999',
     });
     const [ref, cambios] = mocks.updateDoc.mock.calls[0] as [RefFalsa, Record<string, unknown>];
     expect(ref.path).toBe('proveedores/prov-1');
-    expect(cambios).toEqual({ nombre: 'Lácteos Colonia', telefono: '099999999' });
+    expect(cambios.nombre).toBe('Lácteos Colonia');
+    expect(cambios.telefono).toBe('099999999');
     expect(cambios).not.toHaveProperty('activo');
+    expect(cambios).not.toHaveProperty('fechaAlta');
+    // El resto de los campos opcionales no vino: se borran (reemplazo total).
+    expect(cambios.email).toBe(mocks.borrar);
   });
 
   it('devuelve una sincronizacion que resuelve con el ack del servidor', async () => {
@@ -270,6 +320,106 @@ describe('actualizarProveedor', () => {
     expect(mocks.updateDoc).not.toHaveBeenCalled();
   });
 
+  // El update es un REEMPLAZO TOTAL de los campos opcionales: `datos` es la foto
+  // completa del formulario, no un delta. Vaciar un campo en el modal (que manda
+  // `undefined`) tiene que BORRARLO del documento; antes se omitía del payload y
+  // el valor viejo sobrevivía —con `pagos` eso dejaba una cuenta bancaria dada de
+  // baja a la vista para copiar en una transferencia—.
+  describe('borrado de campos opcionales', () => {
+    const CAMPOS_TEXTO = ['contactoNombre', 'telefono', 'email', 'direccion', 'rut', 'notas'] as const;
+
+    it.each(CAMPOS_TEXTO)('borra %s cuando llega ausente', async (campo) => {
+      const sinEseCampo: DatosProveedor = { ...DATOS_COMPLETOS };
+      delete sinEseCampo[campo];
+
+      await actualizarProveedor(db, 'p1', sinEseCampo);
+
+      expect(cambiosEscritos()[campo]).toBe(mocks.borrar);
+    });
+
+    it.each(CAMPOS_TEXTO)('borra %s cuando llega vacío o en blanco', async (campo) => {
+      await actualizarProveedor(db, 'p1', { ...DATOS_COMPLETOS, [campo]: '   ' });
+
+      expect(cambiosEscritos()[campo]).toBe(mocks.borrar);
+    });
+
+    it('borra pagos cuando se quitan TODAS las cuentas (lista vacía)', async () => {
+      await actualizarProveedor(db, 'p1', { ...DATOS_COMPLETOS, pagos: [] });
+
+      expect(cambiosEscritos().pagos).toBe(mocks.borrar);
+    });
+
+    it('borra pagos cuando llega ausente', async () => {
+      const sinPagos: DatosProveedor = { ...DATOS_COMPLETOS };
+      delete sinPagos.pagos;
+
+      await actualizarProveedor(db, 'p1', sinPagos);
+
+      expect(cambiosEscritos().pagos).toBe(mocks.borrar);
+    });
+
+    it('"sin cuentas" se persiste como campo ausente, nunca como pagos: []', async () => {
+      await actualizarProveedor(db, 'p1', { ...DATOS_COMPLETOS, pagos: [] });
+
+      expect(cambiosEscritos().pagos).not.toEqual([]);
+    });
+
+    it('reemplaza pagos por la lista nueva, más corta, exactamente', async () => {
+      await actualizarProveedor(db, 'p1', {
+        ...DATOS_COMPLETOS,
+        pagos: [
+          { banco: 'BROU', cuenta: '001234567' },
+          { banco: 'Itaú', cuenta: '999' },
+          { banco: 'Santander', cuenta: '777' },
+        ],
+      });
+      mocks.updateDoc.mockClear();
+
+      await actualizarProveedor(db, 'p1', {
+        ...DATOS_COMPLETOS,
+        pagos: [{ banco: 'Itaú', cuenta: '999' }],
+      });
+
+      expect(cambiosEscritos().pagos).toEqual([{ banco: 'Itaú', cuenta: '999' }]);
+    });
+
+    it('omite titular/moneda ausentes de cada cuenta (el update no pasa por el converter)', async () => {
+      // Firestore rechaza `undefined` y este `updateDoc` no tiene converter que
+      // lo limpie: la cuenta se serializa acá, igual que en `pagoADoc`.
+      await actualizarProveedor(db, 'p1', {
+        ...DATOS_COMPLETOS,
+        pagos: [{ banco: 'BROU', cuenta: '001', titular: undefined, moneda: 'UYU' }],
+      });
+
+      const [cuenta] = cambiosEscritos().pagos as Record<string, unknown>[];
+      expect(cuenta).toEqual({ banco: 'BROU', cuenta: '001', moneda: 'UYU' });
+      expect(cuenta).not.toHaveProperty('titular');
+    });
+
+    it('un update que solo cambia el nombre NO borra el resto de los campos', async () => {
+      // El caso que protege contra el arreglo demasiado entusiasta: el modal
+      // manda todo, y todo lo que viene con contenido se conserva.
+      await actualizarProveedor(db, 'p1', { ...DATOS_COMPLETOS, nombre: 'Lácteos Colonia S.A.' });
+
+      expect(cambiosEscritos()).toEqual({
+        nombre: 'Lácteos Colonia S.A.',
+        contactoNombre: 'Ana',
+        telefono: '099111222',
+        email: 'ana@lacteos.uy',
+        direccion: 'Ruta 1 km 60',
+        rut: '210000000012',
+        notas: 'Entrega los martes',
+        pagos: [{ banco: 'BROU', cuenta: '001234567' }],
+      });
+    });
+
+    it('recorta los campos de texto que sí tienen contenido', async () => {
+      await actualizarProveedor(db, 'p1', { ...DATOS_COMPLETOS, telefono: '  099111222  ' });
+
+      expect(cambiosEscritos().telefono).toBe('099111222');
+    });
+  });
+
   describe('unicidad del nombre', () => {
     it('permite corregir solo las mayúsculas del propio nombre', async () => {
       mocks.estado.proveedores = [proveedor({ id: 'p1', nombre: 'la rural' })];
@@ -278,7 +428,7 @@ describe('actualizarProveedor', () => {
 
       const [ref, cambios] = mocks.updateDoc.mock.calls[0] as [RefFalsa, Record<string, unknown>];
       expect(ref.path).toBe('proveedores/p1');
-      expect(cambios).toEqual({ nombre: 'La Rural' });
+      expect(cambios.nombre).toBe('La Rural');
     });
 
     it('rechaza chocar con OTRO proveedor y no escribe', async () => {

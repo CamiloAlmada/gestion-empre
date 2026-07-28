@@ -1,10 +1,12 @@
 import {
   collection,
+  deleteField,
   doc,
   getDocs,
   setDoc,
   updateDoc,
   type DocumentData,
+  type FieldValue,
   type Firestore,
 } from 'firebase/firestore';
 import { type DatosPago, type Proveedor } from '@gestion/core';
@@ -56,6 +58,19 @@ import { ProveedorDuplicadoError, ProveedorInvalidoError } from './errores';
  * (doc 06 §8): la pantalla dispara la escritura, y si está sin conexión cierra el
  * modal, avisa "se sincronizará al reconectar" y le encadena un `.catch` a
  * `sincronizacion`.
+ *
+ * ## El alta OMITE los campos vacíos; la edición los BORRA
+ *
+ * Las dos superficies interpretan distinto un campo opcional ausente o vacío en
+ * `DatosProveedor`, y es a propósito:
+ *
+ * - `crearProveedor` construye el documento entero y lo escribe con `setDoc` a
+ *   través del converter: un campo vacío simplemente no se escribe. Ahí
+ *   `deleteField()` sería además un error (no se puede borrar un campo de un
+ *   documento que todavía no existe).
+ * - `actualizarProveedor` hace un `updateDoc` parcial, donde un campo ausente
+ *   quedaría con su valor viejo. Por eso traduce "ausente o vacío" a
+ *   `deleteField()`: ver el contrato de reemplazo total en su propio doc.
  */
 
 /**
@@ -117,20 +132,44 @@ function exigirNombre(nombre: string): string {
 }
 
 /**
- * Copia a `destino` los campos opcionales definidos y no vacíos, ya recortados.
- * `pagos` se copia tal cual si viene (el converter omite los sub-campos ausentes
- * de cada cuenta). Omite `undefined` (Firestore los rechaza).
+ * Valor de un campo de texto opcional en el update: el texto recortado si trae
+ * contenido, y si no la sentinela de borrado. Solo la usa `actualizarProveedor`
+ * (el alta arma el documento por su cuenta, ver el doc del módulo).
  */
-function copiarDatos(datos: DatosProveedor, destino: DocumentData): void {
-  const { contactoNombre, telefono, email, direccion, rut, pagos, notas } = datos;
-  if (contactoNombre !== undefined && contactoNombre.trim().length > 0)
-    destino.contactoNombre = contactoNombre.trim();
-  if (telefono !== undefined && telefono.trim().length > 0) destino.telefono = telefono.trim();
-  if (email !== undefined && email.trim().length > 0) destino.email = email.trim();
-  if (direccion !== undefined && direccion.trim().length > 0) destino.direccion = direccion.trim();
-  if (rut !== undefined && rut.trim().length > 0) destino.rut = rut.trim();
-  if (pagos !== undefined) destino.pagos = pagos;
-  if (notas !== undefined && notas.trim().length > 0) destino.notas = notas.trim();
+function textoOBorrado(valor: string | undefined): string | FieldValue {
+  const limpio = valor?.trim() ?? '';
+  return limpio.length > 0 ? limpio : deleteField();
+}
+
+/**
+ * Serializa una cuenta de pago para el update, que NO pasa por el converter:
+ * omite `titular`/`moneda` ausentes en lugar de escribirlos como `undefined`,
+ * que Firestore rechaza (no usamos `ignoreUndefinedProperties`, ver `init.ts`).
+ *
+ * Espeja `pagoADoc` de `converters/proveedor.ts`, que hace lo mismo en el alta.
+ * No se comparte con él a propósito: son dos rutas de escritura distintas (una
+ * pasa por el converter y la otra no) y el converter no exporta su interno.
+ */
+function pagoADocumento(pago: DatosPago): DocumentData {
+  const documento: DocumentData = { banco: pago.banco, cuenta: pago.cuenta };
+  if (pago.titular !== undefined) documento.titular = pago.titular;
+  if (pago.moneda !== undefined) documento.moneda = pago.moneda;
+  return documento;
+}
+
+/**
+ * Valor de `pagos` en el update. "Sin cuentas" se persiste SIEMPRE como campo
+ * ausente, nunca como `pagos: []`: tanto `undefined` como la lista vacía se
+ * traducen a `deleteField()`.
+ *
+ * Es la representación que ya asume el resto del sistema —`Proveedor.pagos` es
+ * opcional, el converter mapea ausente ↔ `undefined` y los proveedores creados
+ * antes de tener cuentas no traen el campo—, así que persistir `[]` obligaría a
+ * cada lector a contemplar dos formas del mismo estado.
+ */
+function pagosOBorrado(pagos: DatosPago[] | undefined): DocumentData[] | FieldValue {
+  if (pagos === undefined || pagos.length === 0) return deleteField();
+  return pagos.map(pagoADocumento);
 }
 
 /**
@@ -218,7 +257,39 @@ export async function crearProveedor(
 
 /**
  * Actualiza los datos de un proveedor. NO toca `activo` (usar `desactivarProveedor`).
- * Escribe solo los campos provistos; update parcial, no pasa por el converter.
+ * Update parcial: escribe `nombre` y los siete campos opcionales, y no pasa por
+ * el converter (no reemplaza el documento: `fechaAlta` y `activo` quedan como
+ * están).
+ *
+ * ## Reemplazo TOTAL de los campos opcionales
+ *
+ * `datos` es la foto completa de los campos editables, no un delta: un campo
+ * opcional ausente o vacío en `DatosProveedor` **borra** el valor guardado
+ * (`deleteField()`). Vaciar el teléfono en el modal lo borra de verdad; quitar
+ * todas las cuentas de `pagos` las borra de verdad.
+ *
+ * El caller DEBE, entonces, mandar SIEMPRE todos los campos que quiere conservar.
+ * El único caller es el modal de proveedor, que es un formulario de edición
+ * completo —trae el proveedor entero cargado— y por eso la condición se cumple.
+ *
+ * La alternativa (omitir lo ausente, que es lo que esta función hacía) es
+ * incompatible con esa UI: `DatosProveedor` no distingue "no lo toqué" de "lo
+ * vacié", el formulario manda `undefined` en los dos casos, y el resultado era
+ * que el botón "Quitar cuenta" no borraba nada mientras la pantalla informaba
+ * "Proveedor actualizado". Una cuenta bancaria dada de baja seguía a la vista
+ * para copiar y pegar en una transferencia.
+ *
+ * `pagos` sin cuentas se persiste como campo AUSENTE, nunca como `[]`
+ * (ver `pagosOBorrado`).
+ *
+ * ### Por qué acá diverge de `actualizarCliente`
+ *
+ * `actualizarCliente` usa el mismo mecanismo (`deleteField()`) pero SOLO para el
+ * derivado `telefonoE164`, y deliberadamente NO modela el vaciado de sus campos
+ * de contacto: ahí el caller es el POS, que edita al cliente con formularios
+ * parciales y de paso, y borrar por omisión sería una trampa. Son dos políticas
+ * distintas porque son dos superficies de edición distintas; no unificar sin
+ * revisar antes los callers de clientes.
  *
  * El chequeo de duplicados excluye al propio `proveedorId`, de modo que corregir
  * solo el uso de mayúsculas ("la rural" → "La Rural") es válido. No exige que el
@@ -245,8 +316,16 @@ export async function actualizarProveedor(
     throw new ProveedorDuplicadoError(mensajeDuplicado(homonimo));
   }
 
-  const cambios: DocumentData = { nombre };
-  copiarDatos(datos, cambios);
+  const cambios: DocumentData = {
+    nombre,
+    contactoNombre: textoOBorrado(datos.contactoNombre),
+    telefono: textoOBorrado(datos.telefono),
+    email: textoOBorrado(datos.email),
+    direccion: textoOBorrado(datos.direccion),
+    rut: textoOBorrado(datos.rut),
+    pagos: pagosOBorrado(datos.pagos),
+    notas: textoOBorrado(datos.notas),
+  };
 
   // Sin `await`: la fase 2 es del caller. Ver el doc del módulo.
   const sincronizacion = updateDoc(doc(db, 'proveedores', proveedorId), cambios);
