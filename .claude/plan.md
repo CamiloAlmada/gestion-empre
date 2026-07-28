@@ -113,6 +113,46 @@ mal candidato para ese perfil aunque parezcan mecánicas. Redactar exige decidir
 cómo decir algo, y ahí es donde rellena huecos con plausibilidad. Si vuelve a
 tocar, el brief tiene que darle el texto casi literal, o va a `semisenior`.
 
+### Hallazgo del cierre: `actualizarProveedor` no puede BORRAR un campo
+
+Encontrado por el `advisor` en la consulta de cierre y verificado por el
+orquestador. **Es preexistente, no lo introdujo esta rama.**
+
+`ModalProveedor.tsx:133-142` manda `telefono/email/notas/pagos: undefined`
+cuando el admin vacía el campo. `copiarDatos` (`proveedores.ts:124-134`) omite
+los `undefined`, así que nunca entran al `updateDoc` y **el valor viejo
+persiste** — mientras el toast dice "Proveedor actualizado".
+
+Con `pagos` es operativamente serio: una cuenta bancaria dada de baja sigue
+mostrándose en la ficha "para copiar al transferir". Plata a la cuenta
+equivocada.
+
+El patrón para arreglarlo ya existe en el mismo paquete: `clientes.ts:150` hace
+`cambios.telefonoE164 = e164 ?? deleteField()`. El bloqueante que planteó el
+`advisor` (¿las reglas permiten `deleteField`?) se resuelve solo:
+`match /proveedores` es `allow create, update: if esAdmin()` **sin `hasOnly`**,
+así que pasa.
+
+**Estado: no arreglado, esperando decisión del dueño.** Excede "unicidad de
+proveedores", que es lo que se pidió. Si se aprueba, va a `senior`: copiar el
+patrón de `clientes.ts`, con test del camino de borrado para cada campo
+opcional.
+
+### Verificación manual pendiente (no bloquea el merge)
+
+El `advisor` la dio por no bloqueante: el riesgo que introduce esta rama (la
+lectura de la fase 1) está acotado por el fallback a caché del SDK, y el cuelgue
+posible en `await sincronizacion` del camino online es la exposición §8 que ya
+tienen Productos, Clientes y Precios en producción.
+
+Procedimiento, para cuando se pruebe en el celular: DevTools → *request
+blocking* sobre `firestore.googleapis.com`, con `navigator.onLine` en **true**
+(NO el toggle de offline, que dispara `useOnlineStatus` y ejercita otro camino).
+Tocar "Guardar" en el alta inline de proveedor. **Falla** si "Guardando…"
+persiste más de ~15s sin toast ni error — ahí aplicaría el fallback
+`getDocsFromCache` con timeout, que se decidió NO implementar preventivamente.
+**Se acepta** si el spinner resuelve en segundos.
+
 ### Fuera de alcance, anotado
 
 - **Endurecer el shape de `proveedores` en `firestore.rules`**: hoy es

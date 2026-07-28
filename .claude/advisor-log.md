@@ -116,3 +116,47 @@ historial que la tarea busca proteger, y reactivar es un clic. Se delega T1.
 
 **Divergencias:** ninguna nueva. El `advisor` corrigió su propia recomendación al
 recibir la evidencia del §8, que es el comportamiento buscado.
+
+## R3 unicidad de proveedores — llamada 3 (cierre)
+Fecha: 2026-07-28
+
+**Se le preguntó:** con T1/T2/T3 ya commiteadas (`9896867`, `de0590f`), qué tiene
+de malo lo que existe: invariante sin test, caso de borde, regla de oro rozada,
+si las cuatro divergencias son errores, y veredicto sobre su bloqueante 1 (el
+experimento de "red mentirosa", que no se corrió).
+
+**RECOMENDACIÓN:** "Mergeá después de un solo fix: `actualizarProveedor` no puede
+**borrar** un campo. `ModalProveedor` manda `telefono/email/notas/pagos:
+undefined` cuando el admin los vacía, y `copiarDatos` los omite del `updateDoc` —
+el valor viejo persiste y el toast dice 'Proveedor actualizado'. Usá el patrón
+que ya existe en `clientes.ts:150` (`deleteField()`), con test. El bloqueante 1
+**no bloquea el merge**: queda como verificación manual con el síntoma de abajo.
+Las cuatro divergencias son adaptaciones razonables; ninguna es error."
+
+**SUPUESTOS:** (1) El bug de borrado es preexistente, pero esta tanda reescribió
+la función y le fijó test solo al camino aditivo, así que ahora es deuda de esta
+rama. (2) `Modal` de `packages/ui` no permite cerrar con Escape mientras
+`guardando`; no leyó `Modal.tsx`. (3) Que el ack rechace en el camino online del
+inline deja la compra apuntando a un `proveedorId` revertido; tolerable porque
+solo pasa por denegación de reglas a un admin. (4) Que "Reglas: tanda aparte"
+sigue anotado en `.claude/plan.md`. (5) El mock de `getDocs` que resuelve siempre
+es un supuesto del test, no verificación de que la fase 1 resuelva offline: esa
+garantía la da el SDK, no el código propio.
+
+**BLOQUEANTES:** (1) Confirmar que `firestore.rules` permite `update` con
+`deleteField` (algunas validaciones con `hasOnly` lo rechazan). (2) Síntoma de la
+verificación manual: DevTools → *request blocking* sobre `firestore.googleapis.com`
+con `navigator.onLine` en true (NO el toggle offline, que dispara
+`useOnlineStatus`). Falla si "Guardando…" persiste más de ~15s sin toast; se
+acepta si el spinner resuelve en segundos.
+
+**Qué se hizo después:** verificado el bug leyendo el código —`ModalProveedor`
+manda `undefined` (líneas 133-142), `copiarDatos` lo omite, `clientes.ts:150`
+tiene el `deleteField()` a copiar—. Su bloqueante 1 se resuelve solo:
+`match /proveedores` es `allow create, update: if esAdmin()` **sin `hasOnly`**,
+así que `deleteField` pasa. Su supuesto 4 es correcto: el endurecimiento de
+reglas está anotado en el plan. El fix queda como decisión del dueño: es
+preexistente y excede "unicidad de proveedores".
+
+**Divergencias:** ninguna. El hallazgo es adyacente a la tarea, no una objeción a
+lo implementado — las cuatro divergencias las aprobó explícitamente.
