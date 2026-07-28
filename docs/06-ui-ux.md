@@ -496,3 +496,40 @@ escribe sigue el patrón híbrido:
 
 Nunca dejar un botón "Guardando…" esperando un ack que no va a llegar sin
 conexión. El POS usa este mismo patrón para el cobro.
+
+### Variante: escrituras con validación previa (read-before-write)
+
+Algunas operaciones necesitan verificar condiciones antes de escribir
+(p. ej. unicidad de nombre de proveedor, doc 07). El patrón se adapta para
+mantener la capacidad de respuesta offline sin sacrificar la validación:
+
+Las funciones que validan devuelven una **estructura de dos fases**:
+- Una **promesa externa** que resuelve apenas se ejecutó la lectura de
+  validación y se disparó la escritura (o se rechazó por validación fallida).
+- Un campo **`sincronizacion`** (una Promesa anidada) que resuelve con el ack
+  del servidor, si hubiera conexión.
+
+**Flujo offline**: la promesa externa resuelve normalmente incluso sin red
+porque la lectura la responde la caché de persistencia de Firestore y el id
+del documento nuevo lo genera el cliente sin comunicación de red. El `.then`
+o `.catch` que maneja la respuesta toma el resultado de validación y el nuevo
+id (si procede) y puede actualizar la UI inmediatamente. El campo
+`sincronizacion` queda **en vuelo, y siempre hay que encadenarle un `.catch`**:
+un rechazo que nadie maneja termina en un unhandled rejection. Los rechazos
+posibles son de
+infraestructura (permisos, red, cuota), no de validación de negocio: en una
+carrera (dos altas simultáneas del mismo nombre desde clientes distintos), el
+servidor NO valida la unicidad, ambas escrituras tienen éxito y quedan dos
+proveedores duplicados (se aceptó este best-effort por diseño, doc 07).
+
+**Flujo online**: se awaitea la promesa externa como de costumbre; `sincronizacion`
+también necesita su `.catch()` siempre, para evitar unhandled rejection si el
+servidor rechaza por infraestructura. La única diferencia con offline es cuándo
+y qué mensaje se muestra al usuario.
+
+**Ejemplos vivos**:
+- El contrato de la función: `packages/firebase-kit/src/proveedores.ts` (JSDoc
+  de módulo con la firma).
+- El uso en el POS: `apps/quesarte/src/pantallas/CompraPantalla.tsx` (alta
+  inline de proveedor durante una compra, sin salir del flujo — recibirá el
+  id del nuevo proveedor para seguir armando la compra sin conexión).

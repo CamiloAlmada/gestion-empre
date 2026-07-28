@@ -56,6 +56,39 @@ proveedores/{id} → {
 }
 ```
 
+### Unicidad del nombre de proveedor
+
+`crearProveedor` y `actualizarProveedor` chequean que no exista otro proveedor
+con el mismo nombre, comparando sin distinguir mayúsculas y sin espacios de
+borde. Si existe uno con el mismo nombre normalizado, la función tira
+`ProveedorDuplicadoError` y no escribe nada. Dos fichas del mismo proveedor
+partirían en dos su historial de compras, inutilizando la inteligencia de
+compras (doc 07 "Inteligencia").
+
+**Particularidades**:
+- La comparación **no pliega acentos ni la eñe**: "Café" y "Cafe" son dos
+  proveedores distintos. Misma decisión que en categorías (ver
+  `packages/core/src/categoria.ts`, líneas 33-45): la app funciona en español
+  y respetar ñ y acentos es correcto.
+- Un homónimo de un proveedor **inactivo también cuenta como duplicado**. El
+  camino correcto es reactivarlo con `reactivarProveedor`; crear una ficha
+  nueva es un error que será detectado.
+- Límite de **120 caracteres** para el nombre (razonable para cualquier razón
+  social o nombre de fantasía).
+- **La garantía es best-effort, no dura.** A diferencia de las categorías —donde
+  el id del documento ES la clave del nombre normalizado y las reglas de
+  Firestore garantizan la unicidad estructuralmente— acá el id es autogenerado
+  y el chequeo vive solo en el cliente (`firebase-kit`, funciones asíncronas de
+  validación). Tiene condición de carrera: dos altas simultáneas del mismo nombre
+  desde clientes distintos pasan ambas (el servidor no enforza nada). No cubre al
+  Admin SDK de firebase-admin (el seed de demo crea proveedores con
+  `admin.firestore()` sin pasar por la validación; el seed usa ids con prefijo
+  `demo-` para hacerlo explícito). Se aceptó a propósito por tres razones: la
+  colección es solo-admin, en la práctica hay un único administrador, y el
+  patrón de id canónico no es aplicable acá porque las compras (que referencian
+  al proveedor por id) son inmutables por reglas de Firestore (doc 03), así que
+  cambiar el id de un proveedor rompería el historial.
+
 ### Cambios en colecciones existentes
 
 ```
