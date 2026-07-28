@@ -133,10 +133,49 @@ El patrón para arreglarlo ya existe en el mismo paquete: `clientes.ts:150` hace
 `match /proveedores` es `allow create, update: if esAdmin()` **sin `hasOnly`**,
 así que pasa.
 
-**Estado: no arreglado, esperando decisión del dueño.** Excede "unicidad de
-proveedores", que es lo que se pidió. Si se aprueba, va a `senior`: copiar el
-patrón de `clientes.ts`, con test del camino de borrado para cada campo
-opcional.
+**Estado: ✅ arreglado** por `senior` en `2602f99`, a pedido del dueño.
+48 tests en `proveedores.test.ts` (eran 28), 360 en el paquete, 12/12 verde en
+el monorepo.
+
+`actualizarProveedor` pasó a un **contrato de reemplazo total**: `datos` es la
+foto completa de los campos editables, y un opcional ausente o vacío se traduce
+a `deleteField()`. La precondición ("el caller manda siempre todo lo que quiere
+conservar") se cumple porque el único caller es el modal, que es un formulario
+de edición completo. `crearProveedor` NO cambió: ahí `undefined` sí significa
+"campo ausente" y `deleteField()` sobre un documento inexistente sería un error.
+
+"Sin cuentas" se persiste siempre como campo **ausente**, nunca como `pagos: []`.
+
+**Arreglo adyacente que el `senior` incluyó sin que estuviera pedido, y que
+correspondía**: el update no pasa por el converter y `init.ts` no setea
+`ignoreUndefinedProperties`, así que serializar una cuenta con `titular` o
+`moneda` ausentes rompía con "Unsupported field value: undefined" — el caso más
+común del formulario. Sin eso el fix no funcionaba con el payload real.
+Verificado por el orquestador: `init.ts:48` efectivamente no lo setea, y
+`converters/proveedor.ts:37` hace la misma omisión en el alta.
+
+### 🔴 Mismo bug en CLIENTES, sin arreglar
+
+Reportado por el `senior` como nota fuera de alcance y **verificado por el
+orquestador**: `actualizarCliente` tiene exactamente el mismo defecto.
+
+- `ModalCliente.tsx:45-54` precarga los datos del cliente para editarlo (su
+  propio comentario dice "alta nueva o edición de un cliente puntual").
+- `ModalCliente.tsx:66-70` manda `undefined` al vaciar `alias`, `telefono`,
+  `email`, `direccion` o `notas`.
+- `copiarContacto` (`clientes.ts`) los omite → el valor viejo sobrevive.
+
+O sea: vaciar el teléfono o la dirección de un cliente no hace nada, y la
+pantalla informa que se guardó.
+
+Diferencia con proveedores: acá está **documentado como limitación deliberada**
+en el JSDoc de `actualizarCliente` ("limpiar el teléfono display no lo modela
+esta superficie, igual que en Fase 1.5"). Pero la UI ofrece la acción, así que
+documentado no lo hace correcto — solo lo hace conocido.
+
+Menos grave que en proveedores: no hay datos bancarios. Pero un teléfono viejo
+que no se puede borrar sí importa, porque de ahí salen los links de WhatsApp
+(doc 08). **Decisión pendiente del dueño.**
 
 ### Verificación manual pendiente (no bloquea el merge)
 
