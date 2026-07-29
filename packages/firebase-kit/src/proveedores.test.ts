@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Proveedor } from '@gestion/core';
 import {
   crearProveedor,
@@ -6,26 +6,23 @@ import {
   desactivarProveedor,
   reactivarProveedor,
   LARGO_MAX_NOMBRE_PROVEEDOR,
-  TIMEOUT_LECTURA_PROVEEDORES_MS,
   type DatosProveedor,
 } from './proveedores';
 import { ProveedorDuplicadoError, ProveedorInvalidoError } from './errores';
 
-// Mock de `firebase/firestore` como en clientes.test.ts, más `getDocs` (y la
-// colección encadenable con `withConverter`) al estilo de categorias.test.ts: el
-// chequeo de duplicados lee la colección antes de escribir. El estado leído lo
-// controla cada test vía `estado.proveedores`; el converter no interviene, el
-// snapshot devuelve las entidades tal cual.
+// Mock de `firebase/firestore` como en clientes.test.ts: solo las ESCRITURAS y
+// las fábricas de referencias. El chequeo de duplicados ya no lee del SDK —
+// recibe `existentes`, la lista que la pantalla tiene suscrita—, así que es
+// lógica pura sobre un array y no necesita mock ninguno.
 //
-// `getDocs`/`getDocsFromCache` son `vi.fn()` (con la implementación por defecto
-// puesta en `beforeEach`) para que los tests de la escalera de degradación
-// puedan hacerlas colgar o rechazar sin tocar el resto de la suite.
+// Por eso desaparecieron los tests de la vieja escalera
+// `getDocs` → timeout → `getDocsFromCache` → lista vacía: se borraron junto con
+// el código que testeaban. Y no se reescriben: declaraban por construcción que
+// esas dos llamadas del SDK son independientes, que era justo la hipótesis a
+// verificar (ver el JSDoc del módulo, "Por qué el chequeo NO lee del SDK").
 const mocks = vi.hoisted(() => ({
   setDoc: vi.fn(),
   updateDoc: vi.fn(),
-  getDocs: vi.fn(),
-  getDocsFromCache: vi.fn(),
-  estado: { proveedores: [] as Proveedor[] },
   contador: { n: 0 },
   // Sentinela de `deleteField()`: el mock devuelve SIEMPRE esta misma referencia,
   // así los tests afirman que un campo se marca para borrado comparando identidad
@@ -62,8 +59,6 @@ vi.mock('firebase/firestore', () => ({
     }
     return crearRef(segmentos.join('/'), segmentos[segmentos.length - 1] ?? '');
   },
-  getDocs: (fuente: ColeccionFalsa) => mocks.getDocs(fuente),
-  getDocsFromCache: (fuente: ColeccionFalsa) => mocks.getDocsFromCache(fuente),
   setDoc: (ref: RefFalsa, datos: unknown) => mocks.setDoc(ref, datos),
   updateDoc: (ref: RefFalsa, datos: unknown) => mocks.updateDoc(ref, datos),
   deleteField: () => mocks.borrar,
@@ -71,18 +66,8 @@ vi.mock('firebase/firestore', () => ({
 
 const db = {} as never;
 
-/** Snapshot falso de la colección, con lo que haya en `estado.proveedores`. */
-function snapshotDeProveedores(fuente: ColeccionFalsa) {
-  if (fuente.__collection !== 'proveedores') {
-    throw new Error(`lectura inesperada sobre ${fuente.__collection}`);
-  }
-  return { docs: mocks.estado.proveedores.map((p) => ({ id: p.id, data: () => p })) };
-}
-
-/** Promesa que nunca se asienta: la red mentirosa que originó la escalera. */
-function colgada<T>(): Promise<T> {
-  return new Promise<T>(() => {});
-}
+/** Colección vacía: el caso de la mayoría de los tests, que no miran duplicados. */
+const NINGUNO: readonly Proveedor[] = [];
 
 /** Payload del `updateDoc` que se disparó (falla si no hubo ninguno). */
 function cambiosEscritos(): Record<string, unknown> {
@@ -110,24 +95,21 @@ function proveedor(over: Partial<Proveedor> & Pick<Proveedor, 'id' | 'nombre'>):
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.contador.n = 0;
-  mocks.estado.proveedores = [];
   mocks.setDoc.mockResolvedValue(undefined);
   mocks.updateDoc.mockResolvedValue(undefined);
-  mocks.getDocs.mockImplementation((fuente: ColeccionFalsa) =>
-    Promise.resolve(snapshotDeProveedores(fuente)),
-  );
-  mocks.getDocsFromCache.mockImplementation((fuente: ColeccionFalsa) =>
-    Promise.resolve(snapshotDeProveedores(fuente)),
-  );
 });
 
 describe('crearProveedor', () => {
   it('crea con activo true, fechaAlta y los pagos provistos', async () => {
-    const { proveedorId } = await crearProveedor(db, {
-      nombre: '  Lácteos Colonia  ',
-      rut: '210000000012',
-      pagos: [{ banco: 'BROU', cuenta: '001234567' }],
-    });
+    const { proveedorId } = await crearProveedor(
+      db,
+      {
+        nombre: '  Lácteos Colonia  ',
+        rut: '210000000012',
+        pagos: [{ banco: 'BROU', cuenta: '001234567' }],
+      },
+      NINGUNO,
+    );
 
     const [ref, prov] = mocks.setDoc.mock.calls[0] as [RefFalsa, Record<string, unknown>];
     expect(ref.path).toMatch(/^proveedores\//);
@@ -141,7 +123,7 @@ describe('crearProveedor', () => {
   });
 
   it('devuelve una sincronizacion que resuelve con el ack del servidor', async () => {
-    const { sincronizacion } = await crearProveedor(db, { nombre: 'La Rural' });
+    const { sincronizacion } = await crearProveedor(db, { nombre: 'La Rural' }, NINGUNO);
     await expect(sincronizacion).resolves.toBeUndefined();
   });
 
@@ -149,11 +131,15 @@ describe('crearProveedor', () => {
     // El alta no cambió con el reemplazo total de la edición: acá `undefined`
     // significa "campo ausente" y el converter no lo escribe. `deleteField()`
     // sobre un documento que todavía no existe es inválido.
-    await crearProveedor(db, {
-      nombre: 'La Rural',
-      telefono: '   ',
-      email: '',
-    });
+    await crearProveedor(
+      db,
+      {
+        nombre: 'La Rural',
+        telefono: '   ',
+        email: '',
+      },
+      NINGUNO,
+    );
 
     const [, prov] = mocks.setDoc.mock.calls[0] as [RefFalsa, Record<string, unknown>];
     expect(prov.nombre).toBe('La Rural');
@@ -172,7 +158,7 @@ describe('crearProveedor', () => {
     const colgada = new Promise<void>(() => {});
     mocks.setDoc.mockReturnValue(colgada);
 
-    const { proveedorId, sincronizacion } = await crearProveedor(db, { nombre: 'La Rural' });
+    const { proveedorId, sincronizacion } = await crearProveedor(db, { nombre: 'La Rural' }, NINGUNO);
 
     expect(proveedorId).toMatch(/^auto-/);
     expect(sincronizacion).toBe(colgada);
@@ -181,38 +167,38 @@ describe('crearProveedor', () => {
   it('el rechazo del servidor viaja por sincronizacion, no por la promesa externa', async () => {
     mocks.setDoc.mockRejectedValue(new Error('permission-denied'));
 
-    const { sincronizacion } = await crearProveedor(db, { nombre: 'La Rural' });
+    const { sincronizacion } = await crearProveedor(db, { nombre: 'La Rural' }, NINGUNO);
 
     await expect(sincronizacion).rejects.toThrow('permission-denied');
   });
 
   it('rechaza nombre vacío tras trim y no escribe', async () => {
-    await expect(crearProveedor(db, { nombre: '  ' })).rejects.toThrow(ProveedorInvalidoError);
+    await expect(crearProveedor(db, { nombre: '  ' }, NINGUNO)).rejects.toThrow(ProveedorInvalidoError);
     expect(mocks.setDoc).not.toHaveBeenCalled();
   });
 
   it('acepta un nombre de exactamente el largo máximo', async () => {
     const nombre = 'a'.repeat(LARGO_MAX_NOMBRE_PROVEEDOR);
-    await crearProveedor(db, { nombre });
+    await crearProveedor(db, { nombre }, NINGUNO);
     const [, prov] = mocks.setDoc.mock.calls[0] as [RefFalsa, Record<string, unknown>];
     expect(prov.nombre).toBe(nombre);
   });
 
   it('rechaza un nombre más largo que el máximo y no escribe', async () => {
     const nombre = 'a'.repeat(LARGO_MAX_NOMBRE_PROVEEDOR + 1);
-    await expect(crearProveedor(db, { nombre })).rejects.toThrow(ProveedorInvalidoError);
+    await expect(crearProveedor(db, { nombre }, NINGUNO)).rejects.toThrow(ProveedorInvalidoError);
     expect(mocks.setDoc).not.toHaveBeenCalled();
   });
 
   it('mide el largo tras trim: 120 caracteres rodeados de espacios es válido', async () => {
     const nombre = 'a'.repeat(LARGO_MAX_NOMBRE_PROVEEDOR);
-    await crearProveedor(db, { nombre: `   ${nombre}   ` });
+    await crearProveedor(db, { nombre: `   ${nombre}   ` }, NINGUNO);
     const [, prov] = mocks.setDoc.mock.calls[0] as [RefFalsa, Record<string, unknown>];
     expect(prov.nombre).toBe(nombre);
   });
 
   it('acepta nombres con "/" o "." (el id es autogenerado, no deriva del nombre)', async () => {
-    await crearProveedor(db, { nombre: 'Distribuidora S.A. / Colonia' });
+    await crearProveedor(db, { nombre: 'Distribuidora S.A. / Colonia' }, NINGUNO);
     const [ref, prov] = mocks.setDoc.mock.calls[0] as [RefFalsa, Record<string, unknown>];
     expect(prov.nombre).toBe('Distribuidora S.A. / Colonia');
     expect(ref.id).toMatch(/^auto-/);
@@ -220,79 +206,92 @@ describe('crearProveedor', () => {
 
   describe('unicidad del nombre', () => {
     it('rechaza un duplicado exacto y no escribe', async () => {
-      mocks.estado.proveedores = [proveedor({ id: 'p1', nombre: 'La Rural' })];
+      const existentes = [proveedor({ id: 'p1', nombre: 'La Rural' })];
 
-      await expect(crearProveedor(db, { nombre: 'La Rural' })).rejects.toThrow(
+      await expect(crearProveedor(db, { nombre: 'La Rural' }, existentes)).rejects.toThrow(
         ProveedorDuplicadoError,
       );
       expect(mocks.setDoc).not.toHaveBeenCalled();
     });
 
     it('rechaza un duplicado que solo difiere en mayúsculas y espacios de borde', async () => {
-      mocks.estado.proveedores = [proveedor({ id: 'p1', nombre: 'La Rural' })];
+      const existentes = [proveedor({ id: 'p1', nombre: 'La Rural' })];
 
-      await expect(crearProveedor(db, { nombre: '  LA rural ' })).rejects.toThrow(
+      await expect(crearProveedor(db, { nombre: '  LA rural ' }, existentes)).rejects.toThrow(
         ProveedorDuplicadoError,
       );
       expect(mocks.setDoc).not.toHaveBeenCalled();
     });
 
     it('nombra al proveedor existente en el mensaje, no al que se tipeó', async () => {
-      mocks.estado.proveedores = [proveedor({ id: 'p1', nombre: 'La Rural' })];
+      const existentes = [proveedor({ id: 'p1', nombre: 'La Rural' })];
 
-      await expect(crearProveedor(db, { nombre: 'la rural' })).rejects.toThrow(
+      await expect(crearProveedor(db, { nombre: 'la rural' }, existentes)).rejects.toThrow(
         'Ya existe un proveedor llamado "La Rural".',
       );
     });
 
     it('un homónimo INACTIVO también es duplicado, con un mensaje que invita a reactivarlo', async () => {
-      mocks.estado.proveedores = [
-        proveedor({ id: 'p1', nombre: 'La Rural', activo: false }),
-      ];
+      const existentes = [proveedor({ id: 'p1', nombre: 'La Rural', activo: false })];
 
-      await expect(crearProveedor(db, { nombre: 'La Rural' })).rejects.toThrow(
+      await expect(crearProveedor(db, { nombre: 'La Rural' }, existentes)).rejects.toThrow(
         'Ya existe un proveedor llamado "La Rural" (está inactivo, podés reactivarlo).',
       );
       expect(mocks.setDoc).not.toHaveBeenCalled();
     });
 
     it('NO pliega acentos: "Café" y "Cafe" son dos proveedores distintos', async () => {
-      mocks.estado.proveedores = [proveedor({ id: 'p1', nombre: 'Café Brasilero' })];
+      const existentes = [proveedor({ id: 'p1', nombre: 'Café Brasilero' })];
 
-      await crearProveedor(db, { nombre: 'Cafe Brasilero' });
+      await crearProveedor(db, { nombre: 'Cafe Brasilero' }, existentes);
 
       const [, prov] = mocks.setDoc.mock.calls[0] as [RefFalsa, Record<string, unknown>];
       expect(prov.nombre).toBe('Cafe Brasilero');
     });
 
     it('NO pliega la eñe: "Niño" y "Nino" son dos proveedores distintos', async () => {
-      mocks.estado.proveedores = [proveedor({ id: 'p1', nombre: 'El Niño' })];
+      const existentes = [proveedor({ id: 'p1', nombre: 'El Niño' })];
 
-      await crearProveedor(db, { nombre: 'El Nino' });
+      await crearProveedor(db, { nombre: 'El Nino' }, existentes);
 
       expect(mocks.setDoc).toHaveBeenCalledTimes(1);
     });
 
     it('deja pasar un nombre distinto aunque haya otros proveedores', async () => {
-      mocks.estado.proveedores = [
+      const existentes = [
         proveedor({ id: 'p1', nombre: 'La Rural' }),
         proveedor({ id: 'p2', nombre: 'Lácteos Colonia' }),
       ];
 
-      const { proveedorId } = await crearProveedor(db, { nombre: 'Granja del Sur' });
+      const { proveedorId } = await crearProveedor(db, { nombre: 'Granja del Sur' }, existentes);
 
       expect(mocks.setDoc).toHaveBeenCalledTimes(1);
       expect(proveedorId).toMatch(/^auto-/);
+    });
+
+    it('con la lista vacía (suscripción todavía sin datos) el chequeo se saltea y el alta procede', async () => {
+      // Degradación aceptada, ver el JSDoc del módulo: el chequeo es
+      // best-effort. Antes lo mismo pasaba con la caché fría del SDK; ahora el
+      // caso es "la pantalla todavía no recibió el primer snapshot".
+      const { proveedorId } = await crearProveedor(db, { nombre: 'La Rural' }, []);
+
+      expect(proveedorId).toMatch(/^auto-/);
+      expect(mocks.setDoc).toHaveBeenCalledTimes(1);
     });
   });
 });
 
 describe('actualizarProveedor', () => {
   it('actualiza datos sin tocar activo ni fechaAlta', async () => {
-    await actualizarProveedor(db, 'prov-1', {
-      nombre: 'Lácteos Colonia',
-      telefono: '099999999',
-    });
+    await actualizarProveedor(
+      db,
+      'prov-1',
+      {
+        nombre: 'Lácteos Colonia',
+        telefono: '099999999',
+      },
+      NINGUNO,
+    );
     const [ref, cambios] = mocks.updateDoc.mock.calls[0] as [RefFalsa, Record<string, unknown>];
     expect(ref.path).toBe('proveedores/prov-1');
     expect(cambios.nombre).toBe('Lácteos Colonia');
@@ -304,7 +303,7 @@ describe('actualizarProveedor', () => {
   });
 
   it('devuelve una sincronizacion que resuelve con el ack del servidor', async () => {
-    const { sincronizacion } = await actualizarProveedor(db, 'prov-1', { nombre: 'La Rural' });
+    const { sincronizacion } = await actualizarProveedor(db, 'prov-1', { nombre: 'La Rural' }, NINGUNO);
     await expect(sincronizacion).resolves.toBeUndefined();
   });
 
@@ -312,7 +311,7 @@ describe('actualizarProveedor', () => {
     const colgada = new Promise<void>(() => {});
     mocks.updateDoc.mockReturnValue(colgada);
 
-    const { sincronizacion } = await actualizarProveedor(db, 'prov-1', { nombre: 'La Rural' });
+    const { sincronizacion } = await actualizarProveedor(db, 'prov-1', { nombre: 'La Rural' }, NINGUNO);
 
     expect(sincronizacion).toBe(colgada);
   });
@@ -320,13 +319,13 @@ describe('actualizarProveedor', () => {
   it('el rechazo del servidor viaja por sincronizacion, no por la promesa externa', async () => {
     mocks.updateDoc.mockRejectedValue(new Error('permission-denied'));
 
-    const { sincronizacion } = await actualizarProveedor(db, 'prov-1', { nombre: 'La Rural' });
+    const { sincronizacion } = await actualizarProveedor(db, 'prov-1', { nombre: 'La Rural' }, NINGUNO);
 
     await expect(sincronizacion).rejects.toThrow('permission-denied');
   });
 
   it('rechaza nombre vacío y no escribe', async () => {
-    await expect(actualizarProveedor(db, 'prov-1', { nombre: '' })).rejects.toThrow(
+    await expect(actualizarProveedor(db, 'prov-1', { nombre: '' }, NINGUNO)).rejects.toThrow(
       ProveedorInvalidoError,
     );
     expect(mocks.updateDoc).not.toHaveBeenCalled();
@@ -334,7 +333,7 @@ describe('actualizarProveedor', () => {
 
   it('rechaza un nombre más largo que el máximo y no escribe', async () => {
     const nombre = 'a'.repeat(LARGO_MAX_NOMBRE_PROVEEDOR + 1);
-    await expect(actualizarProveedor(db, 'prov-1', { nombre })).rejects.toThrow(
+    await expect(actualizarProveedor(db, 'prov-1', { nombre }, NINGUNO)).rejects.toThrow(
       ProveedorInvalidoError,
     );
     expect(mocks.updateDoc).not.toHaveBeenCalled();
@@ -352,19 +351,19 @@ describe('actualizarProveedor', () => {
       const sinEseCampo: DatosProveedor = { ...DATOS_COMPLETOS };
       delete sinEseCampo[campo];
 
-      await actualizarProveedor(db, 'p1', sinEseCampo);
+      await actualizarProveedor(db, 'p1', sinEseCampo, NINGUNO);
 
       expect(cambiosEscritos()[campo]).toBe(mocks.borrar);
     });
 
     it.each(CAMPOS_TEXTO)('borra %s cuando llega vacío o en blanco', async (campo) => {
-      await actualizarProveedor(db, 'p1', { ...DATOS_COMPLETOS, [campo]: '   ' });
+      await actualizarProveedor(db, 'p1', { ...DATOS_COMPLETOS, [campo]: '   ' }, NINGUNO);
 
       expect(cambiosEscritos()[campo]).toBe(mocks.borrar);
     });
 
     it('borra pagos cuando se quitan TODAS las cuentas (lista vacía)', async () => {
-      await actualizarProveedor(db, 'p1', { ...DATOS_COMPLETOS, pagos: [] });
+      await actualizarProveedor(db, 'p1', { ...DATOS_COMPLETOS, pagos: [] }, NINGUNO);
 
       expect(cambiosEscritos().pagos).toBe(mocks.borrar);
     });
@@ -373,32 +372,42 @@ describe('actualizarProveedor', () => {
       const sinPagos: DatosProveedor = { ...DATOS_COMPLETOS };
       delete sinPagos.pagos;
 
-      await actualizarProveedor(db, 'p1', sinPagos);
+      await actualizarProveedor(db, 'p1', sinPagos, NINGUNO);
 
       expect(cambiosEscritos().pagos).toBe(mocks.borrar);
     });
 
     it('"sin cuentas" se persiste como campo ausente, nunca como pagos: []', async () => {
-      await actualizarProveedor(db, 'p1', { ...DATOS_COMPLETOS, pagos: [] });
+      await actualizarProveedor(db, 'p1', { ...DATOS_COMPLETOS, pagos: [] }, NINGUNO);
 
       expect(cambiosEscritos().pagos).not.toEqual([]);
     });
 
     it('reemplaza pagos por la lista nueva, más corta, exactamente', async () => {
-      await actualizarProveedor(db, 'p1', {
-        ...DATOS_COMPLETOS,
-        pagos: [
-          { banco: 'BROU', cuenta: '001234567' },
-          { banco: 'Itaú', cuenta: '999' },
-          { banco: 'Santander', cuenta: '777' },
-        ],
-      });
+      await actualizarProveedor(
+        db,
+        'p1',
+        {
+          ...DATOS_COMPLETOS,
+          pagos: [
+            { banco: 'BROU', cuenta: '001234567' },
+            { banco: 'Itaú', cuenta: '999' },
+            { banco: 'Santander', cuenta: '777' },
+          ],
+        },
+        NINGUNO,
+      );
       mocks.updateDoc.mockClear();
 
-      await actualizarProveedor(db, 'p1', {
-        ...DATOS_COMPLETOS,
-        pagos: [{ banco: 'Itaú', cuenta: '999' }],
-      });
+      await actualizarProveedor(
+        db,
+        'p1',
+        {
+          ...DATOS_COMPLETOS,
+          pagos: [{ banco: 'Itaú', cuenta: '999' }],
+        },
+        NINGUNO,
+      );
 
       expect(cambiosEscritos().pagos).toEqual([{ banco: 'Itaú', cuenta: '999' }]);
     });
@@ -406,10 +415,15 @@ describe('actualizarProveedor', () => {
     it('omite titular/moneda ausentes de cada cuenta (el update no pasa por el converter)', async () => {
       // Firestore rechaza `undefined` y este `updateDoc` no tiene converter que
       // lo limpie: la cuenta se serializa acá, igual que en `pagoADoc`.
-      await actualizarProveedor(db, 'p1', {
-        ...DATOS_COMPLETOS,
-        pagos: [{ banco: 'BROU', cuenta: '001', titular: undefined, moneda: 'UYU' }],
-      });
+      await actualizarProveedor(
+        db,
+        'p1',
+        {
+          ...DATOS_COMPLETOS,
+          pagos: [{ banco: 'BROU', cuenta: '001', titular: undefined, moneda: 'UYU' }],
+        },
+        NINGUNO,
+      );
 
       const [cuenta] = cambiosEscritos().pagos as Record<string, unknown>[];
       expect(cuenta).toEqual({ banco: 'BROU', cuenta: '001', moneda: 'UYU' });
@@ -419,7 +433,7 @@ describe('actualizarProveedor', () => {
     it('un update que solo cambia el nombre NO borra el resto de los campos', async () => {
       // El caso que protege contra el arreglo demasiado entusiasta: el modal
       // manda todo, y todo lo que viene con contenido se conserva.
-      await actualizarProveedor(db, 'p1', { ...DATOS_COMPLETOS, nombre: 'Lácteos Colonia S.A.' });
+      await actualizarProveedor(db, 'p1', { ...DATOS_COMPLETOS, nombre: 'Lácteos Colonia S.A.' }, NINGUNO);
 
       expect(cambiosEscritos()).toEqual({
         nombre: 'Lácteos Colonia S.A.',
@@ -434,7 +448,7 @@ describe('actualizarProveedor', () => {
     });
 
     it('recorta los campos de texto que sí tienen contenido', async () => {
-      await actualizarProveedor(db, 'p1', { ...DATOS_COMPLETOS, telefono: '  099111222  ' });
+      await actualizarProveedor(db, 'p1', { ...DATOS_COMPLETOS, telefono: '  099111222  ' }, NINGUNO);
 
       expect(cambiosEscritos().telefono).toBe('099111222');
     });
@@ -442,9 +456,9 @@ describe('actualizarProveedor', () => {
 
   describe('unicidad del nombre', () => {
     it('permite corregir solo las mayúsculas del propio nombre', async () => {
-      mocks.estado.proveedores = [proveedor({ id: 'p1', nombre: 'la rural' })];
+      const existentes = [proveedor({ id: 'p1', nombre: 'la rural' })];
 
-      await actualizarProveedor(db, 'p1', { nombre: 'La Rural' });
+      await actualizarProveedor(db, 'p1', { nombre: 'La Rural' }, existentes);
 
       const [ref, cambios] = mocks.updateDoc.mock.calls[0] as [RefFalsa, Record<string, unknown>];
       expect(ref.path).toBe('proveedores/p1');
@@ -452,149 +466,36 @@ describe('actualizarProveedor', () => {
     });
 
     it('rechaza chocar con OTRO proveedor y no escribe', async () => {
-      mocks.estado.proveedores = [
+      const existentes = [
         proveedor({ id: 'p1', nombre: 'La Rural' }),
         proveedor({ id: 'p2', nombre: 'Lácteos Colonia' }),
       ];
 
-      await expect(actualizarProveedor(db, 'p2', { nombre: 'la rural' })).rejects.toThrow(
+      await expect(actualizarProveedor(db, 'p2', { nombre: 'la rural' }, existentes)).rejects.toThrow(
         ProveedorDuplicadoError,
       );
       expect(mocks.updateDoc).not.toHaveBeenCalled();
     });
 
     it('rechaza chocar con otro proveedor INACTIVO, con el mensaje que lo distingue', async () => {
-      mocks.estado.proveedores = [
+      const existentes = [
         proveedor({ id: 'p1', nombre: 'La Rural', activo: false }),
         proveedor({ id: 'p2', nombre: 'Lácteos Colonia' }),
       ];
 
-      await expect(actualizarProveedor(db, 'p2', { nombre: 'La Rural' })).rejects.toThrow(
+      await expect(actualizarProveedor(db, 'p2', { nombre: 'La Rural' }, existentes)).rejects.toThrow(
         'Ya existe un proveedor llamado "La Rural" (está inactivo, podés reactivarlo).',
       );
       expect(mocks.updateDoc).not.toHaveBeenCalled();
     });
 
-    it('edita aunque el proveedor no esté en la lectura (caché incompleta offline)', async () => {
-      mocks.estado.proveedores = [proveedor({ id: 'p1', nombre: 'Lácteos Colonia' })];
+    it('edita aunque el proveedor no esté en `existentes` (suscripción incompleta)', async () => {
+      const existentes = [proveedor({ id: 'p1', nombre: 'Lácteos Colonia' })];
 
-      await actualizarProveedor(db, 'p-fuera-de-cache', { nombre: 'La Rural' });
+      await actualizarProveedor(db, 'p-fuera-de-la-lista', { nombre: 'La Rural' }, existentes);
 
       expect(mocks.updateDoc).toHaveBeenCalledTimes(1);
     });
-  });
-});
-
-// El bug que la motivó: con la red MUERTA pero `navigator.onLine === true`
-// (captive portal), `getDocs` no cae a la caché — se cuelga esperando al
-// servidor (medido: 48 s sin resolver) —, y como corre ANTES de escribir,
-// congelaba el alta entera con el modal en "Guardando…".
-describe('lectura previa: escalera de degradación', () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  it('con getDocs colgado, la fase 1 resuelve al vencer el timeout y dispara el setDoc', async () => {
-    mocks.getDocs.mockReturnValue(colgada());
-
-    const promesa = crearProveedor(db, { nombre: 'La Rural' });
-    let resuelta = false;
-    void promesa.then(() => {
-      resuelta = true;
-    });
-
-    await vi.advanceTimersByTimeAsync(TIMEOUT_LECTURA_PROVEEDORES_MS - 1);
-    expect(resuelta).toBe(false); // antes del techo sigue esperando al servidor
-
-    await vi.advanceTimersByTimeAsync(1);
-    const { proveedorId } = await promesa;
-
-    expect(proveedorId).toMatch(/^auto-/);
-    expect(mocks.setDoc).toHaveBeenCalledTimes(1);
-    expect(mocks.getDocsFromCache).toHaveBeenCalledTimes(1);
-  });
-
-  it('con getDocs colgado y la caché RECHAZANDO, el alta procede igual', async () => {
-    mocks.getDocs.mockReturnValue(colgada());
-    mocks.getDocsFromCache.mockRejectedValue(new Error('unavailable'));
-
-    const promesa = crearProveedor(db, { nombre: 'La Rural' });
-    await vi.advanceTimersByTimeAsync(TIMEOUT_LECTURA_PROVEEDORES_MS);
-
-    const { proveedorId } = await promesa;
-    expect(proveedorId).toMatch(/^auto-/);
-    expect(mocks.setDoc).toHaveBeenCalledTimes(1);
-  });
-
-  it('con getDocs colgado y la caché RESOLVIENDO VACÍO, el alta procede igual', async () => {
-    // Comportamiento real del SDK sobre una QUERY: `getDocsFromCache` resuelve
-    // con un snapshot vacío en vez de rechazar. El chequeo se saltea en
-    // silencio, que es lo decidido.
-    mocks.getDocs.mockReturnValue(colgada());
-    mocks.getDocsFromCache.mockResolvedValue({ docs: [] });
-
-    const promesa = crearProveedor(db, { nombre: 'La Rural' });
-    await vi.advanceTimersByTimeAsync(TIMEOUT_LECTURA_PROVEEDORES_MS);
-
-    const { proveedorId } = await promesa;
-    expect(proveedorId).toMatch(/^auto-/);
-    expect(mocks.setDoc).toHaveBeenCalledTimes(1);
-  });
-
-  it('un duplicado que SÍ está en la caché sigue siendo duplicado tras el timeout', async () => {
-    mocks.estado.proveedores = [proveedor({ id: 'p1', nombre: 'La Rural' })];
-    mocks.getDocs.mockReturnValue(colgada());
-
-    const promesa = crearProveedor(db, { nombre: 'la rural' });
-    const afirmacion = expect(promesa).rejects.toThrow(ProveedorDuplicadoError);
-    await vi.advanceTimersByTimeAsync(TIMEOUT_LECTURA_PROVEEDORES_MS);
-    await afirmacion;
-
-    expect(mocks.setDoc).not.toHaveBeenCalled();
-  });
-
-  it('un getDocs que RECHAZA también degrada a la caché, sin romper el alta', async () => {
-    mocks.getDocs.mockRejectedValue(new Error('unavailable'));
-
-    const { proveedorId } = await crearProveedor(db, { nombre: 'La Rural' });
-
-    expect(proveedorId).toMatch(/^auto-/);
-    expect(mocks.getDocsFromCache).toHaveBeenCalledTimes(1);
-  });
-
-  it('actualizarProveedor comparte la escalera: con getDocs colgado igual escribe', async () => {
-    mocks.getDocs.mockReturnValue(colgada());
-
-    const promesa = actualizarProveedor(db, 'p1', { nombre: 'La Rural' });
-    await vi.advanceTimersByTimeAsync(TIMEOUT_LECTURA_PROVEEDORES_MS);
-    await promesa;
-
-    expect(mocks.updateDoc).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe('lectura previa: camino normal', () => {
-  it('con getDocs respondiendo, NO se toca la caché', async () => {
-    mocks.estado.proveedores = [proveedor({ id: 'p1', nombre: 'Lácteos Colonia' })];
-
-    await crearProveedor(db, { nombre: 'La Rural' });
-
-    expect(mocks.getDocs).toHaveBeenCalledTimes(1);
-    expect(mocks.getDocsFromCache).not.toHaveBeenCalled();
-  });
-
-  it('no deja temporizadores colgados tras una lectura normal', async () => {
-    vi.useFakeTimers();
-    try {
-      await crearProveedor(db, { nombre: 'La Rural' });
-      expect(vi.getTimerCount()).toBe(0);
-    } finally {
-      vi.useRealTimers();
-    }
   });
 });
 

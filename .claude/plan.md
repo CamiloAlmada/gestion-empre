@@ -415,7 +415,22 @@ próximo "Editar" abre con "Guardar" deshabilitado. **Preexistente** (el modal y
 cerraba con Escape y backdrop sin mirar `guardando`). Verificado por el
 orquestador. Pendiente: replicar ahí las ~15 líneas de `Proveedores.tsx`.
 
-### Lo que queda por hacer (advisor, post-mortem)
+### ✅ RESUELTO — verificado en el navegador (2026-07-29)
+
+| Criterio | Antes | Después |
+| --- | --- | --- |
+| Modal cierra bajo captive portal (umbral <6 s) | **nunca** (48 s+) | **204 ms** |
+| `guardando` liberado | no | sí |
+| Proveedor queda elegido en la compra | — | sí |
+
+**Lección de medición, que costó tres corridas del harness:** el selector de
+proveedor es un `<input>`, y **los valores de input NO aparecen en
+`innerText`**. Mi chequeo "¿el proveedor quedó seleccionado?" era ciego por
+construcción, y de ahí salió el diagnóstico equivocado de que la fase 1 colgaba.
+Para medir estado de formularios hay que leer `.value` del elemento, no el texto
+de la página.
+
+### Lo que se hizo (advisor, post-mortem)
 
 Dos cambios, y **ninguno alcanza solo**:
 

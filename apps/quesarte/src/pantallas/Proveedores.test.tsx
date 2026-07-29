@@ -336,7 +336,86 @@ describe('Proveedores', () => {
       fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Quesos del Norte' } });
       fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
 
-      expect(await screen.findByText('No se pudo crear el proveedor. Intentá de nuevo.')).toBeTruthy();
+      // Mismo mensaje que offline: el fallo es del ack, no de la fase 1, y ese
+      // matiz no depende de lo que dijera `navigator.onLine`.
+      expect(await screen.findByText('No se pudo sincronizar el proveedor creado.')).toBeTruthy();
+    });
+
+    // EL test del episodio del captive portal: `navigator.onLine` vale `true`
+    // (red muerta que dice estar viva) y el ack no llega NUNCA. Antes, tanto el
+    // cierre del modal como el `finally` que baja `guardando` colgaban de ese
+    // `await sincronizacion`, así que el modal quedaba congelado en
+    // "Guardando…" y la única salida era recargar la página.
+    it('EN LÍNEA con un ack que nunca resuelve: el modal cierra igual y "Guardando…" se libera', async () => {
+      configurarCollection({ datos: [] });
+      mocks.useOnlineStatus.mockReturnValue(true);
+      mocks.crearProveedor.mockResolvedValue({
+        proveedorId: 'nuevo',
+        sincronizacion: new Promise<void>(() => {}),
+      });
+
+      renderizar();
+      fireEvent.click(screen.getAllByRole('button', { name: 'Agregar proveedor' })[0]!);
+      fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Quesos del Norte' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+      await waitFor(() => {
+        const dialog = document.querySelector('dialog') as HTMLDialogElement;
+        expect(dialog.open).toBe(false);
+      });
+
+      // Y el alta quedó liberada: el próximo "+" abre el modal con "Guardar"
+      // habilitado, no con "Guardando…" para siempre.
+      fireEvent.click(screen.getAllByRole('button', { name: 'Agregar proveedor' })[0]!);
+      expect((screen.getByRole('button', { name: 'Guardar' }) as HTMLButtonElement).disabled).toBe(false);
+    });
+
+    it('en línea: el ack que resuelve DESPUÉS del cierre avisa éxito', async () => {
+      configurarCollection({ datos: [] });
+      let resolverAck!: () => void;
+      mocks.crearProveedor.mockResolvedValue({
+        proveedorId: 'nuevo',
+        sincronizacion: new Promise<void>((resolve) => {
+          resolverAck = resolve;
+        }),
+      });
+
+      renderizar();
+      fireEvent.click(screen.getAllByRole('button', { name: 'Agregar proveedor' })[0]!);
+      fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Quesos del Norte' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+      await waitFor(() => {
+        const dialog = document.querySelector('dialog') as HTMLDialogElement;
+        expect(dialog.open).toBe(false);
+      });
+      expect(screen.queryByText('Proveedor creado.')).toBeNull(); // todavía no
+
+      resolverAck();
+      expect(await screen.findByText('Proveedor creado.')).toBeTruthy();
+    });
+
+    it('le pasa a crearProveedor la colección suscrita, para el chequeo de duplicados', async () => {
+      // El chequeo ya no lee del SDK: sale de la suscripción de esta pantalla
+      // (ver el JSDoc de `packages/firebase-kit/src/proveedores.ts`). La lista
+      // va ENTERA, sin el filtro de "Mostrar inactivos": un homónimo inactivo
+      // también es duplicado.
+      configurarCollection({
+        datos: [
+          proveedorDe({ id: 'p1', nombre: 'Quesos del Norte' }),
+          proveedorDe({ id: 'p2', nombre: 'Miel Artesanal', activo: false }),
+        ],
+      });
+      mocks.crearProveedor.mockResolvedValue({ proveedorId: 'nuevo', sincronizacion: Promise.resolve() });
+
+      renderizar();
+      fireEvent.click(screen.getAllByRole('button', { name: 'Agregar proveedor' })[0]!);
+      fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'La Rural' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+      await waitFor(() => expect(mocks.crearProveedor).toHaveBeenCalledTimes(1));
+      const [, , existentes] = mocks.crearProveedor.mock.calls[0] as [unknown, unknown, Proveedor[]];
+      expect(existentes.map((p) => p.id)).toEqual(['p1', 'p2']);
     });
 
     it('agregar una cuenta de pago sin banco/cuenta bloquea el guardado', () => {
@@ -354,7 +433,7 @@ describe('Proveedores', () => {
 
     it('carga una cuenta de pago completa y la envía dentro de pagos[]', async () => {
       configurarCollection({ datos: [] });
-      mocks.crearProveedor.mockResolvedValue({ proveedorId: 'nuevo' });
+      mocks.crearProveedor.mockResolvedValue({ proveedorId: 'nuevo', sincronizacion: Promise.resolve() });
 
       renderizar();
       fireEvent.click(screen.getAllByRole('button', { name: 'Agregar proveedor' })[0]!);
@@ -375,7 +454,7 @@ describe('Proveedores', () => {
 
     it('quitar una cuenta la elimina del borrador antes de guardar', async () => {
       configurarCollection({ datos: [] });
-      mocks.crearProveedor.mockResolvedValue({ proveedorId: 'nuevo' });
+      mocks.crearProveedor.mockResolvedValue({ proveedorId: 'nuevo', sincronizacion: Promise.resolve() });
 
       renderizar();
       fireEvent.click(screen.getAllByRole('button', { name: 'Agregar proveedor' })[0]!);

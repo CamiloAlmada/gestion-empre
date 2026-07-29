@@ -2,8 +2,6 @@ import {
   collection,
   deleteField,
   doc,
-  getDocs,
-  getDocsFromCache,
   setDoc,
   updateDoc,
   type DocumentData,
@@ -25,8 +23,9 @@ import { ProveedorDuplicadoError, ProveedorInvalidoError } from './errores';
  * ## Unicidad del nombre: best-effort en el cliente, y por qué no hay más
  *
  * Dos fichas "La Rural" parten en dos el historial de compras de ese proveedor.
- * Para evitarlo, `crearProveedor` y `actualizarProveedor` leen la colección,
- * comparan por nombre normalizado y tiran `ProveedorDuplicadoError`.
+ * Para evitarlo, `crearProveedor` y `actualizarProveedor` reciben `existentes`
+ * —la lista que la pantalla YA tiene suscrita con `useCollection`—, comparan por
+ * nombre normalizado y tiran `ProveedorDuplicadoError`.
  *
  * Deliberadamente NO se usa el patrón de id canónico de `categorias` (donde el id
  * del documento ES la clave del nombre y las reglas garantizan la unicidad). Al
@@ -38,12 +37,35 @@ import { ProveedorDuplicadoError, ProveedorInvalidoError } from './errores';
  * patrón exige `allow delete`, y `proveedores` tiene `allow delete: if false` a
  * propósito ("no se borran: se desactivan").
  *
- * Entonces: id autogenerado y chequeo leer→comparar→tirar como ÚNICA defensa.
- * Tiene condición de carrera (dos altas simultáneas del mismo nombre pasan las
- * dos), no cubre al Admin SDK, y puede saltearse entero si la lectura previa no
- * llega a tiempo (ver `leerProveedores`). Se acepta: la colección es solo-admin
- * (a diferencia de `clientes`), en la práctica hay un único admin, y la carrera
- * residual no justifica una colección-ledger con `getAfter` en las reglas.
+ * Entonces: id autogenerado y chequeo comparar→tirar como ÚNICA defensa. Tiene
+ * condición de carrera (dos altas simultáneas del mismo nombre pasan las dos),
+ * no cubre al Admin SDK, y puede saltearse entero si `existentes` todavía no
+ * trae al homónimo (la suscripción recién montada, o una caché fría). Se acepta:
+ * la colección es solo-admin (a diferencia de `clientes`), en la práctica hay un
+ * único admin, y la carrera residual no justifica una colección-ledger con
+ * `getAfter` en las reglas.
+ *
+ * ## Por qué el chequeo NO lee del SDK, y la lección que lo puso acá
+ *
+ * Una versión anterior leía la colección acá adentro con `getDocs`, y para
+ * sobrevivir a la red mentirosa —captive portal: red muerta con
+ * `navigator.onLine === true`— tenía una escalera `getDocs` → timeout de 5 s →
+ * `getDocsFromCache` → lista vacía. Se borró entera, junto con sus nueve tests.
+ *
+ * Los datos de la suscripción `onSnapshot` que la pantalla ya tiene abierta son
+ * estrictamente mejores que "caché o lista vacía": están en memoria, llegan al
+ * instante e incluyen las escrituras locales todavía sin ack (latency
+ * compensation). Y el chequeo vuelve a ser lógica pura sobre un array, testeable
+ * SIN mockear Firebase.
+ *
+ * La lección, que costó un diagnóstico entero equivocado: **ningún unit test con
+ * el SDK mockeado puede validar el acoplamiento entre llamadas dentro del SDK
+ * real.** Aquellos nueve tests declaraban por construcción que `getDocs` y
+ * `getDocsFromCache` son independientes —que era justo la hipótesis a
+ * verificar—, así que pasaban en verde mientras el comportamiento estaba roto, y
+ * el cuelgue que decían cubrir vivía en realidad en el caller (que esperaba el
+ * ack antes de cerrar el modal). Con este diseño el mock desaparece del camino
+ * crítico.
  *
  * ## Contrato en dos fases
  *
@@ -53,14 +75,17 @@ import { ProveedorDuplicadoError, ProveedorInvalidoError } from './errores';
  * esta forma: si la función esperara el ack, sin conexión NUNCA resolvería, y ni
  * el id nuevo ni el error de duplicado llegarían a la pantalla —que además usa
  * ese id para seguir armando una compra—. La promesa externa sí resuelve
- * offline: el id sale de `doc(collection(...))`, que no necesita red, y la
- * lectura previa tiene techo de tiempo garantizado (ver `leerProveedores`; NO
- * alcanza con confiar en que `getDocs` caiga a la caché).
+ * offline: el id sale de `doc(collection(...))`, que no necesita red, y el
+ * chequeo de duplicados no toca el SDK (ver la sección anterior).
  *
  * Esto es lo que preserva el patrón híbrido de escrituras offline del proyecto
- * (doc 06 §8): la pantalla dispara la escritura, y si está sin conexión cierra el
- * modal, avisa "se sincronizará al reconectar" y le encadena un `.catch` a
- * `sincronizacion`.
+ * (doc 06 §8): la pantalla dispara la escritura, cierra el modal y le cuelga a
+ * `sincronizacion` los avisos de éxito y de fallo.
+ *
+ * **El caller NUNCA espera el ack para cerrar el modal**, ni siquiera creyéndose
+ * en línea: bajo captive portal `navigator.onLine` vale `true` y el ack no llega
+ * jamás. `enLinea` puede elegir el TEXTO del aviso, nunca si la UI se bloquea
+ * (ver el JSDoc de `handleCrear` en `Proveedores.tsx`).
  *
  * ## El alta OMITE los campos vacíos; la edición los BORRA
  *
@@ -176,76 +201,6 @@ function pagosOBorrado(pagos: DatosPago[] | undefined): DocumentData[] | FieldVa
 }
 
 /**
- * Techo de espera de la lectura previa al chequeo de duplicados, en ms.
- *
- * Corto a propósito. El costo de un timeout falso es casi nulo —degrada a un
- * chequeo que YA era best-effort (ver el doc del módulo)—, mientras que el costo
- * de esperar de más lo paga el admin mirando "Guardando…" en un modal, con la
- * compra a medio armar detrás. Ante la duda, cortar antes.
- */
-export const TIMEOUT_LECTURA_PROVEEDORES_MS = 5_000;
-
-/**
- * Corre `promesa` con techo de tiempo: si no se asienta en `ms`, rechaza.
- *
- * `Promise.race` deja manejado el rechazo tardío de la perdedora (le engancha su
- * propio handler), así que una `promesa` que rechaza DESPUÉS del vencimiento no
- * termina en un unhandled rejection.
- */
-function conTimeout<T>(promesa: Promise<T>, ms: number): Promise<T> {
-  let temporizador: ReturnType<typeof setTimeout> | undefined;
-  const vencimiento = new Promise<never>((_, rechazar) => {
-    temporizador = setTimeout(() => rechazar(new Error('timeout')), ms);
-  });
-  return Promise.race([promesa, vencimiento]).finally(() => clearTimeout(temporizador));
-}
-
-/**
- * Lee todos los proveedores existentes (validados por el converter). Escala
- * esperada: decenas, igual que categorías.
- *
- * ## Escalera de degradación (y por qué la necesita)
- *
- * Con la red MUERTA pero `navigator.onLine === true` —captive portal, wifi que
- * dice estar conectado y no pasa tráfico— `getDocs` NO cae a la caché: se cuelga
- * esperando al servidor indefinidamente (medido: 48 s sin resolver). Como esta
- * lectura corre ANTES de escribir, ese cuelgue congelaba el alta entera.
- *
- * Entonces, en orden:
- *
- * 1. `getDocs` con techo de `TIMEOUT_LECTURA_PROVEEDORES_MS`.
- * 2. Si vence (o falla), `getDocsFromCache`, que nunca sale a la red.
- * 3. Si eso también falla, **lista vacía**: la operación sigue sin chequeo de
- *    duplicados, sin marca en el documento y sin error.
- *
- * El paso 3 no es solo el camino del error: `getDocsFromCache` sobre una QUERY
- * resuelve con un snapshot POSIBLEMENTE VACÍO cuando no hay nada cacheado —a
- * diferencia de `getDocFromCache` de documento único, que rechaza—, así que el
- * chequeo también se saltea EN SILENCIO con la caché fría, resolviendo por el
- * paso 2. Es deliberado: bloquear el alta protegería una garantía que nunca fue
- * dura, al costo de cortarle el flujo al admin en medio de armar una compra. El
- * duplicado que evitaría no es catastrófico (parte en dos el historial de un
- * proveedor y se arregla desactivando una ficha).
- */
-async function leerProveedores(db: Firestore): Promise<Proveedor[]> {
-  const coleccion = collection(db, 'proveedores').withConverter(proveedorConverter);
-
-  try {
-    const snap = await conTimeout(getDocs(coleccion), TIMEOUT_LECTURA_PROVEEDORES_MS);
-    return snap.docs.map((d) => d.data());
-  } catch {
-    // Vencido o rechazado: se intenta la caché, que no sale a la red.
-  }
-
-  try {
-    const snap = await getDocsFromCache(coleccion);
-    return snap.docs.map((d) => d.data());
-  } catch {
-    return [];
-  }
-}
-
-/**
  * Busca entre `existentes` un proveedor homónimo de `nombre`, ignorando el de id
  * `excluirId` (el propio, en una edición) si se pasa.
  */
@@ -280,20 +235,24 @@ function mensajeDuplicado(existente: Proveedor): string {
  * interesa el resultado: es una promesa ya en vuelo, y si nadie la maneja un
  * rechazo del servidor termina en un unhandled rejection.
  *
+ * @param existentes Proveedores ya conocidos por la pantalla (los de su
+ *   suscripción `useCollection`), contra los que se chequea el duplicado. Es la
+ *   colección ENTERA, sin filtrar por `activo`: un homónimo inactivo también es
+ *   duplicado.
  * @throws {ProveedorInvalidoError} si el nombre queda vacío tras `trim()` o supera
  *   `LARGO_MAX_NOMBRE_PROVEEDOR`.
  * @throws {ProveedorDuplicadoError} si ya existe un proveedor con ese nombre
  *   (comparación case-insensitive; el homónimo inactivo también cuenta). En ese
- *   caso no se escribe nada. Solo se detecta si el homónimo estaba en la lectura
- *   previa, que puede degradar a lista vacía (ver `leerProveedores`).
+ *   caso no se escribe nada. Solo se detecta si el homónimo está en `existentes`.
  */
 export async function crearProveedor(
   db: Firestore,
   datos: DatosProveedor,
+  existentes: readonly Proveedor[],
 ): Promise<{ proveedorId: string; sincronizacion: Promise<void> }> {
   const nombre = exigirNombre(datos.nombre);
 
-  const homonimo = buscarHomonimo(await leerProveedores(db), nombre);
+  const homonimo = buscarHomonimo(existentes, nombre);
   if (homonimo !== undefined) {
     throw new ProveedorDuplicadoError(mensajeDuplicado(homonimo));
   }
@@ -356,12 +315,14 @@ export async function crearProveedor(
  *
  * El chequeo de duplicados excluye al propio `proveedorId`, de modo que corregir
  * solo el uso de mayúsculas ("la rural" → "La Rural") es válido. No exige que el
- * proveedor exista en la lectura: sin conexión la caché puede no tenerlo, y
- * negarse a editar por eso rompería el uso offline.
+ * proveedor esté en `existentes`: la suscripción puede no haberlo traído
+ * todavía, y negarse a editar por eso rompería el uso offline.
  *
  * Mismo contrato en dos fases que `crearProveedor`, con la misma obligación de
  * encadenarle un `catch` a `sincronizacion`.
  *
+ * @param existentes Proveedores ya conocidos por la pantalla, igual que en
+ *   `crearProveedor`.
  * @throws {ProveedorInvalidoError} si el nombre queda vacío tras `trim()` o supera
  *   `LARGO_MAX_NOMBRE_PROVEEDOR`.
  * @throws {ProveedorDuplicadoError} si OTRO proveedor ya usa ese nombre. En ese
@@ -371,10 +332,11 @@ export async function actualizarProveedor(
   db: Firestore,
   proveedorId: string,
   datos: DatosProveedor,
+  existentes: readonly Proveedor[],
 ): Promise<{ sincronizacion: Promise<void> }> {
   const nombre = exigirNombre(datos.nombre);
 
-  const homonimo = buscarHomonimo(await leerProveedores(db), nombre, proveedorId);
+  const homonimo = buscarHomonimo(existentes, nombre, proveedorId);
   if (homonimo !== undefined) {
     throw new ProveedorDuplicadoError(mensajeDuplicado(homonimo));
   }

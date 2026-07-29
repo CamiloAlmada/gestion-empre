@@ -476,7 +476,88 @@ describe('CompraPantalla', () => {
       fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Quesos del Sur' } });
       fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
 
-      expect(await screen.findByText('No se pudo crear el proveedor. Intentá de nuevo.')).toBeTruthy();
+      // Mismo mensaje que offline: el fallo es del ack, no de la fase 1, y ese
+      // matiz no depende de lo que dijera `navigator.onLine`.
+      expect(await screen.findByText('No se pudo sincronizar el proveedor creado.')).toBeTruthy();
+    });
+
+    // EL test del episodio del captive portal: `navigator.onLine` vale `true`
+    // (red muerta que dice estar viva) y el ack no llega NUNCA. Antes, tanto el
+    // cierre del modal como el `finally` que baja `guardandoProveedor` colgaban
+    // de ese `await sincronizacion`: el modal quedaba congelado en "Guardando…"
+    // con la compra a medio armar detrás, sin más salida que recargar.
+    it('EN LÍNEA con un ack que nunca resuelve: el modal cierra igual, el proveedor queda elegido y "Guardando…" se libera', async () => {
+      mocks.useOnlineStatus.mockReturnValue(true);
+      mocks.crearProveedor.mockResolvedValue({
+        proveedorId: 'nuevo-prov',
+        sincronizacion: new Promise<void>(() => {}),
+      });
+      renderizar();
+
+      fireEvent.click(screen.getByRole('button', { name: '+ Nuevo' }));
+      fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'La Rural' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+      await waitFor(() => expect(document.querySelector('dialog[open]')).toBeNull());
+
+      // La compra sigue armable: el proveedor nuevo quedó elegido.
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar borrador' }));
+      await waitFor(() => expect(mocks.actualizarBorradorCompra).toHaveBeenCalledTimes(1));
+      const [, , datos] = mocks.actualizarBorradorCompra.mock.calls[0] as [
+        unknown,
+        string,
+        { proveedorId?: string },
+      ];
+      expect(datos.proveedorId).toBe('nuevo-prov');
+
+      // Y el alta quedó liberada: el próximo "+ Nuevo" ofrece "Guardar".
+      fireEvent.click(screen.getByRole('button', { name: '+ Nuevo' }));
+      expect((screen.getByRole('button', { name: 'Guardar' }) as HTMLButtonElement).disabled).toBe(false);
+    });
+
+    it('en línea: el ack que resuelve DESPUÉS del cierre avisa éxito', async () => {
+      let resolverAck!: () => void;
+      mocks.crearProveedor.mockResolvedValue({
+        proveedorId: 'nuevo-prov',
+        sincronizacion: new Promise<void>((resolve) => {
+          resolverAck = resolve;
+        }),
+      });
+      renderizar();
+
+      fireEvent.click(screen.getByRole('button', { name: '+ Nuevo' }));
+      fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Quesos del Sur' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+      await waitFor(() => expect(document.querySelector('dialog[open]')).toBeNull());
+      expect(screen.queryByText('Proveedor creado.')).toBeNull(); // todavía no
+
+      resolverAck();
+      expect(await screen.findByText('Proveedor creado.')).toBeTruthy();
+    });
+
+    it('le pasa a crearProveedor la colección suscrita, para el chequeo de duplicados', async () => {
+      // El chequeo ya no lee del SDK: sale de la suscripción de esta pantalla
+      // (ver el JSDoc de `packages/firebase-kit/src/proveedores.ts`).
+      estadoProveedores = {
+        datos: [
+          proveedor({ id: 'prov1', nombre: 'Quesos del Norte' }),
+          proveedor({ id: 'prov2', nombre: 'La Rural', activo: false }),
+        ],
+        cargando: false,
+        error: null,
+      };
+      mocks.crearProveedor.mockResolvedValue({ proveedorId: 'nuevo-prov', sincronizacion: Promise.resolve() });
+      renderizar();
+
+      fireEvent.click(screen.getByRole('button', { name: '+ Nuevo' }));
+      fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Granja del Sur' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+      await waitFor(() => expect(mocks.crearProveedor).toHaveBeenCalledTimes(1));
+      const [, , existentes] = mocks.crearProveedor.mock.calls[0] as [unknown, unknown, Proveedor[]];
+      // La lista va ENTERA, incluido el inactivo: también es duplicado.
+      expect(existentes.map((p) => p.id)).toEqual(['prov1', 'prov2']);
     });
 
     it('online: crea el proveedor, lo deja seleccionado en la compra y cierra con éxito', async () => {

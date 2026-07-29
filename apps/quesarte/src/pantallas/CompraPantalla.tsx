@@ -317,23 +317,31 @@ export function CompraPantalla() {
    * Alta de proveedor EN MEDIO de armar una compra (botón "+ Nuevo" junto al
    * selector de proveedor). Mismo contrato en dos fases que `Proveedores.tsx`/
    * `DetalleProveedorPantalla.tsx`: se awaitea siempre la fase 1 (valida y
-   * detecta duplicado, resuelve también offline), con el modal abierto si
-   * tira error para que el admin corrija el nombre.
+   * detecta el duplicado contra `proveedores.datos`, la lista ya suscrita), con
+   * el modal abierto si tira error para que el admin corrija el nombre.
    *
-   * Una vez resuelta la fase 1 el id ya existe: en AMBOS caminos (offline y
-   * online) se deja el proveedor seleccionado en la compra
-   * (`setProveedor(...)`), que es lo que permite seguir armándola sin
-   * conexión — a diferencia de la versión anterior, que le decía al usuario
-   * que la creación había fallado mientras la escritura quedaba encolada
-   * igual, empujándolo a reintentar y duplicar la ficha al reconectar.
+   * Una vez resuelta la fase 1 el id ya existe: se deja el proveedor
+   * seleccionado en la compra (`setProveedor(...)`), que es lo que permite
+   * seguir armándola sin conexión — a diferencia de una versión anterior, que
+   * le decía al usuario que la creación había fallado mientras la escritura
+   * quedaba encolada igual, empujándolo a reintentar y duplicar la ficha al
+   * reconectar.
+   *
+   * ## `enLinea` no bloquea la UI (regla del repo, ver `Proveedores.tsx`)
+   *
+   * La fase 2 (`sincronizacion`, el ack) **nunca** se espera para cerrar el
+   * modal, ni siquiera con `enLinea === true`: bajo captive portal
+   * `navigator.onLine` miente y vale `true`, el ack no llega jamás y el modal
+   * quedaba congelado en "Guardando…" con la compra a medio armar detrás.
+   * `enLinea` elige el TEXTO del aviso, nunca si la UI se bloquea.
    *
    * Cancelable en cualquier punto (ver `cancelarAltaProveedor`). La regla es una
    * sola: **cancelar silencia el ÉXITO, nunca un fallo.** Una operación
    * abandonada ya no selecciona el proveedor en la compra ni avisa que salió
    * bien, pero si termina fallando se avisa igual: la escritura ya había salido,
    * y ocultarle que no llegó sería peor que el mensaje tardío. `sincronizacion`
-   * conserva su `catch` en los dos caminos (un rechazo sin manejar es un
-   * unhandled rejection).
+   * conserva su manejador de rechazo en los dos caminos (una promesa ya en vuelo
+   * sin `catch` es un unhandled rejection).
    */
   async function handleCrearProveedorInline(datos: DatosProveedor) {
     const alta = {};
@@ -342,26 +350,26 @@ export function CompraPantalla() {
 
     setGuardandoProveedor(true);
     try {
-      const { proveedorId, sincronizacion } = await crearProveedor(db, datos);
+      const { proveedorId, sincronizacion } = await crearProveedor(db, datos, proveedores.datos);
 
-      if (!enLinea) {
-        sincronizacion.catch(() => {
+      // Se congela acá: el `finally` de abajo limpia el ref, así que el `.then`
+      // no puede volver a preguntar si la operación seguía vigente.
+      const avisarExito = enLinea && vigente();
+      sincronizacion.then(
+        () => {
+          if (avisarExito) mostrarToast('Proveedor creado.', 'exito');
+        },
+        () => {
           mostrarToast('No se pudo sincronizar el proveedor creado.', 'error');
-        });
-        if (!vigente()) return;
-        setProveedor({ id: proveedorId, nombre: datos.nombre.trim() });
-        setModalProveedorAbierto(false);
-        mostrarToast('Guardado sin conexión. Se sincronizará al reconectar.', 'info');
-        return;
-      }
+        },
+      );
 
+      if (!vigente()) return;
       // El proveedor queda elegido apenas resuelve la fase 1 (el id ya existe),
       // que es lo que deja seguir armando la compra sin esperar el ack.
-      if (vigente()) setProveedor({ id: proveedorId, nombre: datos.nombre.trim() });
-      await sincronizacion;
-      if (!vigente()) return;
-      mostrarToast('Proveedor creado.', 'exito');
+      setProveedor({ id: proveedorId, nombre: datos.nombre.trim() });
       setModalProveedorAbierto(false);
+      if (!enLinea) mostrarToast('Guardado sin conexión. Se sincronizará al reconectar.', 'info');
     } catch (error) {
       mostrarToast(mensajeErrorProveedorInline(error), 'error');
     } finally {
@@ -383,10 +391,10 @@ export function CompraPantalla() {
    * modal cuando el guardado se cuelga, y es preferible a quedar encerrado con
    * la compra a medio armar detrás.
    *
-   * Baja `guardandoProveedor` acá y no en el `finally` de la operación
-   * abandonada, que puede no llegar nunca (online, con el ack colgado): si no,
-   * el próximo "+ Nuevo" abriría el modal con "Guardar" deshabilitado para
-   * siempre.
+   * Baja `guardandoProveedor` acá y no solo en el `finally` de la operación
+   * abandonada: ese `finally` respeta la cancelación (no pisa el estado de la
+   * pantalla), así que sin esto el próximo "+ Nuevo" abriría el modal con
+   * "Guardar" deshabilitado para siempre.
    */
   function cancelarAltaProveedor() {
     altaProveedorEnCursoRef.current = null;

@@ -11,6 +11,7 @@ import { ProveedorHeader, useHeaderActual } from '../componentes/header/Contexto
 const mocks = vi.hoisted(() => ({
   useOnlineStatus: vi.fn(() => true),
   useDoc: vi.fn(),
+  useCollection: vi.fn(),
   actualizarProveedor: vi.fn(),
   desactivarProveedor: vi.fn(),
   reactivarProveedor: vi.fn(),
@@ -19,12 +20,18 @@ const mocks = vi.hoisted(() => ({
 // Mismo criterio que DetalleClientePantalla.test.tsx (tarea RE-1: la ficha
 // pasó de `useCollection` filtrada por activos a `useDoc` sobre el documento
 // puntual, para que un proveedor inactivo tenga ficha visible).
+//
+// `useCollection` volvió, pero para otra cosa: la ficha suscribe la colección
+// ENTERA de proveedores y se la pasa a `actualizarProveedor`, que desde el
+// arreglo del cuelgue bajo captive portal ya no lee del SDK (ver el JSDoc de
+// `packages/firebase-kit/src/proveedores.ts`).
 vi.mock('@gestion/firebase-kit', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@gestion/firebase-kit')>();
   return {
     ...actual,
     useOnlineStatus: mocks.useOnlineStatus,
     useDoc: mocks.useDoc,
+    useCollection: mocks.useCollection,
     actualizarProveedor: mocks.actualizarProveedor,
     desactivarProveedor: mocks.desactivarProveedor,
     reactivarProveedor: mocks.reactivarProveedor,
@@ -45,6 +52,7 @@ function crearRefFalsa(path: string): RefFalsa {
 
 vi.mock('firebase/firestore', () => ({
   doc: (_db: unknown, coleccion: string, id: string) => crearRefFalsa(`${coleccion}/${id}`),
+  collection: (_db: unknown, path: string) => crearRefFalsa(path),
 }));
 
 interface EstadoDocFalso<T> {
@@ -53,11 +61,22 @@ interface EstadoDocFalso<T> {
   error: FirestoreError | null;
 }
 
+/** Proveedores de la suscripción a la colección (los que ve el chequeo de
+ * duplicados de `actualizarProveedor`). Por defecto, solo el de la ficha. */
+let proveedoresSuscritos: Proveedor[] = [];
+
+mocks.useCollection.mockImplementation(() => ({
+  datos: proveedoresSuscritos,
+  cargando: false,
+  error: null,
+}));
+
 function configurarProveedor(estado: EstadoDocFalso<Proveedor>) {
   mocks.useDoc.mockImplementation((ref: RefFalsa | null) => {
     if (ref === null) return { datos: null, cargando: false, error: null };
     return estado;
   });
+  proveedoresSuscritos = estado.datos === null ? [] : [estado.datos];
 }
 
 function estadoOkDoc<T>(datos: T): EstadoDocFalso<T> {
@@ -109,6 +128,7 @@ describe('DetalleProveedorPantalla', () => {
     cleanup();
     vi.clearAllMocks();
     mocks.useOnlineStatus.mockReturnValue(true);
+    proveedoresSuscritos = [];
   });
 
   it('estado cargando', () => {
@@ -244,6 +264,30 @@ describe('DetalleProveedorPantalla', () => {
       expect(await screen.findByText('Proveedor actualizado.')).toBeTruthy();
     });
 
+    it('le pasa a actualizarProveedor la colección suscrita, para el chequeo de duplicados', async () => {
+      // El chequeo ya no lee del SDK: sale de la suscripción de esta pantalla
+      // (ver el JSDoc de `packages/firebase-kit/src/proveedores.ts`).
+      const otro = proveedorDe({ id: 'p2', nombre: 'La Rural', activo: false });
+      configurarProveedor(estadoOkDoc(proveedorDe({ id: 'p1', nombre: 'Quesos del Norte' })));
+      proveedoresSuscritos = [proveedorDe({ id: 'p1', nombre: 'Quesos del Norte' }), otro];
+      mocks.actualizarProveedor.mockResolvedValue({ sincronizacion: Promise.resolve() });
+
+      renderizar('p1');
+      fireEvent.click(screen.getByRole('button', { name: 'Editar' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+      await waitFor(() => expect(mocks.actualizarProveedor).toHaveBeenCalledTimes(1));
+      const [, , , existentes] = mocks.actualizarProveedor.mock.calls[0] as [
+        unknown,
+        string,
+        unknown,
+        Proveedor[],
+      ];
+      // La lista va ENTERA, sin filtrar por activo: el homónimo inactivo también
+      // es duplicado.
+      expect(existentes.map((p) => p.id)).toEqual(['p1', 'p2']);
+    });
+
     it('duplicado: el toast muestra el mensaje del error (con el homónimo inactivo) y el modal sigue abierto', async () => {
       configurarProveedor(estadoOkDoc(proveedorDe({ id: 'p1', nombre: 'Quesos del Norte' })));
       mocks.actualizarProveedor.mockRejectedValue(
@@ -273,7 +317,57 @@ describe('DetalleProveedorPantalla', () => {
       fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Quesos del Norte SRL' } });
       fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
 
-      expect(await screen.findByText('No se pudo actualizar el proveedor. Intentá de nuevo.')).toBeTruthy();
+      expect(await screen.findByText('No se pudo sincronizar la edición del proveedor.')).toBeTruthy();
+    });
+
+    // EL test del episodio del captive portal: `navigator.onLine` vale `true`
+    // (red muerta que dice estar viva) y el ack no llega NUNCA. La pantalla no
+    // puede quedar esperándolo: antes, tanto el cierre del modal como el
+    // `finally` que baja `guardando` colgaban de ese `await` y el modal se
+    // congelaba en "Guardando…" para siempre.
+    it('EN LÍNEA con un ack que nunca resuelve: el modal cierra igual y "Guardando…" se libera', async () => {
+      configurarProveedor(estadoOkDoc(proveedorDe({ id: 'p1', nombre: 'Quesos del Norte' })));
+      mocks.useOnlineStatus.mockReturnValue(true);
+      mocks.actualizarProveedor.mockResolvedValue({ sincronizacion: new Promise<void>(() => {}) });
+
+      renderizar('p1');
+      fireEvent.click(screen.getByRole('button', { name: 'Editar' }));
+      fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Quesos del Norte SRL' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+      await waitFor(() => {
+        const dialog = document.querySelector('dialog') as HTMLDialogElement;
+        expect(dialog.open).toBe(false);
+      });
+
+      // Y el guardado quedó liberado: reabrir el modal ofrece "Guardar", no
+      // "Guardando…" deshabilitado.
+      fireEvent.click(screen.getByRole('button', { name: 'Editar' }));
+      expect((screen.getByRole('button', { name: 'Guardar' }) as HTMLButtonElement).disabled).toBe(false);
+    });
+
+    it('en línea: el ack que resuelve DESPUÉS del cierre avisa éxito', async () => {
+      configurarProveedor(estadoOkDoc(proveedorDe({ id: 'p1', nombre: 'Quesos del Norte' })));
+      let resolverAck!: () => void;
+      mocks.actualizarProveedor.mockResolvedValue({
+        sincronizacion: new Promise<void>((resolve) => {
+          resolverAck = resolve;
+        }),
+      });
+
+      renderizar('p1');
+      fireEvent.click(screen.getByRole('button', { name: 'Editar' }));
+      fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Quesos del Norte SRL' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+      await waitFor(() => {
+        const dialog = document.querySelector('dialog') as HTMLDialogElement;
+        expect(dialog.open).toBe(false);
+      });
+      expect(screen.queryByText('Proveedor actualizado.')).toBeNull(); // todavía no
+
+      resolverAck();
+      expect(await screen.findByText('Proveedor actualizado.')).toBeTruthy();
     });
 
     it('sin conexión: cierra el modal sin esperar el ack y, si la sincronización rechaza después, avisa con un toast', async () => {

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
-import { doc } from 'firebase/firestore';
+import { collection, doc } from 'firebase/firestore';
 import type { DatosPago } from '@gestion/core';
 import {
   ProveedorDuplicadoError,
@@ -8,6 +8,7 @@ import {
   actualizarProveedor,
   proveedorConverter,
   reactivarProveedor,
+  useCollection,
   useDoc,
   useOnlineStatus,
   type DatosProveedor,
@@ -21,10 +22,12 @@ import { useHeader } from '../componentes/header/ContextoHeader';
 type Modal = 'editar' | 'desactivar' | null;
 
 /**
- * Mensaje del `catch` de `actualizarProveedor`: duplicado e inválido traen su
- * propio mensaje en español; cualquier otro error (p. ej. el ack de
- * `sincronizacion` rechazado estando online) usa el genérico. Mismo patrón que
- * `mensajeErrorProveedor` de `Proveedores.tsx`.
+ * Mensaje del `catch` de la FASE 1 de `actualizarProveedor`: duplicado e
+ * inválido traen su propio mensaje en español; cualquier otro error usa el
+ * genérico. Mismo patrón que `mensajeErrorProveedor` de `Proveedores.tsx`.
+ *
+ * El fallo de la fase 2 (el ack) NO pasa por acá: tiene su propio mensaje, ver
+ * `handleGuardar`.
  */
 function mensajeErrorProveedor(error: unknown): string {
   if (error instanceof ProveedorDuplicadoError || error instanceof ProveedorInvalidoError) {
@@ -98,6 +101,19 @@ export function DetalleProveedorPantalla() {
   );
   const { datos: proveedor, cargando, error } = useDoc(proveedorRef);
 
+  // Colección entera (sin filtrar por `activo`: un homónimo inactivo también es
+  // duplicado), para el chequeo de unicidad de `actualizarProveedor`, que ya no
+  // lee del SDK sino que recibe la lista. Es una suscripción de más en una
+  // pantalla que con `useDoc` se bastaba, y se paga a propósito: la colección es
+  // de decenas de documentos, la ruta es solo-admin, y la alternativa —una
+  // lectura a demanda al guardar— es justo lo que se sacó del camino crítico
+  // (ver el JSDoc de `packages/firebase-kit/src/proveedores.ts`).
+  const proveedoresRef = useMemo(
+    () => collection(db, 'proveedores').withConverter(proveedorConverter),
+    [],
+  );
+  const { datos: proveedores } = useCollection(proveedoresRef);
+
   const noEncontrado = !cargando && error === null && proveedor === null;
   const tituloHeader = cargando ? 'Proveedor' : (proveedor?.nombre ?? 'Proveedor no encontrado');
 
@@ -126,34 +142,46 @@ export function DetalleProveedorPantalla() {
   }
 
   /**
-   * Mismo patrón híbrido de escrituras offline del proyecto (docs/06-ui-ux.md
-   * §8), delegado a `actualizarProveedor` (packages/firebase-kit).
+   * Variante del patrón híbrido de escrituras offline del proyecto
+   * (docs/06-ui-ux.md §8), delegada a `actualizarProveedor`
+   * (packages/firebase-kit).
    *
    * Contrato en dos fases (ver el JSDoc del módulo): se awaitea SIEMPRE la
-   * fase 1 (valida el nombre y detecta el duplicado; resuelve también
-   * offline), con el modal abierto por si tira `ProveedorDuplicadoError`/
-   * `ProveedorInvalidoError` y el admin necesita corregir el nombre. Recién
-   * resuelta la fase 1 se decide, según `enLinea`, qué hacer con la fase 2
-   * (`sincronizacion`, el ack).
+   * fase 1 (valida el nombre y detecta el duplicado contra `proveedores`, la
+   * lista ya suscrita; resuelve al instante porque no toca el SDK), con el
+   * modal abierto por si tira `ProveedorDuplicadoError`/`ProveedorInvalidoError`
+   * y el admin necesita corregir el nombre.
+   *
+   * ## `enLinea` no bloquea la UI (regla del repo, ver `Proveedores.tsx`)
+   *
+   * La fase 2 (`sincronizacion`, el ack) **nunca** se espera para cerrar el
+   * modal, ni siquiera con `enLinea === true`: bajo captive portal
+   * `navigator.onLine` miente y vale `true`, el ack no llega jamás y el modal
+   * quedaba congelado en "Guardando…" sin salida. `enLinea` elige el TEXTO del
+   * aviso, nunca si la UI se bloquea esperando al servidor.
+   *
+   * Los avisos del ack van colgados con `.then`: éxito cuando llega (solo si la
+   * edición se hizo creyéndose en línea; offline ya se avisó al cerrar) y error
+   * cuando falla — obligatorio, `sincronizacion` es una promesa ya en vuelo y
+   * sin manejador de rechazo sería un unhandled rejection.
    */
   async function handleGuardar(datos: DatosProveedor) {
     if (proveedor === null) return;
     setGuardando(true);
     try {
-      const { sincronizacion } = await actualizarProveedor(db, proveedor.id, datos);
+      const { sincronizacion } = await actualizarProveedor(db, proveedor.id, datos, proveedores);
 
-      if (!enLinea) {
-        cerrarModal();
-        mostrarToast('Guardado sin conexión. Se sincronizará al reconectar.', 'info');
-        sincronizacion.catch(() => {
+      sincronizacion.then(
+        () => {
+          if (enLinea) mostrarToast('Proveedor actualizado.', 'exito');
+        },
+        () => {
           mostrarToast('No se pudo sincronizar la edición del proveedor.', 'error');
-        });
-        return;
-      }
+        },
+      );
 
-      await sincronizacion;
-      mostrarToast('Proveedor actualizado.', 'exito');
       cerrarModal();
+      if (!enLinea) mostrarToast('Guardado sin conexión. Se sincronizará al reconectar.', 'info');
     } catch (error) {
       mostrarToast(mensajeErrorProveedor(error), 'error');
     } finally {

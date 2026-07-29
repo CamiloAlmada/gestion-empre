@@ -25,10 +25,13 @@ const CLASE_ACCION_PRIMARIA =
   'inline-flex min-h-[48px] min-w-[48px] items-center justify-center gap-1.5 rounded-control bg-primary-600 px-3 font-medium text-white hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2 focus-visible:ring-offset-superficie';
 
 /**
- * Mensaje del `catch` de `crearProveedor`: duplicado e inválido traen su propio
- * mensaje en español (ver `packages/firebase-kit/src/proveedores.ts`); cualquier
- * otro error (p. ej. el ack de `sincronizacion` rechazado estando online) usa el
+ * Mensaje del `catch` de la FASE 1 de `crearProveedor`: duplicado e inválido
+ * traen su propio mensaje en español (ver
+ * `packages/firebase-kit/src/proveedores.ts`); cualquier otro error usa el
  * genérico. Mismo patrón que `mensajeErrorConfirmar` de `CompraPantalla.tsx`.
+ *
+ * El fallo de la fase 2 (el ack) NO pasa por acá: tiene su propio mensaje, ver
+ * `handleCrear`.
  */
 function mensajeErrorProveedor(error: unknown): string {
   if (error instanceof ProveedorDuplicadoError || error instanceof ProveedorInvalidoError) {
@@ -154,28 +157,40 @@ export function Proveedores() {
   }
 
   /**
-   * Alta de proveedor: mismo patrón híbrido de escrituras offline del
-   * proyecto (docs/06-ui-ux.md §8) que `Productos.tsx` — acá delegado a
-   * `crearProveedor` (packages/firebase-kit), que ya arma el documento y
-   * valida el nombre.
+   * Alta de proveedor: variante del patrón híbrido de escrituras offline del
+   * proyecto (docs/06-ui-ux.md §8), delegada a `crearProveedor`
+   * (packages/firebase-kit), que ya arma el documento y valida el nombre.
    *
    * Contrato en dos fases (ver el JSDoc del módulo): la fase 1 (la promesa que
-   * devuelve `crearProveedor`) se awaitea SIEMPRE, incluso offline — es la que
-   * valida el nombre y detecta el duplicado, y sin conexión igual resuelve
-   * (lee de la caché de persistencia). El modal se mantiene abierto si tira
-   * `ProveedorDuplicadoError`/`ProveedorInvalidoError`, para que el admin
-   * pueda corregir el nombre. Recién con la fase 1 resuelta se decide, según
-   * `enLinea`, qué hacer con la fase 2 (`sincronizacion`, el ack): offline se
-   * dispara sin esperar (con su propio `.catch`, para no dejar un unhandled
-   * rejection); online se espera antes de avisar éxito.
+   * devuelve `crearProveedor`) se awaitea SIEMPRE — es la que valida el nombre
+   * y detecta el duplicado contra los proveedores ya suscritos, y resuelve al
+   * instante porque no toca el SDK. El modal se mantiene abierto si tira
+   * `ProveedorDuplicadoError`/`ProveedorInvalidoError`, para que el admin pueda
+   * corregir el nombre.
+   *
+   * ## La regla, que vale para TODO el repo: `enLinea` no bloquea la UI
+   *
+   * La fase 2 (`sincronizacion`, el ack del servidor) **nunca** se espera para
+   * cerrar el modal, ni siquiera con `enLinea === true`. Bajo captive portal
+   * —wifi conectado que no pasa tráfico— `navigator.onLine` MIENTE y vale
+   * `true`: el ack no llega jamás, y una versión anterior de este handler
+   * dejaba el modal congelado en "Guardando…" para siempre, porque tanto el
+   * cierre como el `finally` colgaban de ese `await`.
+   *
+   * `enLinea` puede elegir el TEXTO del aviso —offline se avisa en el acto que
+   * quedó encolado—, nunca si la UI queda bloqueada esperando al servidor.
+   *
+   * Los avisos del ack van colgados con `.then`: éxito cuando llega (solo si el
+   * alta se hizo creyéndose en línea; offline ya se avisó al cerrar, y un
+   * segundo toast al reconectar sería ruido) y error cuando falla. El manejador
+   * de rechazo es además obligatorio: `sincronizacion` es una promesa ya en
+   * vuelo y sin `catch` un rechazo del servidor sería un unhandled rejection.
    *
    * Cancelable en cualquier punto (ver `cancelarAlta`). La regla es una sola:
    * **cancelar silencia el ÉXITO, nunca un fallo.** Una operación abandonada ya
-   * no cierra el modal ni avisa que salió bien —el usuario la dio por perdida—,
-   * pero si termina fallando se avisa igual: la escritura ya había salido, y
-   * ocultarle que no llegó sería peor que el mensaje tardío. `sincronizacion`
-   * conserva su `catch` en los dos caminos (un rechazo sin manejar es un
-   * unhandled rejection).
+   * no avisa que salió bien —el usuario la dio por perdida—, pero si termina
+   * fallando se avisa igual: la escritura ya había salido, y ocultarle que no
+   * llegó sería peor que el mensaje tardío.
    */
   async function handleCrear(datos: DatosProveedor) {
     const alta = {};
@@ -184,22 +199,23 @@ export function Proveedores() {
 
     setGuardando(true);
     try {
-      const { sincronizacion } = await crearProveedor(db, datos);
+      const { sincronizacion } = await crearProveedor(db, datos, proveedores);
 
-      if (!enLinea) {
-        sincronizacion.catch(() => {
+      // Se congela acá: el `finally` de abajo limpia el ref, así que el `.then`
+      // no puede volver a preguntar si la operación seguía vigente.
+      const avisarExito = enLinea && vigente();
+      sincronizacion.then(
+        () => {
+          if (avisarExito) mostrarToast('Proveedor creado.', 'exito');
+        },
+        () => {
           mostrarToast('No se pudo sincronizar el proveedor creado.', 'error');
-        });
-        if (!vigente()) return;
-        setModalAltaAbierto(false);
-        mostrarToast('Guardado sin conexión. Se sincronizará al reconectar.', 'info');
-        return;
-      }
+        },
+      );
 
-      await sincronizacion;
       if (!vigente()) return;
-      mostrarToast('Proveedor creado.', 'exito');
       setModalAltaAbierto(false);
+      if (!enLinea) mostrarToast('Guardado sin conexión. Se sincronizará al reconectar.', 'info');
     } catch (error) {
       mostrarToast(mensajeErrorProveedor(error), 'error');
     } finally {
@@ -218,9 +234,10 @@ export function Proveedores() {
    * puede terminar existiendo, y en ese caso aparece en el listado; lo que no
    * pasa es que la pantalla avise éxito de algo que el usuario dio por perdido.
    *
-   * Baja `guardando` acá y no en el `finally` de la operación abandonada, que
-   * puede no llegar nunca (online, con el ack colgado): si no, el próximo intento
-   * abriría el modal con "Guardar" deshabilitado para siempre.
+   * Baja `guardando` acá y no solo en el `finally` de la operación abandonada:
+   * ese `finally` respeta la cancelación (no pisa el estado de la pantalla), así
+   * que sin esto el próximo intento abriría el modal con "Guardar" deshabilitado
+   * para siempre.
    */
   function cancelarAlta() {
     altaEnCursoRef.current = null;
