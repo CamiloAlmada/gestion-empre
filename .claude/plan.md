@@ -354,27 +354,44 @@ harness de Playwright que encontró el bug.
 | Arreglo | Resultado medido |
 | --- | --- |
 | "Cancelar" habilitado durante el guardado | ✅ **funciona**: cierra el modal en 800 ms y libera `guardando` |
-| Escalera `getDocs` → timeout 5s → `getDocsFromCache` → lista vacía | ❌ **NO funciona**: la fase 1 sigue sin resolver a los 20 s |
+| Escalera `getDocs` → timeout 5s → `getDocsFromCache` → lista vacía | ⚠️ **inocua**: la fase 1 ya resolvía en 20 ms. Ver la corrección abajo |
 
-### Por qué la escalera no funciona, y por qué los tests no lo agarraron
+### CORRECCIÓN: la escalera no era la culpable. El error de diagnóstico fue mío
 
-Muestreo cada 500 ms desde el clic en Guardar: `guardando` sigue en `true` a los
-502, 2012, 6525, 12543 y 20069 ms. **El timeout de 5 s no destraba nada.**
+La tabla de arriba dice "la escalera NO funciona". **Eso era una inferencia
+equivocada del orquestador**, corregida el mismo día por un experimento que pidió
+el `advisor`.
 
-Hipótesis: `getDocsFromCache` **no llega a correr**, porque queda encolado detrás
-del `getDocs` trabado en la cola asíncrona interna del SDK de Firestore. Las dos
-lecturas comparten esa cola, así que el fallback hereda el bloqueo del primario.
+Lo que yo había medido: `guardando` sigue en `true` a los 502, 2012, 6525, 12543
+y 20069 ms, y "el proveedor no queda seleccionado". De ahí concluí que la fase 1
+no resolvía. **El segundo dato era un mal proxy** —el `advisor` lo marcó como
+bloqueante: "cómo mide el harness la selección del proveedor; sin eso, tu tabla
+no distingue A de B"—.
 
-**Los tests unitarios no pueden detectar esto, por construcción**: mockean
-`getDocs` y `getDocsFromCache` como funciones independientes. En el mock, colgar
-una no afecta a la otra; en el SDK real, sí. Los 9 tests nuevos pasan y el
-comportamiento sigue roto. Es un recordatorio de que un mock que no modela la
-serialización interna no prueba lo que parece probar.
+**El experimento que lo desempata**: un `console.log` con timestamp justo después
+del `await crearProveedor(...)`.
 
-**El supuesto del `advisor` que había que verificar no era el que fallaba.** Él
-pidió confirmar si `getDocsFromCache` sobre una query *resuelve o rechaza* con
-caché vacía —y el `senior` lo verificó leyendo el bundle del SDK: resuelve—. Pero
-el problema real es anterior: **no llega a ejecutarse**.
+```
+clic:                          12929 ms
+[EXPERIMENTO] fase 1 resuelta  12949 ms
+```
+
+**20 milisegundos.** La fase 1 resuelve casi instantáneamente.
+
+**La causa raíz real** —diagnosticada por el `advisor`, que además señaló que era
+un error propio de su llamada 1—: `CompraPantalla.tsx`, rama `enLinea === true`,
+hace `await sincronizacion` antes de cerrar el modal. Bajo captive portal
+`navigator.onLine` **miente y vale `true`**, así que se toma esa rama, el ack
+nunca llega, y ni el `setModalProveedorAbierto(false)` ni el `finally` con
+`setGuardandoProveedor(false)` se ejecutan jamás.
+
+O sea: **aunque la escalera funcionara a la perfección, el modal se congelaba
+igual**. El criterio de aceptación "modal cerrado en <6 s" era inalcanzable
+tocando solo `firebase-kit`.
+
+Lección para el orquestador: medir el síntoma visible (`guardando`) no localiza
+la causa cuando hay dos esperas encadenadas. El log con timestamp en el punto
+exacto costó dos minutos y decidió lo que tres corridas del harness no pudieron.
 
 ### Lo que sí se ganó
 
@@ -398,10 +415,44 @@ próximo "Editar" abre con "Guardar" deshabilitado. **Preexistente** (el modal y
 cerraba con Escape y backdrop sin mirar `guardando`). Verificado por el
 orquestador. Pendiente: replicar ahí las ~15 líneas de `Proveedores.tsx`.
 
-### Pendiente
+### Lo que queda por hacer (advisor, post-mortem)
 
-Escalado al `advisor` con la evidencia: si la hipótesis de la cola compartida es
-correcta, la escalera hay que reemplazarla, no ajustarla.
+Dos cambios, y **ninguno alcanza solo**:
+
+1. **El caller deja de esperar el ack para cerrar el modal.** Sacar el
+   `await sincronizacion` como condición de cierre (`CompraPantalla.tsx`, rama
+   online). Tras la fase 1: seleccionar proveedor, cerrar modal, y colgar el
+   toast de éxito o fracaso del ack en background. `enLinea` puede elegir el
+   TEXTO del toast, nunca decidir si la UI espera un ack.
+2. **Sacar la lectura del SDK del camino crítico.** Borrar `leerProveedores`,
+   `conTimeout` y `TIMEOUT_LECTURA_PROVEEDORES_MS`; `crearProveedor` y
+   `actualizarProveedor` reciben `existentes: readonly Proveedor[]` y el caller
+   pasa la lista de la suscripción `useCollection` que **ya tiene**. Los datos de
+   una suscripción son estrictamente mejores que "caché o lista vacía": llegan al
+   instante e incluyen las escrituras locales pendientes.
+
+Beneficio lateral del punto 2: el chequeo de duplicados vuelve a ser lógica pura
+y se testea **sin mockear Firebase**, así que el mock deja de poder mentir.
+
+**Los 9 tests de la escalera se borran con el código que testean.** No se
+reescriben ni se les deja advertencia. La lección no es que estuvieran mal
+escritos: es que **ningún unit test con el SDK mockeado puede validar el
+acoplamiento entre llamadas dentro del SDK real**. El harness de captive portal
+es EL test de aceptación de cualquier cambio en caminos de red degradada.
+
+### Dos reglas que salen de esto, para todo el repo
+
+1. **Ninguna lectura a demanda del SDK en el camino crítico de una escritura con
+   UI esperando.** Los datos de validación salen de suscripciones ya en memoria.
+2. **`navigator.onLine` / `enLinea` nunca decide si se bloquea la UI sobre un
+   ack.** Solo elige textos.
+
+### Auditoría pendiente por la regla 1
+
+`packages/firebase-kit/src/categorias.ts` (líneas ~69, 94, 143, 163) tiene el
+mismo patrón `getDocs`-antes-de-escribir, **y sin timeout**. Bajo captive portal,
+crear o renombrar una categoría se congela igual. Misma medicina: la pantalla de
+Ajustes tiene su lista suscrita.
 
 ## En espera de la elicitación con Adrián (doc 10)
 
