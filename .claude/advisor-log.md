@@ -300,4 +300,60 @@ de aceptación de la tarea.
 **Divergencias:** **un error MÍO en el brief**, que él detectó: afirmé que
 `actualizarCliente` hace lectura previa y por lo tanto tenía el mismo cuelgue.
 Es falso — no tiene un solo `getDocs`, deriva el `telefonoE164` localmente y va
-directo al `updateDoc`. Verificado. El alcance se achica a `proveedores.ts`. Se anota condicionado, no como pendiente.
+directo al `updateDoc`. Verificado. El alcance se achica a `proveedores.ts`.
+
+---
+
+## R6 aplicar el patrón a categorias.ts — llamada 1 (temprano)
+Fecha: 2026-07-29
+
+**Se le preguntó:** cuatro cosas. (1) Si el fan-out a productos de
+`renombrarCategoria` puede salir del SDK, dado que **no es una validación sino la
+fuente de verdad del re-etiquetado** y una lista stale dejaría productos
+huérfanos. (2) Si importa que el `orden = max + 1` se calcule sobre una
+suscripción posiblemente stale. (3) Si a `ModalProducto` le alcanza recibir
+`categorias` por prop. (4) Si los callers tienen el mismo bug del `await`.
+
+**RECOMENDACIÓN:** "(1) La lectura del fan-out **se va**: `renombrarCategoria`
+recibe `productos: readonly Producto[]` y filtra en memoria; el batch queda
+idéntico. (2) El `orden` duplicado no importa; sí importa que `handleImportar`
+mantenga un array local acumulado entre iteraciones del loop. (3) La prop
+alcanza; no agregar suscripción a `ModalProducto`. (4) El `await` de estos
+callers es correcto y se queda; el bug análogo real es que `enLinea` es el único
+gate: reemplazarlo para mutaciones por 'último snapshot confirmado del servidor'
+(`fromCache === false`), exponiéndolo opt-in desde `useCollection`."
+
+**El argumento que desarma mi premisa, y es correcto:** `writeBatch` es atómico
+en la ESCRITURA pero **no valida read-set** —`runTransaction` está descartado en
+el JSDoc del módulo porque exigiría servidor—. La carrera "producto creado entre
+la lectura y el commit" **existe hoy igual** con `getDocs`. Lo único que aportaba
+era frescura, y bajo captive portal no la aporta: cuelga. Además el producto
+huérfano ya es un estado manejado en la UI (`huerfana`, "(sin definir)").
+
+Plan: T1 `useCollection` con frescura opt-in (`semisenior`), T2 `categorias.ts`
+(`senior`, en paralelo), T3 callers (`semisenior`, depende de T1+T2), T4
+verificación con el harness (`trainee`).
+
+**SUPUESTOS:** (1) `onSnapshot` con `includeMetadataChanges: true` emite
+`fromCache: false` al confirmar el servidor aunque los datos no cambien, y bajo
+captive portal queda en `true` indefinidamente; no verificó el SDK instalado.
+(2) `useCollection`/`useDoc` no tienen consumidores que se rompan con un
+parámetro opcional. (3) El harness de proveedores es reutilizable. (4) La escala
+sigue en decenas de productos. (5) El test de import secuencial mockea
+`crearCategoria`, así que T3 necesita un test nuevo de la acumulación local.
+
+**BLOQUEANTES:** (1) **Ventana residual asumida, no medida**: si el portal se
+activa DESPUÉS de un snapshot confirmado y ANTES del clic, el `await` del commit
+cuelga igual. La acepta por rara; si el harness muestra que es fácil de pisar,
+volver con ese dato y reevalúa fire-and-forget para `crearCategoria` (no para
+renombrar). (2) No leyó el JSX de deshabilitado de `Categorias.tsx`: asume que
+los botones ya se deshabilitan con `!enLinea`.
+
+**Qué se hizo después:** verificado el bloqueante 2 — `Categorias.tsx` **sí**
+deshabilita con `!enLinea` (líneas 230, 236, 266, 317) y tiene banner en 215, así
+que T3 solo cambia la condición. Verificado además que **29 archivos** consumen
+`useCollection`, lo que convierte la retrocompatibilidad estricta en el requisito
+central del brief de T1. Lanzadas T1 y T2 en paralelo.
+
+**Divergencias:** ninguna. Me corrigió una premisa falsa —la del read-set— y el
+resto de sus supuestos se sostuvieron. Se anota condicionado, no como pendiente.

@@ -1,14 +1,10 @@
+import { doc, setDoc, writeBatch, type Firestore } from 'firebase/firestore';
 import {
-  collection,
-  doc,
-  getDocs,
-  query,
-  setDoc,
-  where,
-  writeBatch,
-  type Firestore,
-} from 'firebase/firestore';
-import { type Categoria, claveCategoria, claveCategoriaValida } from '@gestion/core';
+  type Categoria,
+  type Producto,
+  claveCategoria,
+  claveCategoriaValida,
+} from '@gestion/core';
 import { categoriaConverter } from './converters/categoria';
 import { CategoriaDuplicadaError, CategoriaInvalidaError } from './errores';
 
@@ -16,30 +12,69 @@ import { CategoriaDuplicadaError, CategoriaInvalidaError } from './errores';
  * Gestión del vocabulario de categorías (`categorias/{id} → { nombre, orden,
  * clave }`), usado por la pantalla de administración de categorías (solo admin).
  *
- * A diferencia de las escrituras del POS (`ventas.ts`, `stock.ts`), estas
- * funciones SÍ leen de Firestore antes de escribir: el chequeo de duplicados y el
- * cálculo de `orden` necesitan conocer las categorías existentes, y el renombre
- * necesita saber el nombre anterior para actualizar los productos. No son
- * operaciones de mostrador offline-first: las hace el admin, con conexión, sobre
- * un catálogo chico. Las mutaciones multi-documento (renombrar, reordenar) van en
- * un `writeBatch` atómico, coherente con el resto del kit (nunca `runTransaction`,
+ * ## Los datos de validación se INYECTAN; acá no se lee de Firestore
+ *
+ * `crearCategoria` y `renombrarCategoria` reciben `existentes` (las categorías)
+ * y `productos` como arrays, y NO los leen del SDK. Los provee la pantalla desde
+ * las suscripciones `onSnapshot` que ya tiene abiertas (`useCollection`), que son
+ * estrictamente mejores que una lectura a demanda: están en memoria, llegan al
+ * instante e incluyen las escrituras locales todavía sin ack (latency
+ * compensation).
+ *
+ * Es la misma regla que documenta `proveedores.ts`, y la puso ahí el mismo
+ * incidente: bajo captive portal —la red dice estar viva, `navigator.onLine`
+ * vale `true`, pero no pasa tráfico— un `getDocs` **se cuelga esperando al
+ * servidor en vez de caer a caché**. Medido en el alta de proveedores: 48
+ * segundos de spinner sin salida. Este módulo tenía el mismo patrón
+ * `getDocs`-antes-de-escribir, y ni siquiera con el timeout que llegó a tener
+ * proveedores: crear o renombrar una categoría se congelaba igual.
+ *
+ * Los dos parámetros son OBLIGATORIOS a propósito. Opcionales dejarían que un
+ * caller nuevo se saltee el chequeo de duplicados o el fan-out sin enterarse;
+ * así lo obliga el compilador.
+ *
+ * Beneficio secundario: las validaciones vuelven a ser lógica pura sobre arrays,
+ * testeables sin mockear lecturas de Firebase.
+ *
+ * Las mutaciones multi-documento (renombrar, reordenar) siguen yendo en un
+ * `writeBatch` atómico, coherente con el resto del kit (nunca `runTransaction`,
  * que exigiría servidor).
  *
  * ## El id del documento ES la clave del nombre
  *
  * `categorias/{id}` cumple SIEMPRE `id === claveCategoria(nombre)`. Esa es la
  * garantía estructural de que no hay dos categorías con el mismo nombre: dos
- * categorías homónimas serían literalmente el mismo documento. El chequeo de
- * duplicados que hacen estas funciones (leer → comparar → escribir) se conserva,
- * pero cambió de rol: ya NO es la garantía —tiene condición de carrera y no
- * cubre al Admin SDK—, es la fuente del mensaje de error amigable. La garantía
+ * categorías homónimas serían literalmente el mismo documento. La garantía dura
  * la da `firestore.rules`, que exige `categoriaId == request.resource.data.clave`
  * en create y en update. Ver `categoria.ts` en `core`.
+ *
+ * El chequeo de duplicados contra `existentes` NO es esa garantía: es solo la
+ * fuente del **mensaje de error amigable**. Si `existentes` viene incompleto y
+ * el duplicado se cuela, las dos escrituras van al MISMO path y convergen en un
+ * único documento al sincronizar. Ahí está la diferencia con `proveedores.ts`,
+ * donde el mismo chequeo es la ÚNICA defensa (id autogenerado) y saltearlo
+ * parte el historial en dos fichas.
  *
  * Consecuencia para el renombre: si la clave cambia, el documento se MUEVE de
  * path (set del nuevo + delete del viejo en el mismo batch). Dejar el id viejo
  * rompería el invariante y, peor, un alta posterior del nombre viejo pisaría el
  * documento renombrado.
+ *
+ * ## La carrera del fan-out es la de siempre, no una nueva
+ *
+ * El renombre re-etiqueta los productos que referencian el nombre anterior. Con
+ * la lista inyectada, un producto que la suscripción todavía no trajo queda sin
+ * re-etiquetar y apunta a una categoría que ya no existe.
+ *
+ * Esa carrera existía IGUAL con `getDocs`: `writeBatch` es atómico en la
+ * ESCRITURA pero no valida read-set, así que un producto creado entre la lectura
+ * y el commit se perdía del fan-out de las dos maneras. Lo único que aportaba
+ * `getDocs` era frescura, y bajo captive portal no la aporta: cuelga. Cambiar a
+ * `runTransaction` —lo único que cerraría la carrera— está descartado en este
+ * kit porque exige servidor, que es justo lo que no hay.
+ *
+ * Además el producto huérfano ya es un estado manejado por la UI: ver `huerfana`
+ * y el texto "(sin definir)" en `ModalProducto.tsx`.
  */
 
 /**
@@ -65,40 +100,34 @@ function exigirNombre(nombre: string): string {
   return limpio;
 }
 
-/** Lee todas las categorías existentes (validadas por el converter). */
-async function leerCategorias(db: Firestore): Promise<Categoria[]> {
-  const snap = await getDocs(collection(db, 'categorias').withConverter(categoriaConverter));
-  return snap.docs.map((d) => d.data());
-}
-
 /**
  * Crea una categoría nueva con nombre normalizado y `orden = max(orden) + 1` (0 si
  * no hay ninguna). El id del documento ES la clave del nombre, nunca un id
  * autogenerado: ahí vive la garantía de unicidad.
  *
- * Lee la colección para calcular el orden y para detectar duplicados. Ese chequeo
- * ya no es la garantía (dos dispositivos offline pueden pasarlo los dos), pero es
- * lo que produce el mensaje amigable; si igual se cuelan las dos escrituras, van
- * al MISMO path y convergen en un solo documento al sincronizar.
- *
+ * @param existentes Categorías ya conocidas por la pantalla (las de su
+ *   suscripción `useCollection`). De ahí salen el chequeo de duplicados y el
+ *   cálculo de `orden`. Un alta en lote DEBE acumular localmente lo que va
+ *   creando y volver a pasarlo acá: la suscripción no se actualiza dentro del
+ *   bucle, y dos altas seguidas con la misma lista se pisarían el `orden`.
  * @throws {CategoriaInvalidaError} si el nombre queda vacío o su clave no sirve
  *   como id de documento.
- * @throws {CategoriaDuplicadaError} si ya existe una categoría con ese nombre.
+ * @throws {CategoriaDuplicadaError} si ya existe una categoría con ese nombre en
+ *   `existentes`. Es el mensaje amigable, no la garantía: ver el doc del módulo.
  */
 export async function crearCategoria(
   db: Firestore,
   nombre: string,
+  existentes: readonly Categoria[],
 ): Promise<{ categoriaId: string }> {
   const nombreLimpio = exigirNombre(nombre);
   const claveNueva = claveCategoria(nombreLimpio);
-  const existentes = await leerCategorias(db);
 
   if (existentes.some((c) => claveCategoria(c.nombre) === claveNueva)) {
     throw new CategoriaDuplicadaError(`Ya existe una categoría llamada "${nombreLimpio}".`);
   }
 
-  const orden =
-    existentes.length === 0 ? 0 : Math.max(...existentes.map((c) => c.orden)) + 1;
+  const orden = existentes.length === 0 ? 0 : Math.max(...existentes.map((c) => c.orden)) + 1;
 
   const ref = doc(db, 'categorias', claveNueva).withConverter(categoriaConverter);
   const categoria: Categoria = { id: claveNueva, nombre: nombreLimpio, orden };
@@ -108,9 +137,9 @@ export async function crearCategoria(
 }
 
 /**
- * Renombra una categoría y propaga el nuevo nombre al campo `categoria` de TODOS
- * los productos que lo referencian (denormalizado), en UN batch atómico: o se
- * renombra y se re-etiquetan todos los productos, o no cambia nada.
+ * Renombra una categoría y propaga el nuevo nombre al campo `categoria` de los
+ * productos que lo referencian (denormalizado), en UN batch atómico: o se
+ * renombra y se re-etiquetan todos, o no cambia nada.
  *
  * El chequeo de duplicados excluye la propia categoría, de modo que corregir solo
  * el uso de mayúsculas ("quesos" → "Quesos") es válido.
@@ -129,18 +158,27 @@ export async function crearCategoria(
  * Efecto colateral útil: renombrar un documento heredado (id autogenerado, previo
  * a la migración de ids) lo reubica en su path canónico.
  *
+ * @param existentes Categorías ya conocidas por la pantalla: de ahí salen la
+ *   categoría actual (para el nombre anterior y el `orden`) y el chequeo de
+ *   duplicados.
+ * @param productos Productos ya conocidos por la pantalla. El fan-out filtra EN
+ *   MEMORIA por `categoria === nombreAnterior` (igualdad exacta, igual que la
+ *   query que reemplaza). Los que la suscripción no haya traído quedan afuera;
+ *   ver la carrera en el doc del módulo.
  * @throws {CategoriaInvalidaError} si el nombre nuevo queda vacío, si su clave no
- *   sirve como id de documento, o si la categoría `categoriaId` no existe.
+ *   sirve como id de documento, o si la categoría `categoriaId` no está en
+ *   `existentes`.
  * @throws {CategoriaDuplicadaError} si otra categoría ya usa ese nombre.
  */
 export async function renombrarCategoria(
   db: Firestore,
   categoriaId: string,
   nombreNuevo: string,
+  existentes: readonly Categoria[],
+  productos: readonly Producto[],
 ): Promise<void> {
   const nombreLimpio = exigirNombre(nombreNuevo);
   const claveNueva = claveCategoria(nombreLimpio);
-  const existentes = await leerCategorias(db);
 
   const actual = existentes.find((c) => c.id === categoriaId);
   if (actual === undefined) {
@@ -156,13 +194,11 @@ export async function renombrarCategoria(
 
   const nombreAnterior = actual.nombre;
 
-  // Productos que referencian el nombre anterior (denormalizado). Query por
-  // igualdad exacta contra el nombre viejo. Escala esperada: decenas de productos,
-  // muy lejos del límite de 500 operaciones del batch de Firestore; si esto
-  // creciera a cientos, habría que paginar el batch.
-  const productosSnap = await getDocs(
-    query(collection(db, 'productos'), where('categoria', '==', nombreAnterior)),
-  );
+  // Productos que referencian el nombre anterior (denormalizado). Igualdad
+  // exacta contra el nombre viejo. Escala esperada: decenas de productos, muy
+  // lejos del límite de 500 operaciones del batch de Firestore; si esto creciera
+  // a cientos, habría que paginar el batch.
+  const aReetiquetar = productos.filter((p) => p.categoria === nombreAnterior);
 
   const batch = writeBatch(db);
   if (claveNueva === categoriaId) {
@@ -183,8 +219,8 @@ export async function renombrarCategoria(
     });
     batch.delete(doc(db, 'categorias', categoriaId));
   }
-  for (const productoDoc of productosSnap.docs) {
-    batch.update(productoDoc.ref, { categoria: nombreLimpio });
+  for (const producto of aReetiquetar) {
+    batch.update(doc(db, 'productos', producto.id), { categoria: nombreLimpio });
   }
   await batch.commit();
 }

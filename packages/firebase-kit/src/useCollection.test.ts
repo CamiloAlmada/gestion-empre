@@ -16,12 +16,19 @@ interface Dato {
   nombre: string;
 }
 
-/** Captura los callbacks next/error que `onSnapshot` recibe por cada suscripción. */
-let onNext: (snap: { docs: { data: () => Dato }[] }) => void;
-let onError: (error: FirestoreError) => void;
+interface SnapshotFalso {
+  docs: { data: () => Dato }[];
+  metadata: { fromCache: boolean };
+}
 
-function snapshotDe(datos: Dato[]) {
-  return { docs: datos.map((dato) => ({ data: () => dato })) };
+/** Captura los callbacks next/error que `onSnapshot` recibe por cada suscripción. */
+let onNext: (snap: SnapshotFalso) => void;
+let onError: (error: FirestoreError) => void;
+/** Opciones (segundo argumento) con las que se llamó a `onSnapshot`, si las hubo. */
+let opcionesRecibidas: { includeMetadataChanges?: boolean } | undefined;
+
+function snapshotDe(datos: Dato[], fromCache = false): SnapshotFalso {
+  return { docs: datos.map((dato) => ({ data: () => dato })), metadata: { fromCache } };
 }
 
 const queryFalsa = { id: 'q1' } as unknown as Query<Dato>;
@@ -29,17 +36,28 @@ const queryFalsa = { id: 'q1' } as unknown as Query<Dato>;
 describe('useCollection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.onSnapshot.mockImplementation(
-      (
-        _query: unknown,
-        next: (snap: { docs: { data: () => Dato }[] }) => void,
-        error: (e: FirestoreError) => void,
-      ) => {
+    opcionesRecibidas = undefined;
+    mocks.onSnapshot.mockImplementation((_query: unknown, ...resto: unknown[]) => {
+      // El hook llama a `onSnapshot` con 3 args (query, next, error) cuando
+      // no se pide `seguirFrescura`, y con 4 (query, options, next, error)
+      // cuando sí — misma distinción que hace la firma real de Firestore.
+      if (resto.length === 2) {
+        const [next, error] = resto as [(snap: SnapshotFalso) => void, (e: FirestoreError) => void];
+        opcionesRecibidas = undefined;
         onNext = next;
         onError = error;
-        return mocks.desuscribir;
-      },
-    );
+      } else {
+        const [opciones, next, error] = resto as [
+          { includeMetadataChanges?: boolean },
+          (snap: SnapshotFalso) => void,
+          (e: FirestoreError) => void,
+        ];
+        opcionesRecibidas = opciones;
+        onNext = next;
+        onError = error;
+      }
+      return mocks.desuscribir;
+    });
   });
 
   afterEach(() => {
@@ -144,5 +162,93 @@ describe('useCollection', () => {
 
     expect(mocks.desuscribir).toHaveBeenCalledTimes(1);
     expect(result.current).toEqual({ datos: [], cargando: false, error: null });
+  });
+
+  describe('con { seguirFrescura: true }', () => {
+    it('sin seguirFrescura: se suscribe sin includeMetadataChanges y sin desdeCache', () => {
+      const { result } = renderHook(() => useCollection(queryFalsa));
+
+      expect(opcionesRecibidas).toBeUndefined();
+      expect(result.current).toEqual({ datos: [], cargando: true, error: null });
+      expect('desdeCache' in result.current).toBe(false);
+    });
+
+    it('antes del primer snapshot: cargando true, desdeCache false, suscribe con includeMetadataChanges', () => {
+      const { result } = renderHook(() => useCollection(queryFalsa, { seguirFrescura: true }));
+
+      expect(opcionesRecibidas).toEqual({ includeMetadataChanges: true });
+      expect(result.current).toEqual({
+        datos: [],
+        cargando: true,
+        error: null,
+        desdeCache: false,
+      });
+    });
+
+    it('primer snapshot desde caché: expone desdeCache true', () => {
+      const { result } = renderHook(() => useCollection(queryFalsa, { seguirFrescura: true }));
+
+      act(() => {
+        onNext(snapshotDe([{ nombre: 'Ana' }], true));
+      });
+
+      expect(result.current).toEqual({
+        datos: [{ nombre: 'Ana' }],
+        cargando: false,
+        error: null,
+        desdeCache: true,
+      });
+    });
+
+    it('confirmación del servidor con los mismos datos: llega un snapshot con desdeCache false', () => {
+      const { result } = renderHook(() => useCollection(queryFalsa, { seguirFrescura: true }));
+
+      act(() => {
+        onNext(snapshotDe([{ nombre: 'Ana' }], true));
+      });
+      expect(result.current.desdeCache).toBe(true);
+
+      // Mismos datos, pero ahora confirmados por el servidor. Sin
+      // `includeMetadataChanges: true` este segundo snapshot no se emitiría
+      // porque los datos no cambiaron — por eso se verifica más arriba que
+      // la suscripción se hizo con esa opción.
+      act(() => {
+        onNext(snapshotDe([{ nombre: 'Ana' }], false));
+      });
+
+      expect(result.current).toEqual({
+        datos: [{ nombre: 'Ana' }],
+        cargando: false,
+        error: null,
+        desdeCache: false,
+      });
+    });
+
+    it('se cae la red: el listener vuelve a emitir con desdeCache true', () => {
+      const { result } = renderHook(() => useCollection(queryFalsa, { seguirFrescura: true }));
+
+      act(() => {
+        onNext(snapshotDe([{ nombre: 'Ana' }], false));
+      });
+      expect(result.current.desdeCache).toBe(false);
+
+      act(() => {
+        onNext(snapshotDe([{ nombre: 'Ana' }], true));
+      });
+
+      expect(result.current.desdeCache).toBe(true);
+    });
+
+    it('con query null: no suscribe y devuelve estado inactivo con desdeCache false', () => {
+      const { result } = renderHook(() => useCollection(null, { seguirFrescura: true }));
+
+      expect(mocks.onSnapshot).not.toHaveBeenCalled();
+      expect(result.current).toEqual({
+        datos: [],
+        cargando: false,
+        error: null,
+        desdeCache: false,
+      });
+    });
   });
 });
