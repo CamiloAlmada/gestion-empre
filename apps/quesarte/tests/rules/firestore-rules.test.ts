@@ -1001,6 +1001,13 @@ describe('proveedores (solo admin)', () => {
     );
   });
 
+  it('vendedor NO puede actualizar un proveedor', async () => {
+    // El único verbo sin cobertura de permisos vendedor en este bloque.
+    await assertFails(
+      updateDoc(doc(db(VENDEDOR), 'proveedores', 'prov-1'), { telefono: '099111222' }),
+    );
+  });
+
   it('nadie borra proveedores (ni el admin)', async () => {
     await assertFails(deleteDoc(doc(db(ADMIN), 'proveedores', 'prov-1')));
   });
@@ -1107,6 +1114,18 @@ describe('proveedores (solo admin)', () => {
     await assertFails(updateDoc(doc(db(ADMIN), 'proveedores', 'prov-1'), { fechaAlta: new Date() }));
   });
 
+  it('create con fechaAlta: Date.now() falla', async () => {
+    // `Date.now()` devuelve un número; la regla exige `fechaAlta is timestamp`.
+    // Este test fija que el SDK siempre convierte con `new Date()`, no `Date.now()`.
+    await assertFails(
+      setDoc(doc(db(ADMIN), 'proveedores', 'prov-fecha-mala'), {
+        nombre: 'Test',
+        fechaAlta: Date.now(),
+        activo: true,
+      }),
+    );
+  });
+
   it('create con pagos no-lista → falla', async () => {
     await assertFails(
       setDoc(doc(db(ADMIN), 'proveedores', 'prov-x'), proveedorCompleto({ pagos: 'x' })),
@@ -1124,6 +1143,16 @@ describe('proveedores (solo admin)', () => {
       setDoc(
         doc(db(ADMIN), 'proveedores', 'prov-x'),
         proveedorCompleto({ pagos: [{ banco: 'BROU' }] }),
+      ),
+    );
+  });
+
+  it('create con pago con banco vacío falla', async () => {
+    // La regla exige `p.banco.size() >= 1`: banco vacío viola la restricción.
+    await assertFails(
+      setDoc(
+        doc(db(ADMIN), 'proveedores', 'prov-banco-vacio'),
+        proveedorCompleto({ pagos: [{ banco: '', cuenta: '123456' }] }),
       ),
     );
   });

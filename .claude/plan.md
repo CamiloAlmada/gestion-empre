@@ -219,13 +219,97 @@ persiste más de ~15s sin toast ni error — ahí aplicaría el fallback
 
 ### Fuera de alcance, anotado
 
-- **Endurecer el shape de `proveedores` en `firestore.rules`**: hoy es
-  `allow create, update: if esAdmin()` y nada más — la colección menos validada
-  del sistema. No interactúa con la unicidad (que no se apoya en reglas), así que
-  va en tanda propia para no agrandar este diff.
+- ~~**Endurecer el shape de `proveedores` en `firestore.rules`**~~ → hecho, ver
+  la sección R4 más abajo.
 - `desactivarProveedor` / `reactivarProveedor` siguen con una sola promesa,
   asimétricos con las otras dos. No leen antes de escribir, así que no lo
   necesitan.
+
+## R4 — Endurecer las reglas de proveedores (2026-07-29)
+
+Commit `730089b` + los tres tests de cierre, en la rama `feat/reglas-proveedores`.
+**Pendiente de push, que en este repo ES desplegar** (ver abajo).
+
+`proveedores` era la colección menos validada del sistema: `allow create,
+update: if esAdmin()` y nada más.
+
+### Decisiones (advisor, llamadas 1 y 2 — no re-discutir)
+
+**`pagos` es una lista de mapas y el lenguaje de reglas no itera.** No hubo que
+inventar nada: el repo ya había resuelto esto en `plantillasWhatsAppValidas` —
+tope de tamaño más validación del **primer elemento como representante**, con el
+límite documentado en vez de disimulado. Se sigue ese precedente. Cubre
+`pagos: ['basura']`, que es lo que rompe al converter, sin desenrollar un loop
+arbitrario.
+
+**La lista vacía se tolera a propósito**: `crearProveedor:246` pasa
+`datos.pagos` sin normalizar, así que exigir `size() >= 1` rompería el alta en
+producción. Verificado, no supuesto.
+
+**`fechaAlta` inmutable** vía `soloCambian` con todo menos ese campo. **`activo`
+sí entra**, porque `desactivar`/`reactivar` pasan por ese mismo update.
+
+**No hay agujero en `soloCambian` con 9 claves**: `proveedorValido()` revalida el
+documento RESULTANTE entero, así que ninguna clave permitida puede quedar con
+tipo inválido.
+
+### Lo que quedó en evidencia al endurecer
+
+**Dos tests preexistentes que nunca fueron fieles a producción.** Escribían
+`fechaAlta: Date.now()` —un número— cuando toda escritura real produce un
+`Timestamp`: `crearProveedor` vía converter, y el seed de demo vía `haceDias`,
+que devuelve un `Date`.
+
+- Uno afirmaba que se podía crear un documento con una forma que el sistema
+  nunca genera. Pasaba porque no había validación, no porque estuviera bien.
+- El otro es peor y lo encontró el orquestador, no el agente: un `assertFails`
+  de permisos que, con el shape ahora inválido, **habría seguido en verde aunque
+  alguien abriera por accidente la escritura al vendedor** — que es exactamente
+  lo que ese test existe para detectar. Un test negativo que pasa por la razón
+  equivocada da confianza falsa.
+
+El `semisenior` chocó con esto, **paró y lo reportó** en vez de relajar la regla
+para que el test pasara. Era la decisión correcta: la regla venía del diseño
+acordado y ablandarla sin consulta habría sido asumir.
+
+### Los 19 `Date.now()` restantes: deuda CONDICIONADA, no pendiente
+
+Quedan 19 en tests de otras colecciones. **No normalizarlos.** El `advisor`
+corrigió un planteo del orquestador acá: para ventas, movimientos y compras el
+número puede ser el shape REAL de producción, y convertirlos a `new Date()` sin
+verificar colección por colección repetiría el mismo bug de infidelidad en
+sentido inverso. Solo se vuelven deuda si esa colección endurece el tipo de
+fecha.
+
+### Auditoría previa al deploy — corrida y limpia
+
+`apps/quesarte/scripts/auditar-proveedores.mjs`, solo lectura (verificado con
+grep: ni un `set`/`update`/`delete`/`add`/`batch`). Recorre **todos** los
+elementos de `pagos`, más estricto que las reglas, y valida
+`fechaAlta instanceof Timestamp` (línea 142).
+
+| Entorno | Documentos | Violaciones |
+| --- | --- | --- |
+| `quesarte-uy-dev` | 3 | 0 |
+| `quesarte-uy` | 1 | 0 |
+
+Era el bloqueante que levantó el `advisor`, y no era teórico: **un documento ya
+guardado que violara el shape nuevo quedaría INEDITABLE para siempre**, y no se
+descubre hasta que el dueño intenta corregir un teléfono y le rebota un
+`permission-denied` opaco.
+
+Correrla necesita credenciales: `GOOGLE_CLOUD_PROJECT=<proyecto> node
+apps/quesarte/scripts/auditar-proveedores.mjs --project <proyecto>`.
+
+### ⚠️ Pushear a `main` ES desplegar
+
+`.github/workflows` corre `firebase deploy --only firestore --project
+quesarte-uy` en el push a `main`. **No hay paso manual intermedio ni ventana
+para arrepentirse.** Cualquier cambio futuro a `firestore.rules` hereda esto:
+auditar primero, pushear después.
+
+Verificación: 200 tests de reglas en verde (eran 179), corridos por el
+orquestador contra el emulador.
 
 ## En espera de la elicitación con Adrián (doc 10)
 

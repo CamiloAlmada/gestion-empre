@@ -206,3 +206,48 @@ primer elemento, tope de 20, y `size() == 0 ||`. Verificado también que
 `soloCambian` para hacer inmutable el `email`, y eso no existe en el repo —
 `soloCambian` se usa en stats, categorías, productos, piezas y ventas—. No
 cambia la recomendación: el mecanismo está bien precedentado igual.
+
+## R4 endurecer las reglas de proveedores — llamada 2 (cierre)
+Fecha: 2026-07-29
+
+**Se le preguntó:** con las reglas y 18 tests ya commiteados (`730089b`) y la
+auditoría corrida limpia en los dos entornos, si alguna escritura legítima puede
+quedar rechazada en un caso no cubierto, si `soloCambian` con 9 claves abre algún
+agujero, qué hacer con los 19 `Date.now()` restantes, y el veredicto para
+desplegar —recordando que pushear a `main` ES desplegar las reglas a producción—.
+
+**RECOMENDACIÓN:** "Pusheá. El endurecimiento es correcto y las tres escrituras
+legítimas están cubiertas: create completo y mínimo, reemplazo total con
+`deleteField()`, y toggle de `activo` sobre un doc auditado. Antes o después del
+push (no bloquea), delegá al trainee tres tests que faltan: (a) vendedor NO
+actualiza proveedores —único verbo sin negativo de permiso en el describe—, (b)
+create de admin con `fechaAlta: Date.now()` → falla, (c) `pagos: [{banco: '',
+cuenta: 'x'}]` → falla. Los 19 `Date.now()`: anotalos como deuda condicionada en
+`.claude/plan.md`, no los toques."
+
+Sobre el agujero de `soloCambian`: no lo hay, porque `proveedorValido()` revalida
+el documento RESULTANTE entero, así que ninguna clave permitida puede quedar con
+tipo inválido.
+
+**SUPUESTOS:** (1) Que la auditoría verifica el TIPO de `fechaAlta`, no solo su
+presencia; no leyó el script línea por línea. (2) Que el seed de dev escribe
+proveedores con shape válido. (3) Que no hay escrituras offline encoladas de una
+versión vieja; riesgo teórico que da por despreciable con un solo admin. (4) Que
+`firebase deploy --only firestore` no falla por índices, porque no hay queries
+nuevas. (5) Que el test de `deleteField()` corre sobre `prov-1`, que sí tiene
+`rut` y `pagos` presentes.
+
+**BLOQUEANTES:** "Ninguno para el push." Para cerrar el supuesto 1, verificar que
+la auditoría valide `fechaAlta instanceof Timestamp`.
+
+**Qué se hizo después:** verificado el supuesto 1 —`auditar-proveedores.mjs:142`
+hace `datos.fechaAlta instanceof Timestamp`—, así que los 4 documentos de ambos
+entornos pasaron esa comprobación y la reserva queda cerrada. Los tres tests
+recomendados se delegaron a `trainee` y entraron: 197 → 200, con 29 líneas
+agregadas y ninguna borrada.
+
+**Divergencias:** me corrigió un planteo mío. Yo propuse anotar los 19
+`Date.now()` como deuda a normalizar, y señaló que **normalizarlos sería repetir
+el mismo bug en sentido inverso**: para ventas, movimientos y compras el número
+puede ser el shape REAL de producción. Solo son deuda si esa colección endurece
+el tipo de fecha. Se anota condicionado, no como pendiente.
