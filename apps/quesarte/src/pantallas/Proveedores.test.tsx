@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useParams } from 'react-router';
 import { ProveedorToasts } from '@gestion/ui';
 import type { Proveedor } from '@gestion/core';
@@ -412,6 +412,105 @@ describe('Proveedores', () => {
       expect(mocks.crearProveedor).toHaveBeenCalledTimes(1);
 
       resolverSincronizacion();
+    });
+
+    // Salida de emergencia del alta colgada: con la red muerta y
+    // `navigator.onLine === true`, la fase 1 podía tardar (hoy tiene techo de
+    // 5 s) y el ack puede no llegar NUNCA. Con los dos botones deshabilitados
+    // el usuario quedaba encerrado hasta recargar la página.
+    describe('cancelar durante el guardado', () => {
+      /** Alta cuya fase 1 queda en vuelo hasta que el test la suelte. */
+      function altaEnVuelo() {
+        let resolver!: (valor: { proveedorId: string; sincronizacion: Promise<void> }) => void;
+        mocks.crearProveedor.mockReturnValue(
+          new Promise((resolve) => {
+            resolver = resolve;
+          }),
+        );
+        return (valor: { proveedorId: string; sincronizacion: Promise<void> }) => resolver(valor);
+      }
+
+      function abrirYGuardar(nombre: string) {
+        fireEvent.click(screen.getAllByRole('button', { name: 'Agregar proveedor' })[0]!);
+        fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: nombre } });
+        fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+      }
+
+      it('"Cancelar" NO se deshabilita mientras se guarda, y cierra el modal', async () => {
+        configurarCollection({ datos: [] });
+        altaEnVuelo();
+
+        renderizar();
+        abrirYGuardar('Quesos del Norte');
+        await waitFor(() => expect(mocks.crearProveedor).toHaveBeenCalledTimes(1));
+
+        const cancelar = screen.getByRole('button', { name: 'Cancelar' }) as HTMLButtonElement;
+        expect(cancelar.disabled).toBe(false);
+        expect((screen.getByRole('button', { name: 'Guardando…' }) as HTMLButtonElement).disabled).toBe(true);
+
+        fireEvent.click(cancelar);
+
+        const dialog = document.querySelector('dialog') as HTMLDialogElement;
+        expect(dialog.open).toBe(false);
+      });
+
+      it('el alta que aterriza después de cancelar NO avisa éxito', async () => {
+        configurarCollection({ datos: [] });
+        const soltarFase1 = altaEnVuelo();
+
+        renderizar();
+        abrirYGuardar('Quesos del Norte');
+        await waitFor(() => expect(mocks.crearProveedor).toHaveBeenCalledTimes(1));
+        fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+
+        await act(async () => {
+          soltarFase1({ proveedorId: 'nuevo', sincronizacion: Promise.resolve() });
+        });
+
+        expect(screen.queryByText('Proveedor creado.')).toBeNull();
+        const dialog = document.querySelector('dialog') as HTMLDialogElement;
+        expect(dialog.open).toBe(false);
+      });
+
+      it('cancelar libera el guardado: el siguiente intento encuentra "Guardar" habilitado', async () => {
+        // Sin esto, un ack que no llega nunca (online, red muerta) dejaría
+        // `guardando` en true para siempre y el modal inutilizable.
+        configurarCollection({ datos: [] });
+        const soltarFase1 = altaEnVuelo();
+
+        renderizar();
+        abrirYGuardar('Quesos del Norte');
+        await waitFor(() => expect(mocks.crearProveedor).toHaveBeenCalledTimes(1));
+        fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+
+        // La fase 1 aterriza con un ack que nunca resuelve: el `finally` de esa
+        // operación no va a correr jamás.
+        await act(async () => {
+          soltarFase1({ proveedorId: 'nuevo', sincronizacion: new Promise<void>(() => {}) });
+        });
+
+        fireEvent.click(screen.getAllByRole('button', { name: 'Agregar proveedor' })[0]!);
+        expect((screen.getByRole('button', { name: 'Guardar' }) as HTMLButtonElement).disabled).toBe(false);
+      });
+
+      it('sin conexión: tras cancelar, la sincronización que rechaza SIGUE avisando (el catch queda enganchado)', async () => {
+        configurarCollection({ datos: [] });
+        mocks.useOnlineStatus.mockReturnValue(false);
+        const soltarFase1 = altaEnVuelo();
+
+        renderizar();
+        abrirYGuardar('Quesos del Norte');
+        await waitFor(() => expect(mocks.crearProveedor).toHaveBeenCalledTimes(1));
+        fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+
+        await act(async () => {
+          soltarFase1({ proveedorId: 'nuevo', sincronizacion: Promise.reject(new Error('offline')) });
+        });
+
+        expect(await screen.findByText('No se pudo sincronizar el proveedor creado.')).toBeTruthy();
+        // Pero no se anuncia éxito de algo que el usuario dio por perdido.
+        expect(screen.queryByText('Guardado sin conexión. Se sincronizará al reconectar.')).toBeNull();
+      });
     });
 
     it('sin conexión: si la sincronización rechaza después, avisa con un toast de fallo (no queda como unhandled rejection)', async () => {

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { collection, orderBy, query } from 'firebase/firestore';
 import type { Proveedor } from '@gestion/core';
@@ -107,6 +107,11 @@ export function Proveedores() {
   const [mostrarInactivos, setMostrarInactivos] = useState(false);
   const [modalAltaAbierto, setModalAltaAbierto] = useState(false);
   const [guardando, setGuardando] = useState(false);
+  // Alta en vuelo cuyo resultado la pantalla todavía toma por suyo. Cancelar la
+  // pone en `null`, y de ahí en más la operación vieja no toca más el estado ni
+  // muestra mensajes (ver `cancelarAlta`). Es un ref y no estado porque lo leen
+  // continuaciones asincrónicas, que verían un valor viejo si fuera estado.
+  const altaEnCursoRef = useRef<object | null>(null);
   // Fuerza resuscripción al "Reintentar" (misma técnica que Stock/Productos:
   // useCollection resuscribe por identidad de query, no por contenido).
   const [intentoId, setIntentoId] = useState(0);
@@ -163,29 +168,64 @@ export function Proveedores() {
    * `enLinea`, qué hacer con la fase 2 (`sincronizacion`, el ack): offline se
    * dispara sin esperar (con su propio `.catch`, para no dejar un unhandled
    * rejection); online se espera antes de avisar éxito.
+   *
+   * Cancelable en cualquier punto (ver `cancelarAlta`). La regla es una sola:
+   * **cancelar silencia el ÉXITO, nunca un fallo.** Una operación abandonada ya
+   * no cierra el modal ni avisa que salió bien —el usuario la dio por perdida—,
+   * pero si termina fallando se avisa igual: la escritura ya había salido, y
+   * ocultarle que no llegó sería peor que el mensaje tardío. `sincronizacion`
+   * conserva su `catch` en los dos caminos (un rechazo sin manejar es un
+   * unhandled rejection).
    */
   async function handleCrear(datos: DatosProveedor) {
+    const alta = {};
+    altaEnCursoRef.current = alta;
+    const vigente = () => altaEnCursoRef.current === alta;
+
     setGuardando(true);
     try {
       const { sincronizacion } = await crearProveedor(db, datos);
 
       if (!enLinea) {
-        setModalAltaAbierto(false);
-        mostrarToast('Guardado sin conexión. Se sincronizará al reconectar.', 'info');
         sincronizacion.catch(() => {
           mostrarToast('No se pudo sincronizar el proveedor creado.', 'error');
         });
+        if (!vigente()) return;
+        setModalAltaAbierto(false);
+        mostrarToast('Guardado sin conexión. Se sincronizará al reconectar.', 'info');
         return;
       }
 
       await sincronizacion;
+      if (!vigente()) return;
       mostrarToast('Proveedor creado.', 'exito');
       setModalAltaAbierto(false);
     } catch (error) {
       mostrarToast(mensajeErrorProveedor(error), 'error');
     } finally {
-      setGuardando(false);
+      if (vigente()) {
+        altaEnCursoRef.current = null;
+        setGuardando(false);
+      }
     }
+  }
+
+  /**
+   * Cierre del modal pedido por el usuario (Cancelar, Escape o backdrop).
+   *
+   * Si había un alta en curso NO la aborta —la escritura ya salió, ver el
+   * contrato en dos fases de `crearProveedor`—: abandona la espera. El proveedor
+   * puede terminar existiendo, y en ese caso aparece en el listado; lo que no
+   * pasa es que la pantalla avise éxito de algo que el usuario dio por perdido.
+   *
+   * Baja `guardando` acá y no en el `finally` de la operación abandonada, que
+   * puede no llegar nunca (online, con el ack colgado): si no, el próximo intento
+   * abriría el modal con "Guardar" deshabilitado para siempre.
+   */
+  function cancelarAlta() {
+    altaEnCursoRef.current = null;
+    setGuardando(false);
+    setModalAltaAbierto(false);
   }
 
   let contenido;
@@ -253,7 +293,7 @@ export function Proveedores() {
         proveedor={null}
         guardando={guardando}
         onGuardar={(datos) => void handleCrear(datos)}
-        onCerrar={() => setModalAltaAbierto(false)}
+        onCerrar={cancelarAlta}
       />
     </div>
   );

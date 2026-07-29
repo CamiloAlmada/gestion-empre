@@ -202,7 +202,42 @@ divergencia con `actualizarCliente` que después de este cambio ya no existe.
 Verificado por el orquestador: `pnpm turbo lint test build --force` 12/12,
 365 tests en firebase-kit (eran 360), 179 de reglas, 1820 en la app.
 
-### Verificación manual pendiente (no bloquea el merge)
+### 🔴 Verificación de "red mentirosa" — CORRIDA, y FALLÓ (2026-07-29)
+
+Corrida con Playwright contra el dev server y `quesarte-uy-dev`, con sesión de
+admin iniciada por el dueño (el orquestador no ingresa credenciales).
+
+**Método**: se parchearon `fetch` y `XMLHttpRequest` para que las requests a
+`firestore.googleapis.com` **cuelguen** —ni respondan ni fallen—, dejando
+`navigator.onLine` en `true`. Es la simulación fiel del captive portal, y es
+justamente lo que el toggle de offline del navegador NO reproduce: ese dispara
+`useOnlineStatus` y ejercita otro camino.
+
+| Escenario | Resultado |
+| --- | --- |
+| Red mentirosa (2 requests colgadas) | **"Guardando…" a los 48s, nunca resolvió** |
+| Control, sin bloqueo | **535 ms**, modal cerrado |
+
+**Además, el supuesto 2 del `advisor` quedó confirmado y es peor de lo previsto:
+los dos botones del modal están `disabled` mientras `guardando`** — "Cancelar"
+incluido. El usuario no tiene ninguna salida: ni guarda, ni cancela, ni cierra.
+Queda encerrado hasta recargar la página, perdiendo la compra a medio armar.
+
+**Causa**: `crearProveedor` hace `await leerProveedores(db)` (un `getDocs`) antes
+de escribir. Con la red muerta pero `onLine` en `true`, el SDK **no cae a caché**:
+espera al servidor. El supuesto 1 del `advisor` en la llamada 2 —"`getDocs` cae a
+caché cuando el backend es inalcanzable"— resultó **FALSO** en este escenario.
+
+Nota: la escritura NUNCA llegó a dispararse, porque el cuelgue es en la fase 1,
+antes del `setDoc`. O sea que no quedó un proveedor fantasma encolado.
+
+**Arreglo intentado y resultado PARTIDO — ver R5 abajo.**
+
+**Residuo del control**: el test creó el proveedor `Control Sin Bloqueo` en
+`quesarte-uy-dev`. No se puede borrar desde el cliente (`allow delete: if
+false`); hay que desactivarlo desde la app o borrarlo con Admin SDK.
+
+### Procedimiento de la verificación (para repetirla)
 
 El `advisor` la dio por no bloqueante: el riesgo que introduce esta rama (la
 lectura de la fase 1) está acotado por el fallback a caché del SDK, y el cuelgue
@@ -310,6 +345,63 @@ auditar primero, pushear después.
 
 Verificación: 200 tests de reglas en verde (eran 179), corridos por el
 orquestador contra el emulador.
+
+## R5 — Fallback de la fase 1: la mitad funciona, la otra mitad NO (2026-07-29)
+
+Rama `fix/fase1-red-mentirosa`. Dos arreglos en una tanda; medidos con el mismo
+harness de Playwright que encontró el bug.
+
+| Arreglo | Resultado medido |
+| --- | --- |
+| "Cancelar" habilitado durante el guardado | ✅ **funciona**: cierra el modal en 800 ms y libera `guardando` |
+| Escalera `getDocs` → timeout 5s → `getDocsFromCache` → lista vacía | ❌ **NO funciona**: la fase 1 sigue sin resolver a los 20 s |
+
+### Por qué la escalera no funciona, y por qué los tests no lo agarraron
+
+Muestreo cada 500 ms desde el clic en Guardar: `guardando` sigue en `true` a los
+502, 2012, 6525, 12543 y 20069 ms. **El timeout de 5 s no destraba nada.**
+
+Hipótesis: `getDocsFromCache` **no llega a correr**, porque queda encolado detrás
+del `getDocs` trabado en la cola asíncrona interna del SDK de Firestore. Las dos
+lecturas comparten esa cola, así que el fallback hereda el bloqueo del primario.
+
+**Los tests unitarios no pueden detectar esto, por construcción**: mockean
+`getDocs` y `getDocsFromCache` como funciones independientes. En el mock, colgar
+una no afecta a la otra; en el SDK real, sí. Los 9 tests nuevos pasan y el
+comportamiento sigue roto. Es un recordatorio de que un mock que no modela la
+serialización interna no prueba lo que parece probar.
+
+**El supuesto del `advisor` que había que verificar no era el que fallaba.** Él
+pidió confirmar si `getDocsFromCache` sobre una query *resuelve o rechaza* con
+caché vacía —y el `senior` lo verificó leyendo el bundle del SDK: resuelve—. Pero
+el problema real es anterior: **no llega a ejecutarse**.
+
+### Lo que sí se ganó
+
+"Cancelar" es ahora una salida real, y eso convierte el defecto de *"el usuario
+queda encerrado y pierde la compra"* en *"el spinner sigue, pero se puede
+cancelar y seguir trabajando"*. Es una mejora sustantiva aunque la causa raíz
+siga viva.
+
+El `senior` agregó por su cuenta algo que no estaba en el brief y sin lo cual el
+arreglo no cerraba: **bajar `guardando` al cancelar**. Sin eso, como el
+`await sincronizacion` del camino online no resuelve nunca, el `finally` jamás
+corre y el modal quedaba con "Guardar" deshabilitado para siempre en el intento
+siguiente.
+
+### Hallazgo del `senior`: hay un TERCER caller sin flag
+
+`DetalleProveedorPantalla.tsx:286` usa `ModalProveedor` para la edición, con
+`onCerrar={cerrarModal}` pelado. "Cancelar" ahí quedó habilitado pero sin flag de
+cancelación: si el ack no llega, `guardando` queda en `true` para siempre y el
+próximo "Editar" abre con "Guardar" deshabilitado. **Preexistente** (el modal ya
+cerraba con Escape y backdrop sin mirar `guardando`). Verificado por el
+orquestador. Pendiente: replicar ahí las ~15 líneas de `Proveedores.tsx`.
+
+### Pendiente
+
+Escalado al `advisor` con la evidencia: si la hipótesis de la cola compartida es
+correcta, la escalera hay que reemplazarla, no ajustarla.
 
 ## En espera de la elicitación con Adrián (doc 10)
 

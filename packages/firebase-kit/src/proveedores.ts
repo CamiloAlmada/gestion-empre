@@ -3,6 +3,7 @@ import {
   deleteField,
   doc,
   getDocs,
+  getDocsFromCache,
   setDoc,
   updateDoc,
   type DocumentData,
@@ -39,8 +40,9 @@ import { ProveedorDuplicadoError, ProveedorInvalidoError } from './errores';
  *
  * Entonces: id autogenerado y chequeo leer→comparar→tirar como ÚNICA defensa.
  * Tiene condición de carrera (dos altas simultáneas del mismo nombre pasan las
- * dos) y no cubre al Admin SDK. Se acepta: la colección es solo-admin (a
- * diferencia de `clientes`), en la práctica hay un único admin, y la carrera
+ * dos), no cubre al Admin SDK, y puede saltearse entero si la lectura previa no
+ * llega a tiempo (ver `leerProveedores`). Se acepta: la colección es solo-admin
+ * (a diferencia de `clientes`), en la práctica hay un único admin, y la carrera
  * residual no justifica una colección-ledger con `getAfter` en las reglas.
  *
  * ## Contrato en dos fases
@@ -51,8 +53,9 @@ import { ProveedorDuplicadoError, ProveedorInvalidoError } from './errores';
  * esta forma: si la función esperara el ack, sin conexión NUNCA resolvería, y ni
  * el id nuevo ni el error de duplicado llegarían a la pantalla —que además usa
  * ese id para seguir armando una compra—. La promesa externa sí resuelve
- * offline: `getDocs` responde de la caché de persistencia y el id sale de
- * `doc(collection(...))`, que no necesita red.
+ * offline: el id sale de `doc(collection(...))`, que no necesita red, y la
+ * lectura previa tiene techo de tiempo garantizado (ver `leerProveedores`; NO
+ * alcanza con confiar en que `getDocs` caiga a la caché).
  *
  * Esto es lo que preserva el patrón híbrido de escrituras offline del proyecto
  * (doc 06 §8): la pantalla dispara la escritura, y si está sin conexión cierra el
@@ -173,13 +176,73 @@ function pagosOBorrado(pagos: DatosPago[] | undefined): DocumentData[] | FieldVa
 }
 
 /**
+ * Techo de espera de la lectura previa al chequeo de duplicados, en ms.
+ *
+ * Corto a propósito. El costo de un timeout falso es casi nulo —degrada a un
+ * chequeo que YA era best-effort (ver el doc del módulo)—, mientras que el costo
+ * de esperar de más lo paga el admin mirando "Guardando…" en un modal, con la
+ * compra a medio armar detrás. Ante la duda, cortar antes.
+ */
+export const TIMEOUT_LECTURA_PROVEEDORES_MS = 5_000;
+
+/**
+ * Corre `promesa` con techo de tiempo: si no se asienta en `ms`, rechaza.
+ *
+ * `Promise.race` deja manejado el rechazo tardío de la perdedora (le engancha su
+ * propio handler), así que una `promesa` que rechaza DESPUÉS del vencimiento no
+ * termina en un unhandled rejection.
+ */
+function conTimeout<T>(promesa: Promise<T>, ms: number): Promise<T> {
+  let temporizador: ReturnType<typeof setTimeout> | undefined;
+  const vencimiento = new Promise<never>((_, rechazar) => {
+    temporizador = setTimeout(() => rechazar(new Error('timeout')), ms);
+  });
+  return Promise.race([promesa, vencimiento]).finally(() => clearTimeout(temporizador));
+}
+
+/**
  * Lee todos los proveedores existentes (validados por el converter). Escala
- * esperada: decenas, igual que categorías. Sin conexión responde de la caché de
- * persistencia, que puede estar incompleta: por eso el chequeo es best-effort.
+ * esperada: decenas, igual que categorías.
+ *
+ * ## Escalera de degradación (y por qué la necesita)
+ *
+ * Con la red MUERTA pero `navigator.onLine === true` —captive portal, wifi que
+ * dice estar conectado y no pasa tráfico— `getDocs` NO cae a la caché: se cuelga
+ * esperando al servidor indefinidamente (medido: 48 s sin resolver). Como esta
+ * lectura corre ANTES de escribir, ese cuelgue congelaba el alta entera.
+ *
+ * Entonces, en orden:
+ *
+ * 1. `getDocs` con techo de `TIMEOUT_LECTURA_PROVEEDORES_MS`.
+ * 2. Si vence (o falla), `getDocsFromCache`, que nunca sale a la red.
+ * 3. Si eso también falla, **lista vacía**: la operación sigue sin chequeo de
+ *    duplicados, sin marca en el documento y sin error.
+ *
+ * El paso 3 no es solo el camino del error: `getDocsFromCache` sobre una QUERY
+ * resuelve con un snapshot POSIBLEMENTE VACÍO cuando no hay nada cacheado —a
+ * diferencia de `getDocFromCache` de documento único, que rechaza—, así que el
+ * chequeo también se saltea EN SILENCIO con la caché fría, resolviendo por el
+ * paso 2. Es deliberado: bloquear el alta protegería una garantía que nunca fue
+ * dura, al costo de cortarle el flujo al admin en medio de armar una compra. El
+ * duplicado que evitaría no es catastrófico (parte en dos el historial de un
+ * proveedor y se arregla desactivando una ficha).
  */
 async function leerProveedores(db: Firestore): Promise<Proveedor[]> {
-  const snap = await getDocs(collection(db, 'proveedores').withConverter(proveedorConverter));
-  return snap.docs.map((d) => d.data());
+  const coleccion = collection(db, 'proveedores').withConverter(proveedorConverter);
+
+  try {
+    const snap = await conTimeout(getDocs(coleccion), TIMEOUT_LECTURA_PROVEEDORES_MS);
+    return snap.docs.map((d) => d.data());
+  } catch {
+    // Vencido o rechazado: se intenta la caché, que no sale a la red.
+  }
+
+  try {
+    const snap = await getDocsFromCache(coleccion);
+    return snap.docs.map((d) => d.data());
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -221,7 +284,8 @@ function mensajeDuplicado(existente: Proveedor): string {
  *   `LARGO_MAX_NOMBRE_PROVEEDOR`.
  * @throws {ProveedorDuplicadoError} si ya existe un proveedor con ese nombre
  *   (comparación case-insensitive; el homónimo inactivo también cuenta). En ese
- *   caso no se escribe nada.
+ *   caso no se escribe nada. Solo se detecta si el homónimo estaba en la lectura
+ *   previa, que puede degradar a lista vacía (ver `leerProveedores`).
  */
 export async function crearProveedor(
   db: Firestore,

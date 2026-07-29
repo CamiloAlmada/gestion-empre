@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { ProveedorToasts } from '@gestion/ui';
 import { money, peso, type Compra, type Producto, type Proveedor } from '@gestion/core';
@@ -499,6 +499,104 @@ describe('CompraPantalla', () => {
       ];
       expect(datos.proveedorId).toBe('nuevo-prov');
       expect(datos.proveedorNombre).toBe('Quesos del Sur');
+    });
+
+    // Salida de emergencia del alta colgada: con la red muerta y
+    // `navigator.onLine === true` el guardado podía no resolver nunca, y con
+    // "Cancelar" deshabilitado el admin quedaba encerrado en el modal, con la
+    // compra a medio armar detrás y sin más salida que recargar la página.
+    describe('cancelar durante el guardado', () => {
+      /** Alta inline cuya fase 1 queda en vuelo hasta que el test la suelte. */
+      function altaEnVuelo() {
+        let resolver!: (valor: { proveedorId: string; sincronizacion: Promise<void> }) => void;
+        mocks.crearProveedor.mockReturnValue(
+          new Promise((resolve) => {
+            resolver = resolve;
+          }),
+        );
+        return (valor: { proveedorId: string; sincronizacion: Promise<void> }) => resolver(valor);
+      }
+
+      function abrirYGuardar(nombre: string) {
+        fireEvent.click(screen.getByRole('button', { name: '+ Nuevo' }));
+        fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: nombre } });
+        fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+      }
+
+      it('"Cancelar" sigue habilitado mientras se guarda y cierra el modal', async () => {
+        altaEnVuelo();
+        renderizar();
+
+        abrirYGuardar('La Rural');
+        await waitFor(() => expect(mocks.crearProveedor).toHaveBeenCalledTimes(1));
+
+        const cancelar = screen.getByRole('button', { name: 'Cancelar' }) as HTMLButtonElement;
+        expect(cancelar.disabled).toBe(false);
+
+        fireEvent.click(cancelar);
+        expect(document.querySelector('dialog[open]')).toBeNull();
+      });
+
+      it('el alta que aterriza después de cancelar NO se selecciona en la compra ni avisa éxito', async () => {
+        const soltarFase1 = altaEnVuelo();
+        renderizar();
+
+        abrirYGuardar('La Rural');
+        await waitFor(() => expect(mocks.crearProveedor).toHaveBeenCalledTimes(1));
+        fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+
+        await act(async () => {
+          soltarFase1({ proveedorId: 'nuevo-prov', sincronizacion: Promise.resolve() });
+        });
+
+        expect(screen.queryByText('Proveedor creado.')).toBeNull();
+
+        // La compra conserva el proveedor que ya tenía: el nuevo existe (la
+        // escritura salió), pero no se metió solo en la compra.
+        fireEvent.click(screen.getByRole('button', { name: 'Guardar borrador' }));
+        await waitFor(() => expect(mocks.actualizarBorradorCompra).toHaveBeenCalledTimes(1));
+        const [, , datos] = mocks.actualizarBorradorCompra.mock.calls[0] as [
+          unknown,
+          string,
+          { proveedorId?: string; proveedorNombre: string },
+        ];
+        expect(datos.proveedorId).toBe('prov1');
+        expect(datos.proveedorNombre).toBe('Quesos del Norte');
+      });
+
+      it('cancelar libera el guardado: el siguiente "+ Nuevo" encuentra "Guardar" habilitado', async () => {
+        const soltarFase1 = altaEnVuelo();
+        renderizar();
+
+        abrirYGuardar('La Rural');
+        await waitFor(() => expect(mocks.crearProveedor).toHaveBeenCalledTimes(1));
+        fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+
+        // El ack no llega nunca: el `finally` de esa operación no correrá jamás.
+        await act(async () => {
+          soltarFase1({ proveedorId: 'nuevo-prov', sincronizacion: new Promise<void>(() => {}) });
+        });
+
+        fireEvent.click(screen.getByRole('button', { name: '+ Nuevo' }));
+        expect((screen.getByRole('button', { name: 'Guardar' }) as HTMLButtonElement).disabled).toBe(false);
+      });
+
+      it('sin conexión: tras cancelar, la sincronización que rechaza SIGUE avisando (el catch queda enganchado)', async () => {
+        mocks.useOnlineStatus.mockReturnValue(false);
+        const soltarFase1 = altaEnVuelo();
+        renderizar();
+
+        abrirYGuardar('La Rural');
+        await waitFor(() => expect(mocks.crearProveedor).toHaveBeenCalledTimes(1));
+        fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+
+        await act(async () => {
+          soltarFase1({ proveedorId: 'nuevo-prov', sincronizacion: Promise.reject(new Error('offline')) });
+        });
+
+        expect(await screen.findByText('No se pudo sincronizar el proveedor creado.')).toBeTruthy();
+        expect(screen.queryByText('Guardado sin conexión. Se sincronizará al reconectar.')).toBeNull();
+      });
     });
 
     it('el botón "+ Nuevo" ya no se deshabilita sin conexión (la creación funciona offline) y no queda el aviso viejo', () => {

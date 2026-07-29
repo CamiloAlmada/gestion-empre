@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Proveedor } from '@gestion/core';
 import {
   crearProveedor,
@@ -6,6 +6,7 @@ import {
   desactivarProveedor,
   reactivarProveedor,
   LARGO_MAX_NOMBRE_PROVEEDOR,
+  TIMEOUT_LECTURA_PROVEEDORES_MS,
   type DatosProveedor,
 } from './proveedores';
 import { ProveedorDuplicadoError, ProveedorInvalidoError } from './errores';
@@ -15,9 +16,15 @@ import { ProveedorDuplicadoError, ProveedorInvalidoError } from './errores';
 // chequeo de duplicados lee la colección antes de escribir. El estado leído lo
 // controla cada test vía `estado.proveedores`; el converter no interviene, el
 // snapshot devuelve las entidades tal cual.
+//
+// `getDocs`/`getDocsFromCache` son `vi.fn()` (con la implementación por defecto
+// puesta en `beforeEach`) para que los tests de la escalera de degradación
+// puedan hacerlas colgar o rechazar sin tocar el resto de la suite.
 const mocks = vi.hoisted(() => ({
   setDoc: vi.fn(),
   updateDoc: vi.fn(),
+  getDocs: vi.fn(),
+  getDocsFromCache: vi.fn(),
   estado: { proveedores: [] as Proveedor[] },
   contador: { n: 0 },
   // Sentinela de `deleteField()`: el mock devuelve SIEMPRE esta misma referencia,
@@ -55,20 +62,27 @@ vi.mock('firebase/firestore', () => ({
     }
     return crearRef(segmentos.join('/'), segmentos[segmentos.length - 1] ?? '');
   },
-  getDocs: (fuente: ColeccionFalsa) => {
-    if (fuente.__collection !== 'proveedores') {
-      throw new Error(`getDocs inesperado sobre ${fuente.__collection}`);
-    }
-    return Promise.resolve({
-      docs: mocks.estado.proveedores.map((p) => ({ id: p.id, data: () => p })),
-    });
-  },
+  getDocs: (fuente: ColeccionFalsa) => mocks.getDocs(fuente),
+  getDocsFromCache: (fuente: ColeccionFalsa) => mocks.getDocsFromCache(fuente),
   setDoc: (ref: RefFalsa, datos: unknown) => mocks.setDoc(ref, datos),
   updateDoc: (ref: RefFalsa, datos: unknown) => mocks.updateDoc(ref, datos),
   deleteField: () => mocks.borrar,
 }));
 
 const db = {} as never;
+
+/** Snapshot falso de la colección, con lo que haya en `estado.proveedores`. */
+function snapshotDeProveedores(fuente: ColeccionFalsa) {
+  if (fuente.__collection !== 'proveedores') {
+    throw new Error(`lectura inesperada sobre ${fuente.__collection}`);
+  }
+  return { docs: mocks.estado.proveedores.map((p) => ({ id: p.id, data: () => p })) };
+}
+
+/** Promesa que nunca se asienta: la red mentirosa que originó la escalera. */
+function colgada<T>(): Promise<T> {
+  return new Promise<T>(() => {});
+}
 
 /** Payload del `updateDoc` que se disparó (falla si no hubo ninguno). */
 function cambiosEscritos(): Record<string, unknown> {
@@ -99,6 +113,12 @@ beforeEach(() => {
   mocks.estado.proveedores = [];
   mocks.setDoc.mockResolvedValue(undefined);
   mocks.updateDoc.mockResolvedValue(undefined);
+  mocks.getDocs.mockImplementation((fuente: ColeccionFalsa) =>
+    Promise.resolve(snapshotDeProveedores(fuente)),
+  );
+  mocks.getDocsFromCache.mockImplementation((fuente: ColeccionFalsa) =>
+    Promise.resolve(snapshotDeProveedores(fuente)),
+  );
 });
 
 describe('crearProveedor', () => {
@@ -462,6 +482,119 @@ describe('actualizarProveedor', () => {
 
       expect(mocks.updateDoc).toHaveBeenCalledTimes(1);
     });
+  });
+});
+
+// El bug que la motivó: con la red MUERTA pero `navigator.onLine === true`
+// (captive portal), `getDocs` no cae a la caché — se cuelga esperando al
+// servidor (medido: 48 s sin resolver) —, y como corre ANTES de escribir,
+// congelaba el alta entera con el modal en "Guardando…".
+describe('lectura previa: escalera de degradación', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('con getDocs colgado, la fase 1 resuelve al vencer el timeout y dispara el setDoc', async () => {
+    mocks.getDocs.mockReturnValue(colgada());
+
+    const promesa = crearProveedor(db, { nombre: 'La Rural' });
+    let resuelta = false;
+    void promesa.then(() => {
+      resuelta = true;
+    });
+
+    await vi.advanceTimersByTimeAsync(TIMEOUT_LECTURA_PROVEEDORES_MS - 1);
+    expect(resuelta).toBe(false); // antes del techo sigue esperando al servidor
+
+    await vi.advanceTimersByTimeAsync(1);
+    const { proveedorId } = await promesa;
+
+    expect(proveedorId).toMatch(/^auto-/);
+    expect(mocks.setDoc).toHaveBeenCalledTimes(1);
+    expect(mocks.getDocsFromCache).toHaveBeenCalledTimes(1);
+  });
+
+  it('con getDocs colgado y la caché RECHAZANDO, el alta procede igual', async () => {
+    mocks.getDocs.mockReturnValue(colgada());
+    mocks.getDocsFromCache.mockRejectedValue(new Error('unavailable'));
+
+    const promesa = crearProveedor(db, { nombre: 'La Rural' });
+    await vi.advanceTimersByTimeAsync(TIMEOUT_LECTURA_PROVEEDORES_MS);
+
+    const { proveedorId } = await promesa;
+    expect(proveedorId).toMatch(/^auto-/);
+    expect(mocks.setDoc).toHaveBeenCalledTimes(1);
+  });
+
+  it('con getDocs colgado y la caché RESOLVIENDO VACÍO, el alta procede igual', async () => {
+    // Comportamiento real del SDK sobre una QUERY: `getDocsFromCache` resuelve
+    // con un snapshot vacío en vez de rechazar. El chequeo se saltea en
+    // silencio, que es lo decidido.
+    mocks.getDocs.mockReturnValue(colgada());
+    mocks.getDocsFromCache.mockResolvedValue({ docs: [] });
+
+    const promesa = crearProveedor(db, { nombre: 'La Rural' });
+    await vi.advanceTimersByTimeAsync(TIMEOUT_LECTURA_PROVEEDORES_MS);
+
+    const { proveedorId } = await promesa;
+    expect(proveedorId).toMatch(/^auto-/);
+    expect(mocks.setDoc).toHaveBeenCalledTimes(1);
+  });
+
+  it('un duplicado que SÍ está en la caché sigue siendo duplicado tras el timeout', async () => {
+    mocks.estado.proveedores = [proveedor({ id: 'p1', nombre: 'La Rural' })];
+    mocks.getDocs.mockReturnValue(colgada());
+
+    const promesa = crearProveedor(db, { nombre: 'la rural' });
+    const afirmacion = expect(promesa).rejects.toThrow(ProveedorDuplicadoError);
+    await vi.advanceTimersByTimeAsync(TIMEOUT_LECTURA_PROVEEDORES_MS);
+    await afirmacion;
+
+    expect(mocks.setDoc).not.toHaveBeenCalled();
+  });
+
+  it('un getDocs que RECHAZA también degrada a la caché, sin romper el alta', async () => {
+    mocks.getDocs.mockRejectedValue(new Error('unavailable'));
+
+    const { proveedorId } = await crearProveedor(db, { nombre: 'La Rural' });
+
+    expect(proveedorId).toMatch(/^auto-/);
+    expect(mocks.getDocsFromCache).toHaveBeenCalledTimes(1);
+  });
+
+  it('actualizarProveedor comparte la escalera: con getDocs colgado igual escribe', async () => {
+    mocks.getDocs.mockReturnValue(colgada());
+
+    const promesa = actualizarProveedor(db, 'p1', { nombre: 'La Rural' });
+    await vi.advanceTimersByTimeAsync(TIMEOUT_LECTURA_PROVEEDORES_MS);
+    await promesa;
+
+    expect(mocks.updateDoc).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('lectura previa: camino normal', () => {
+  it('con getDocs respondiendo, NO se toca la caché', async () => {
+    mocks.estado.proveedores = [proveedor({ id: 'p1', nombre: 'Lácteos Colonia' })];
+
+    await crearProveedor(db, { nombre: 'La Rural' });
+
+    expect(mocks.getDocs).toHaveBeenCalledTimes(1);
+    expect(mocks.getDocsFromCache).not.toHaveBeenCalled();
+  });
+
+  it('no deja temporizadores colgados tras una lectura normal', async () => {
+    vi.useFakeTimers();
+    try {
+      await crearProveedor(db, { nombre: 'La Rural' });
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

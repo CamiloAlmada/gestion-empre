@@ -7,9 +7,14 @@ export interface ModalProveedorProps {
   abierto: boolean;
   /** `null` = alta. */
   proveedor: Proveedor | null;
-  /** `true` mientras `onGuardar` está resolviendo (deshabilita los botones). */
+  /** `true` mientras `onGuardar` está resolviendo (deshabilita SOLO "Guardar"). */
   guardando: boolean;
   onGuardar: (datos: DatosProveedor) => void;
+  /**
+   * Cierre pedido por el usuario: botón "Cancelar", Escape o click en el
+   * backdrop. Puede llegar MIENTRAS `guardando` es `true` (ver el JSDoc del
+   * componente): el caller tiene que tratarlo como abandono de la espera.
+   */
   onCerrar: () => void;
 }
 
@@ -52,6 +57,20 @@ function pagoADraft(pago: DatosPago): PagoBorrador {
  * `pagos[]` se edita como lista de filas (agregar/quitar cuenta): cada fila
  * exige `banco` y `cuenta` no vacíos si existe (docs/07, `DatosPago`); los
  * demás campos del proveedor son opcionales salvo `nombre`.
+ *
+ * ## "Cancelar" NUNCA se deshabilita, ni siquiera guardando
+ *
+ * Con `guardando` solo se deshabilita "Guardar" (para no disparar dos altas).
+ * Deshabilitar también "Cancelar" dejaba al usuario ENCERRADO cuando el guardado
+ * se colgaba —red muerta con `navigator.onLine === true`—: ni guardaba, ni
+ * cancelaba, y la única salida era recargar la página, perdiendo la compra que
+ * estaba armando.
+ *
+ * Ojo con la semántica, que es contraintuitiva: cancelar NO evita que el
+ * proveedor se cree. La escritura ya salió cuando `onGuardar` empezó a esperar
+ * (contrato en dos fases de `crearProveedor`). Lo que cancela es LA ESPERA: el
+ * caller cierra el modal y deja de tomar el resultado por suyo (no selecciona el
+ * proveedor, no avisa éxito).
  */
 export function ModalProveedor({ abierto, proveedor, guardando, onGuardar, onCerrar }: ModalProveedorProps) {
   const esAlta = proveedor === null;
@@ -154,7 +173,9 @@ export function ModalProveedor({ abierto, proveedor, guardando, onGuardar, onCer
       titulo={esAlta ? 'Nuevo proveedor' : 'Editar proveedor'}
       acciones={
         <>
-          <Button variante="secundaria" onClick={onCerrar} disabled={guardando}>
+          {/* Sin `disabled`: es la salida de emergencia si el guardado se
+              cuelga (ver el JSDoc del componente). */}
+          <Button variante="secundaria" onClick={onCerrar}>
             Cancelar
           </Button>
           <Button onClick={handleGuardarClick} disabled={guardando}>

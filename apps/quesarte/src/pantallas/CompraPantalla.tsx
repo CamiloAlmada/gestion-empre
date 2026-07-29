@@ -167,6 +167,10 @@ export function CompraPantalla() {
 
   const [modalProveedorAbierto, setModalProveedorAbierto] = useState(false);
   const [guardandoProveedor, setGuardandoProveedor] = useState(false);
+  // Alta inline en vuelo cuyo resultado la pantalla todavía toma por suyo.
+  // Cancelar la pone en `null` (ver `cancelarAltaProveedor`). Ref y no estado
+  // porque la leen continuaciones asincrónicas, que verían un valor viejo.
+  const altaProveedorEnCursoRef = useRef<object | null>(null);
   const [selectorProductoAbierto, setSelectorProductoAbierto] = useState(false);
   const [productoParaItem, setProductoParaItem] = useState<Producto | null>(null);
   const [gastoEnEdicion, setGastoEnEdicion] = useState<{ indice: number; gasto: GastoCompra } | null>(null);
@@ -322,30 +326,72 @@ export function CompraPantalla() {
    * conexión — a diferencia de la versión anterior, que le decía al usuario
    * que la creación había fallado mientras la escritura quedaba encolada
    * igual, empujándolo a reintentar y duplicar la ficha al reconectar.
+   *
+   * Cancelable en cualquier punto (ver `cancelarAltaProveedor`). La regla es una
+   * sola: **cancelar silencia el ÉXITO, nunca un fallo.** Una operación
+   * abandonada ya no selecciona el proveedor en la compra ni avisa que salió
+   * bien, pero si termina fallando se avisa igual: la escritura ya había salido,
+   * y ocultarle que no llegó sería peor que el mensaje tardío. `sincronizacion`
+   * conserva su `catch` en los dos caminos (un rechazo sin manejar es un
+   * unhandled rejection).
    */
   async function handleCrearProveedorInline(datos: DatosProveedor) {
+    const alta = {};
+    altaProveedorEnCursoRef.current = alta;
+    const vigente = () => altaProveedorEnCursoRef.current === alta;
+
     setGuardandoProveedor(true);
     try {
       const { proveedorId, sincronizacion } = await crearProveedor(db, datos);
-      setProveedor({ id: proveedorId, nombre: datos.nombre.trim() });
 
       if (!enLinea) {
-        setModalProveedorAbierto(false);
-        mostrarToast('Guardado sin conexión. Se sincronizará al reconectar.', 'info');
         sincronizacion.catch(() => {
           mostrarToast('No se pudo sincronizar el proveedor creado.', 'error');
         });
+        if (!vigente()) return;
+        setProveedor({ id: proveedorId, nombre: datos.nombre.trim() });
+        setModalProveedorAbierto(false);
+        mostrarToast('Guardado sin conexión. Se sincronizará al reconectar.', 'info');
         return;
       }
 
+      // El proveedor queda elegido apenas resuelve la fase 1 (el id ya existe),
+      // que es lo que deja seguir armando la compra sin esperar el ack.
+      if (vigente()) setProveedor({ id: proveedorId, nombre: datos.nombre.trim() });
       await sincronizacion;
+      if (!vigente()) return;
       mostrarToast('Proveedor creado.', 'exito');
       setModalProveedorAbierto(false);
     } catch (error) {
       mostrarToast(mensajeErrorProveedorInline(error), 'error');
     } finally {
-      setGuardandoProveedor(false);
+      if (vigente()) {
+        altaProveedorEnCursoRef.current = null;
+        setGuardandoProveedor(false);
+      }
     }
+  }
+
+  /**
+   * Cierre del modal de proveedor pedido por el usuario (Cancelar, Escape o
+   * backdrop).
+   *
+   * Si había un alta en curso NO la aborta —la escritura ya salió, ver el
+   * contrato en dos fases de `crearProveedor`—: abandona la espera. El proveedor
+   * puede terminar existiendo, pero NO queda seleccionado en la compra; si el
+   * usuario lo quiere, lo elige del selector. Es el precio de poder salir del
+   * modal cuando el guardado se cuelga, y es preferible a quedar encerrado con
+   * la compra a medio armar detrás.
+   *
+   * Baja `guardandoProveedor` acá y no en el `finally` de la operación
+   * abandonada, que puede no llegar nunca (online, con el ack colgado): si no,
+   * el próximo "+ Nuevo" abriría el modal con "Guardar" deshabilitado para
+   * siempre.
+   */
+  function cancelarAltaProveedor() {
+    altaProveedorEnCursoRef.current = null;
+    setGuardandoProveedor(false);
+    setModalProveedorAbierto(false);
   }
 
   function abrirSelectorProducto() {
@@ -698,7 +744,7 @@ export function CompraPantalla() {
         proveedor={null}
         guardando={guardandoProveedor}
         onGuardar={(datos) => void handleCrearProveedorInline(datos)}
-        onCerrar={() => setModalProveedorAbierto(false)}
+        onCerrar={cancelarAltaProveedor}
       />
 
       {compraId !== null && (

@@ -250,4 +250,54 @@ agregadas y ninguna borrada.
 `Date.now()` como deuda a normalizar, y señaló que **normalizarlos sería repetir
 el mismo bug en sentido inverso**: para ventas, movimientos y compras el número
 puede ser el shape REAL de producción. Solo son deuda si esa colección endurece
-el tipo de fecha. Se anota condicionado, no como pendiente.
+el tipo de fecha.
+
+---
+
+## R5 fallback de la fase 1 en red mentirosa — llamada 1 (temprano)
+Fecha: 2026-07-29
+
+**Se le preguntó:** con la verificación de red mentirosa ya corrida y FALLADA
+(48s colgado vs 535ms de control), qué semántica de degradación debe tener la
+fase 1 cuando no consigue leer ni del servidor ni de la caché: escribir igual sin
+chequeo (A), fallar con error de dominio (B), o escribir marcando (C). Más: si el
+modal sin salida entra en la misma tanda, y de cuánto el timeout.
+
+**RECOMENDACIÓN:** "Opción A con escalera, dentro de `leerProveedores` (un solo
+punto cubre `crearProveedor` y `actualizarProveedor`): `Promise.race` entre el
+`getDocs` y un timeout de **5 segundos**; al vencer, `getDocsFromCache`; si esa
+falla, lista vacía y el alta procede sin marca ni error. No tocar `clientes.ts`.
+Arreglá 'Cancelar' **en esta misma tanda**: habilitarlo durante `guardando`
+(`ModalProveedor.tsx:157`) con flag de cancelación en el caller para ignorar el
+resultado tardío. Criterio de aceptación: re-correr el harness Playwright de
+captive portal, modal cerrado en <6 s."
+
+Razón de 5s y no 15: "el costo de un falso timeout es casi nulo (degrada a un
+chequeo ya best-effort), así que conviene errar por corto". El umbral de 15s era
+para diagnóstico, no para UX.
+
+**SUPUESTOS:** (1) `getDocsFromCache` sobre una QUERY resuelve con snapshot
+posiblemente vacío en vez de rechazar —a diferencia de `getDocFromCache` de
+documento único—. Él mismo marca que **es el mismo tipo de supuesto que acaba de
+resultar falso**, y por eso pide verificarlo con el harness y no con la doc.
+(2) El `getDocs` perdedor del race muere solo sin efecto observable. (3) El flag
+de cancelación se puede hacer sin refactor del estado del modal. (4)
+`ModalProveedor` tiene dos callers y hay que replicar el flag en ambos. (5) No
+revisó si otros modales deshabilitan "Cancelar" igual; lo deja como follow-up.
+
+**BLOQUEANTES:** (1) Confirmar empíricamente `getDocsFromCache` con caché vacía.
+(2) Dónde corta la cancelación en `handleCrearProveedorInline`: necesita ver el
+handler para afirmar si el flag evita el `setDoc` o solo el setState tardío.
+
+**Qué se hizo después:** resuelto el bloqueante 2 leyendo el handler. **El flag
+NO puede evitar la escritura**: `crearProveedor` dispara el `setDoc` al final de
+la fase 1, así que cuando el `await` retorna el alta ya salió. Aplica entonces la
+semántica que él mismo dejó pre-autorizada: "Cancelar cierra el modal y abandona
+la espera, y si el alta llega tarde el proveedor existe pero no se usa en la
+compra". Se delega al `senior` con eso decidido. El bloqueante 1 va como criterio
+de aceptación de la tarea.
+
+**Divergencias:** **un error MÍO en el brief**, que él detectó: afirmé que
+`actualizarCliente` hace lectura previa y por lo tanto tenía el mismo cuelgue.
+Es falso — no tiene un solo `getDocs`, deriva el `telefonoE164` localmente y va
+directo al `updateDoc`. Verificado. El alcance se achica a `proveedores.ts`. Se anota condicionado, no como pendiente.
