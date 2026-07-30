@@ -173,7 +173,7 @@ describe('useCollection', () => {
       expect('desdeCache' in result.current).toBe(false);
     });
 
-    it('antes del primer snapshot: cargando true, desdeCache false, suscribe con includeMetadataChanges', () => {
+    it('antes del primer snapshot: cargando true, desdeCache true (sin snapshot confirmado todavía), suscribe con includeMetadataChanges', () => {
       const { result } = renderHook(() => useCollection(queryFalsa, { seguirFrescura: true }));
 
       expect(opcionesRecibidas).toEqual({ includeMetadataChanges: true });
@@ -181,7 +181,7 @@ describe('useCollection', () => {
         datos: [],
         cargando: true,
         error: null,
-        desdeCache: false,
+        desdeCache: true,
       });
     });
 
@@ -239,7 +239,7 @@ describe('useCollection', () => {
       expect(result.current.desdeCache).toBe(true);
     });
 
-    it('con query null: no suscribe y devuelve estado inactivo con desdeCache false', () => {
+    it('con query null: no suscribe y devuelve estado inactivo con desdeCache true (sin snapshot que confirmar)', () => {
       const { result } = renderHook(() => useCollection(null, { seguirFrescura: true }));
 
       expect(mocks.onSnapshot).not.toHaveBeenCalled();
@@ -247,7 +247,28 @@ describe('useCollection', () => {
         datos: [],
         cargando: false,
         error: null,
-        desdeCache: false,
+        desdeCache: true,
+      });
+    });
+
+    it('error de lectura: expone desdeCache true (estado estable, no hay snapshot confirmado vigente)', () => {
+      const { result } = renderHook(() => useCollection(queryFalsa, { seguirFrescura: true }));
+      const error = { code: 'permission-denied' } as FirestoreError;
+
+      act(() => {
+        onNext(snapshotDe([{ nombre: 'Ana' }], false));
+      });
+      expect(result.current.desdeCache).toBe(false);
+
+      act(() => {
+        onError(error);
+      });
+
+      expect(result.current).toEqual({
+        datos: [],
+        cargando: false,
+        error,
+        desdeCache: true,
       });
     });
   });

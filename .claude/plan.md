@@ -469,6 +469,75 @@ mismo patrón `getDocs`-antes-de-escribir, **y sin timeout**. Bajo captive porta
 crear o renombrar una categoría se congela igual. Misma medicina: la pantalla de
 Ajustes tiene su lista suscrita.
 
+## R6 — Categorías sin lecturas del SDK + gate por frescura (2026-07-30)
+
+Rama `feat/categorias-sin-lecturas`, **sin pushear**. `categorias.ts` tenía el
+mismo patrón `getDocs`-antes-de-escribir que ya se arregló en proveedores, y sin
+siquiera el timeout: bajo captive portal, crear o renombrar una categoría se
+congelaba igual.
+
+### La premisa con la que fui a consultar era falsa
+
+Yo temía que sacar la lectura del fan-out degradara un invariante estructural:
+lista de productos incompleta → el batch re-etiqueta de menos → productos
+huérfanos. El `advisor` lo desarmó: **`writeBatch` es atómico en la escritura
+pero NO valida read-set** —`runTransaction` está descartado en el JSDoc del
+módulo porque exigiría servidor—, así que esa carrera **existía igual con
+`getDocs`**. Lo único que la lectura aportaba era frescura, y bajo captive portal
+no la aporta: cuelga. Estaba protegiendo algo que nunca existió.
+
+### Lo que se hizo
+
+| Tarea | Resultado |
+| --- | --- |
+| `useCollection` con `{ seguirFrescura: true }` → expone `desdeCache` | El campo **no existe** —ni en tipo ni en runtime— si no se pide, así que ningún caller puede leerlo y creerlo confiable. Los 29 consumidores existentes, sin tocar |
+| `categorias.ts` sin lecturas | `crearCategoria(db, nombre, existentes)` y `renombrarCategoria(db, id, nombre, existentes, productos)`. Import reducido a `doc, setDoc, writeBatch` |
+| Las pantallas | Gate `enLinea && !desdeCache`; el renombre exige además `productos` confirmado |
+
+**El gate es el cambio que da valor**, no la compilación: `navigator.onLine`
+miente bajo captive portal. La señal honesta es si el último snapshot vino
+confirmado del servidor.
+
+**`handleImportar` acumula localmente.** Su bucle era secuencial *porque* cada
+alta releía la colección; sin eso, las N categorías calculaban el mismo `orden` y
+se pisaban, y el `CategoriaDuplicadaError` que usa para tolerar carreras dejaba
+de dispararse dentro de la tanda.
+
+### El agujero que encontró la consulta de cierre
+
+`desdeCache` arrancaba en `false` y volvía a `false` en error. Como `false`
+significa "confirmado por el servidor", en la carga inicial y **tras un error**
+el hook mentía — la misma clase de señal deshonesta que la tanda venía a
+eliminar.
+
+Dónde mordía, con el caso concreto: la suscripción de `productos` no destructura
+su `error`, así que un fallo ahí dejaba `productos = []` con frescura
+"confirmada", y **el renombre movía la categoría de path sin re-etiquetar un solo
+producto**. Todos huérfanos, en silencio.
+
+La carga inicial es una ventana corta —la persistencia offline está habilitada,
+verificado en `init.ts:49`—, pero **el estado de error es estable**, no una
+ventana. Corregido: el invariante ahora es `desdeCache === false` **si y solo
+si** hay un snapshot vigente confirmado, y está escrito en el JSDoc para que
+nadie lo "arregle" de vuelta pensando que `false` es un default más natural.
+
+### Pendientes anotados
+
+- **Ventana residual, no medida**: si el portal se activa DESPUÉS de un snapshot
+  confirmado y ANTES del clic, el commit cuelga igual. El `advisor` la dejó
+  anotada a propósito y descartó medirla ahora: la escritura encolada converge y
+  el dato no cambiaría el diseño.
+- **`handleImportar` duplica la fórmula del `orden`** de `crearCategoria`. Si esa
+  fórmula cambia en el kit, el acumulado local deriva. Se cierra haciendo que
+  `crearCategoria` devuelva `{ categoriaId, orden }`.
+- **La suscripción de `productos` en `Categorias.tsx` no destructura su `error`**,
+  así que un fallo real no se muestra en UI: solo se refleja indirectamente
+  deshabilitando "Renombrar".
+- **`useDoc` no tiene el equivalente de `seguirFrescura`.** Mismo problema
+  potencial, sin evaluar.
+
+Verificación: `pnpm turbo lint test build --force` 12/12, 1844 tests en la app.
+
 ## En espera de la elicitación con Adrián (doc 10)
 
 No se implementan antes de esa sesión; el objetivo de la sesión es

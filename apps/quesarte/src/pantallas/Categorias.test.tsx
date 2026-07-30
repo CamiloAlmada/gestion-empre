@@ -343,6 +343,24 @@ describe('Categorias', () => {
       expect(screen.getByRole('button', { name: 'Crear categoría' }).hasAttribute('disabled')).toBe(false);
       expect(screen.getByRole('button', { name: 'Bajar Quesos' }).hasAttribute('disabled')).toBe(false);
     });
+
+    // Ata el arreglo de `useCollection` (invariante: `desdeCache === false`
+    // solo con snapshot confirmado por el servidor) a este escenario
+    // concreto: si la suscripción de `productos` está en ERROR —no solo
+    // "todavía sin confirmar"— `useCollection` real ya no devuelve
+    // `desdeCache: false` (antes del fix lo hacía, con `datos: []`), así que
+    // sin este test el bug de productos huérfanos (categoría renombrada sin
+    // re-etiquetar productos porque su lista de `error` quedaba en `[]`
+    // "confirmado") podía reintroducirse en silencio.
+    it('productos con la suscripción en error (desdeCache=true, datos=[]): Renombrar queda deshabilitado', () => {
+      configurarCategorias({ datos: categoriasFalsas, desdeCache: false });
+      estadoProductos = { datos: [], cargando: false, error: new Error('boom'), desdeCache: true };
+      renderizar();
+
+      expect(screen.getAllByRole('button', { name: 'Renombrar' })[0]!.hasAttribute('disabled')).toBe(true);
+      expect(screen.getByRole('button', { name: 'Crear categoría' }).hasAttribute('disabled')).toBe(false);
+      expect(screen.getByRole('button', { name: 'Bajar Quesos' }).hasAttribute('disabled')).toBe(false);
+    });
   });
 
   describe('reordenar', () => {

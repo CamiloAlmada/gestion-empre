@@ -27,6 +27,13 @@ export interface EstadoCollectionConFrescura<T> extends EstadoCollection<T> {
    * `true` si el snapshot vigente proviene de la caché local, todavía sin
    * confirmar por el servidor.
    *
+   * Invariante: `desdeCache === false` si y solo si hay un snapshot vigente
+   * CONFIRMADO POR EL SERVIDOR. En cualquier otro estado —inicial, recién
+   * (re)suscripto, con `query === null`, o tras un error de la suscripción—
+   * no hay ningún dato confirmado, así que `desdeCache` vale `true`. `false`
+   * es la excepción que hay que ganarse con un snapshot real del servidor,
+   * nunca el default.
+   *
    * Es una señal honesta de conectividad real: a diferencia de
    * `navigator.onLine`, no miente en un escenario de "captive portal" (el
    * wifi dice estar conectado, pero no pasa tráfico). Si `desdeCache` es
@@ -82,23 +89,31 @@ export function useCollection<T>(
     datos: [],
     cargando: query !== null,
     error: null,
-    desdeCache: false,
+    // Sin snapshot confirmado todavía (ver invariante en el JSDoc de
+    // `desdeCache`): el estado inicial no es un dato confirmado por el
+    // servidor.
+    desdeCache: true,
   });
 
   useEffect(() => {
     if (query === null) {
-      setEstado({ datos: [], cargando: false, error: null, desdeCache: false });
+      // No hay query, así que tampoco hay snapshot que confirmar: por el
+      // mismo invariante, `desdeCache` no puede ser `false` acá.
+      setEstado({ datos: [], cargando: false, error: null, desdeCache: true });
       return;
     }
 
-    setEstado({ datos: [], cargando: true, error: null, desdeCache: false });
+    setEstado({ datos: [], cargando: true, error: null, desdeCache: true });
 
     const alFallar = (error: FirestoreError) => {
       // Siempre a consola: los errores de Firestore traen información
       // accionable (p. ej. el link de creación de un índice faltante en
       // failed-precondition) que la UI genérica de error no muestra.
       console.error('[useCollection] Error de Firestore:', error);
-      setEstado({ datos: [], cargando: false, error, desdeCache: false });
+      // El error deja de haber un snapshot confirmado vigente: `desdeCache`
+      // pasa a `true` y se queda ahí (a diferencia de la ventana corta de la
+      // carga inicial, este es un estado estable hasta que se reintente).
+      setEstado({ datos: [], cargando: false, error, desdeCache: true });
     };
 
     // Dos callbacks separados (en vez de uno que siempre lea
