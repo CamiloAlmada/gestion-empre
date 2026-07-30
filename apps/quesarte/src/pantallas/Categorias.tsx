@@ -50,11 +50,16 @@ function nombresEnUso(productos: Producto[]): string[] {
  * suscripciones (`categorias` para el listado, `productos` solo para
  * calcular los candidatos de seed) — ya no hay padre con quien compartirlas.
  *
- * Todas las mutaciones exigen conexión (a diferencia del resto de la app):
- * leen antes de escribir (chequeo de duplicados, orden a incrementar,
- * producto anterior a renombrar) y esa lectura previa no es confiable
- * offline — mismo criterio que tenía `ModalCategorias` y que la invitación de
- * usuarios (`ModalInvitarUsuario`).
+ * Todas las mutaciones exigen conexión CONFIRMADA (a diferencia del resto de
+ * la app): `crearCategoria`/`renombrarCategoria` ya no leen de Firestore
+ * (reciben `categorias`/`productos` por parámetro, ver su JSDoc en
+ * `firebase-kit`), pero esos datos vienen de estas mismas suscripciones y
+ * pueden estar stale mientras no estén confirmados por el servidor. Por eso
+ * el gate no es `enLinea` (que bajo "captive portal" miente: dice `true` sin
+ * que pase tráfico) sino `desdeCache` de `useCollection({ seguirFrescura:
+ * true })` — la señal honesta de si hay servidor del otro lado. Mismo
+ * criterio de fondo que tenía `ModalCategorias` (evitar mutar contra datos
+ * potencialmente desactualizados), ajustado a la señal correcta.
  */
 export function Categorias() {
   const enLinea = useOnlineStatus();
@@ -84,17 +89,38 @@ export function Categorias() {
     () => query(coleccionCategorias, orderBy('orden')),
     [intentoId],
   );
-  const { datos: categorias, cargando, error } = useCollection(consultaCategorias);
+  const {
+    datos: categorias,
+    cargando,
+    error,
+    desdeCache: categoriasDesdeCache,
+  } = useCollection(consultaCategorias, { seguirFrescura: true });
 
-  // Catálogo completo (sin filtrar por `activo`), solo para detectar nombres
-  // de categoría "en uso" (texto libre histórico) candidatos al seed inicial
-  // — no se renderiza, así que no importa si todavía está cargando.
+  // Catálogo completo (sin filtrar por `activo`): además de detectar nombres
+  // de categoría "en uso" (texto libre histórico) candidatos al seed inicial,
+  // ahora también se le pasa a `crearCategoria`/`renombrarCategoria` (ya no
+  // leen de Firestore, ver su JSDoc en firebase-kit) y a su frescura entra en
+  // el gate del renombre (el fan-out re-etiqueta productos).
   const consultaProductos = useMemo(() => query(coleccionProductos, orderBy('nombre')), []);
-  const { datos: productos } = useCollection(consultaProductos);
+  const { datos: productos, desdeCache: productosDesdeCache } = useCollection(consultaProductos, {
+    seguirFrescura: true,
+  });
 
   const candidatosSeed = useMemo(() => nombresEnUso(productos), [productos]);
   const mostrarSeed =
     !cargando && error === null && categorias.length === 0 && candidatosSeed.length > 0;
+
+  // La señal honesta de "hay servidor del otro lado" es si el ÚLTIMO
+  // snapshot vino de la caché (`desdeCache`), no `navigator.onLine`: bajo
+  // "captive portal" el wifi dice estar conectado (`enLinea` en `true`) pero
+  // no pasa tráfico, y un `getDocs`/`setDoc` esperando confirmación se
+  // cuelga. `enLinea` puede elegir el TEXTO de un aviso, pero NUNCA es lo
+  // único que decide si una mutación está permitida — esa regla ya vale en
+  // el resto del repo (ver `proveedores.ts`).
+  const puedeEscribir = enLinea && !categoriasDesdeCache;
+  // Renombrar, además, re-etiqueta productos (fan-out denormalizado): exige
+  // que esa suscripción también esté confirmada por el servidor.
+  const puedeRenombrar = puedeEscribir && !productosDesdeCache;
 
   function reintentar() {
     setIntentoId((n) => n + 1);
@@ -109,7 +135,7 @@ export function Categorias() {
     setErrorCrear(undefined);
     setCreando(true);
     try {
-      await crearCategoria(db, nombreLimpio);
+      await crearCategoria(db, nombreLimpio, categorias);
       mostrarToast('Categoría creada.', 'exito');
       setNombreNuevo('');
     } catch (err) {
@@ -143,7 +169,7 @@ export function Categorias() {
     setErrorRenombrar(undefined);
     setRenombrando(edicion.id);
     try {
-      await renombrarCategoria(db, edicion.id, nombreLimpio);
+      await renombrarCategoria(db, edicion.id, nombreLimpio, categorias, productos);
       mostrarToast('Categoría renombrada.', 'exito');
       setEdicion(null);
     } catch (err) {
@@ -158,7 +184,7 @@ export function Categorias() {
   }
 
   async function intercambiar(a: Categoria, b: Categoria) {
-    if (!enLinea || reordenando !== null) return;
+    if (!puedeEscribir || reordenando !== null) return;
     setReordenando(a.id);
     try {
       await intercambiarOrdenCategorias(db, a, b);
@@ -181,21 +207,38 @@ export function Categorias() {
 
   /**
    * Crea una categoría por cada nombre en uso todavía sin definir, en orden
-   * alfabético (queda como `orden` inicial). Secuencial (no `Promise.all`):
-   * `crearCategoria` calcula `orden = max(orden) + 1` leyendo la colección en
-   * cada llamada, así que dos altas en paralelo pisarían el mismo `orden`.
+   * alfabético (queda como `orden` inicial). Secuencial (no `Promise.all`),
+   * pero YA NO porque `crearCategoria` releía la colección en cada llamada
+   * (eso cambió: ahora recibe `existentes` por parámetro, ver su JSDoc en
+   * `firebase-kit`) — sino porque el bucle tiene que ACUMULAR LOCALMENTE lo
+   * que va creando. Si en cambio le pasara siempre `categorias` (la lista
+   * suscrita, fija durante todo el bucle), las N altas calcularían el MISMO
+   * `orden` (`max + 1` sobre una lista que no cambia) y quedarían todas
+   * pisadas en la misma posición; y el `CategoriaDuplicadaError` que este
+   * bucle usa para tolerar carreras dejaría de dispararse DENTRO de la propia
+   * tanda, porque ninguna alta vería a las anteriores. Por eso se arranca de
+   * `categorias` y cada categoría creada se agrega a un array local que es lo
+   * que se pasa a la vuelta siguiente — leer el estado de React acá no
+   * serviría: el closure de este `async function` no ve las actualizaciones
+   * de la suscripción a mitad de bucle.
+   *
    * Si una entrada ya fue creada por una carrera (doble click, u otra
    * pestaña importando al mismo tiempo) `crearCategoria` tira
-   * `CategoriaDuplicadaError`: se ignora esa entrada puntual y se sigue con
-   * el resto, en vez de abortar todo el import a mitad de camino.
+   * `CategoriaDuplicadaError` contra la lista acumulada: se ignora esa
+   * entrada puntual y se sigue con el resto, en vez de abortar todo el
+   * import a mitad de camino.
    */
   async function handleImportar() {
-    if (!enLinea || seeding) return;
+    if (!puedeEscribir || seeding) return;
     setSeeding(true);
     try {
+      let acumuladas: readonly Categoria[] = categorias;
       for (const nombre of candidatosSeed) {
         try {
-          await crearCategoria(db, nombre);
+          const orden =
+            acumuladas.length === 0 ? 0 : Math.max(...acumuladas.map((c) => c.orden)) + 1;
+          const { categoriaId } = await crearCategoria(db, nombre, acumuladas);
+          acumuladas = [...acumuladas, { id: categoriaId, nombre, orden }];
         } catch (err) {
           if (!(err instanceof CategoriaDuplicadaError)) throw err;
         }
@@ -212,12 +255,17 @@ export function Categorias() {
 
   return (
     <div className="flex flex-col gap-4">
-      {!enLinea && (
+      {/* Cubre TANTO sin conexión (`!enLinea`) COMO "captive portal" (el wifi
+          dice estar conectado pero no pasa tráfico: `puedeRenombrar` en
+          `false` con `enLinea` en `true`, ver el cálculo arriba) — al dueño
+          del comercio no le importa la causa técnica, solo que no puede
+          guardar todavía. */}
+      {!puedeRenombrar && (
         <p
           role="status"
           className="rounded-elemento border border-borde bg-superficie p-3 text-sm text-advertencia"
         >
-          <span aria-hidden="true">⚠</span> Necesitás conexión para gestionar categorías.
+          <span aria-hidden="true">⚠</span> No se puede guardar hasta recuperar la conexión.
         </p>
       )}
 
@@ -227,13 +275,13 @@ export function Categorias() {
           value={nombreNuevo}
           onChange={setNombreNuevo}
           error={errorCrear}
-          disabled={creando || !enLinea}
+          disabled={creando || !puedeEscribir}
           placeholder="Ej: Especias"
         />
         <Button
           variante="secundaria"
           onClick={() => void handleCrear()}
-          disabled={creando || !enLinea}
+          disabled={creando || !puedeEscribir}
           className="self-end"
         >
           {creando ? 'Creando…' : 'Crear categoría'}
@@ -263,7 +311,7 @@ export function Categorias() {
               <Button
                 variante="secundaria"
                 onClick={() => void handleImportar()}
-                disabled={!enLinea || seeding}
+                disabled={!puedeEscribir || seeding}
                 className="self-start"
               >
                 {seeding ? 'Importando…' : 'Importar las categorías en uso'}
@@ -314,7 +362,7 @@ export function Categorias() {
                         type="button"
                         aria-label={`Subir ${categoria.nombre}`}
                         onClick={() => subir(indice)}
-                        disabled={!enLinea || indice === 0 || reordenando !== null}
+                        disabled={!puedeEscribir || indice === 0 || reordenando !== null}
                         className="flex min-h-11 min-w-11 items-center justify-center rounded-control border border-borde text-texto hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 disabled:cursor-not-allowed disabled:opacity-40"
                       >
                         ↑
@@ -323,7 +371,7 @@ export function Categorias() {
                         type="button"
                         aria-label={`Bajar ${categoria.nombre}`}
                         onClick={() => bajar(indice)}
-                        disabled={!enLinea || indice === categorias.length - 1 || reordenando !== null}
+                        disabled={!puedeEscribir || indice === categorias.length - 1 || reordenando !== null}
                         className="flex min-h-11 min-w-11 items-center justify-center rounded-control border border-borde text-texto hover:bg-fondo focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 disabled:cursor-not-allowed disabled:opacity-40"
                       >
                         ↓
@@ -331,7 +379,7 @@ export function Categorias() {
                       <Button
                         variante="secundaria"
                         onClick={() => iniciarEdicion(categoria)}
-                        disabled={!enLinea || ocupado}
+                        disabled={!puedeRenombrar || ocupado}
                       >
                         Renombrar
                       </Button>

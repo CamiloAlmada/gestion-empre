@@ -63,6 +63,7 @@ function renderizar(overrides: Partial<ModalProductoProps> = {}) {
     producto: null,
     guardando: false,
     categorias: categoriasFalsas,
+    categoriasFrescas: true,
     onGuardar,
     onCerrar,
     ...overrides,
@@ -309,6 +310,38 @@ describe('ModalProducto - picker de categoría con creación inline (UI-5b, docs
 
     expect(await screen.findByText('Categoría creada.')).toBeTruthy();
     expect(mocks.crearCategoria).toHaveBeenCalledTimes(1);
+  });
+
+  // La señal de frescura NO es lo mismo que `enLinea`: cubre el caso
+  // "captive portal" (el wifi dice estar conectado, `enLinea` en `true`,
+  // pero la suscripción de `categorias` del padre no está confirmada por el
+  // servidor). El gate real es `enLinea && categoriasFrescas`.
+  it('categorías sin confirmar (categoriasFrescas=false) con enLinea=true: la opción "+ Nueva categoría…" queda deshabilitada, con el mismo aviso', () => {
+    renderizar({ categoriasFrescas: false });
+
+    const select = screen.getByLabelText('Categoría') as HTMLSelectElement;
+    const opcionNueva = Array.from(select.options).find((o) => o.text === '+ Nueva categoría…');
+    expect(opcionNueva?.disabled).toBe(true);
+    expect(screen.getByText('Necesitás conexión para crear categorías.')).toBeTruthy();
+
+    // Defensivo, igual que el caso offline: un `change` sintético contra la
+    // opción deshabilitada tampoco abre el sub-formulario.
+    abrirCreacionInline();
+    expect(screen.queryByLabelText('Nombre de la nueva categoría')).toBeNull();
+    expect(mocks.crearCategoria).not.toHaveBeenCalled();
+  });
+
+  it('categorías confirmadas (categoriasFrescas=true) con enLinea=true: crear funciona normalmente', async () => {
+    mocks.crearCategoria.mockResolvedValue({ categoriaId: 'c9' });
+    renderizar({ categoriasFrescas: true });
+
+    abrirCreacionInline();
+    fireEvent.change(screen.getByLabelText('Nombre de la nueva categoría'), { target: { value: 'Especias' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Crear' }));
+
+    expect(await screen.findByText('Categoría creada.')).toBeTruthy();
+    expect(mocks.crearCategoria).toHaveBeenCalledTimes(1);
+    expect(mocks.crearCategoria.mock.calls[0]![2]).toBe(categoriasFalsas);
   });
 
   it('"Gestionar categorías" navega a /ajustes/categorias y cierra el modal', () => {

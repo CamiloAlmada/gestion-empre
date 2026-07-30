@@ -82,6 +82,12 @@ interface EstadoColeccionFalso<T> {
   datos: T[];
   cargando: boolean;
   error: unknown;
+  /** `useCollection({ seguirFrescura: true })`: `true` si el snapshot vigente
+   * viene de caché (sin confirmar por el servidor). Ausente en la mayoría de
+   * los tests (queda `undefined` → `!undefined` es `true` → se comporta
+   * exactamente como "confirmado", igual que antes de que existiera esta
+   * señal) — solo los tests de frescura la fijan explícitamente. */
+  desdeCache?: boolean;
 }
 
 let estadoCategorias: EstadoColeccionFalso<Categoria> = { datos: [], cargando: false, error: null };
@@ -99,16 +105,19 @@ mocks.useCollection.mockImplementation((query: unknown) =>
   nombreColeccion(query) === 'productos' ? estadoProductos : estadoCategorias,
 );
 
-function configurarCategorias(overrides: { datos?: Categoria[]; cargando?: boolean; error?: unknown } = {}) {
+function configurarCategorias(
+  overrides: { datos?: Categoria[]; cargando?: boolean; error?: unknown; desdeCache?: boolean } = {},
+) {
   estadoCategorias = {
     datos: overrides.datos ?? [],
     cargando: overrides.cargando ?? false,
     error: overrides.error ?? null,
+    desdeCache: overrides.desdeCache ?? false,
   };
 }
 
-function configurarProductos(overrides: { datos?: Producto[] } = {}) {
-  estadoProductos = { datos: overrides.datos ?? [], cargando: false, error: null };
+function configurarProductos(overrides: { datos?: Producto[]; desdeCache?: boolean } = {}) {
+  estadoProductos = { datos: overrides.datos ?? [], cargando: false, error: null, desdeCache: overrides.desdeCache ?? false };
 }
 
 /** Expone el header contextual actual, para aserirlo sin montar `Shell`
@@ -145,8 +154,8 @@ describe('Categorias', () => {
     cleanup();
     vi.clearAllMocks();
     mocks.useOnlineStatus.mockReturnValue(true);
-    estadoCategorias = { datos: [], cargando: false, error: null };
-    estadoProductos = { datos: [], cargando: false, error: null };
+    estadoCategorias = { datos: [], cargando: false, error: null, desdeCache: false };
+    estadoProductos = { datos: [], cargando: false, error: null, desdeCache: false };
   });
 
   it('header contextual: título "Categorías", volverA a "/ajustes" (subvista de Ajustes, UI-5c)', () => {
@@ -236,15 +245,41 @@ describe('Categorias', () => {
       configurarCategorias({ datos: categoriasFalsas });
       renderizar();
 
-      expect(screen.getByText('Necesitás conexión para gestionar categorías.')).toBeTruthy();
+      expect(screen.getByText('No se puede guardar hasta recuperar la conexión.')).toBeTruthy();
       expect(screen.getByRole('button', { name: 'Crear categoría' }).hasAttribute('disabled')).toBe(true);
+    });
+
+    // Bajo "captive portal" `navigator.onLine` dice `true` pero no hay
+    // servidor del otro lado: la señal honesta es `desdeCache` (ver
+    // `useCollection({ seguirFrescura: true })`), no `enLinea`.
+    it('categorías sin confirmar (desdeCache=true) con enLinea=true: crear, renombrar y reordenar quedan deshabilitados', () => {
+      configurarCategorias({ datos: categoriasFalsas, desdeCache: true });
+      renderizar();
+
+      expect(screen.getByText('No se puede guardar hasta recuperar la conexión.')).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Crear categoría' }).hasAttribute('disabled')).toBe(true);
+      expect(screen.getByRole('button', { name: 'Bajar Quesos' }).hasAttribute('disabled')).toBe(true);
+      expect(screen.getAllByRole('button', { name: 'Renombrar' })[0]!.hasAttribute('disabled')).toBe(true);
+    });
+
+    it('categorías confirmadas (desdeCache=false) con enLinea=true: todo habilitado', () => {
+      configurarCategorias({ datos: categoriasFalsas, desdeCache: false });
+      configurarProductos({ desdeCache: false });
+      renderizar();
+
+      expect(screen.queryByText('No se puede guardar hasta recuperar la conexión.')).toBeNull();
+      expect(screen.getByRole('button', { name: 'Crear categoría' }).hasAttribute('disabled')).toBe(false);
+      expect(screen.getByRole('button', { name: 'Bajar Quesos' }).hasAttribute('disabled')).toBe(false);
+      expect(screen.getAllByRole('button', { name: 'Renombrar' })[0]!.hasAttribute('disabled')).toBe(false);
     });
   });
 
   describe('renombrar', () => {
-    it('éxito: llama a renombrarCategoria con el id y el nombre nuevo', async () => {
+    it('éxito: llama a renombrarCategoria con el id, el nombre nuevo, las categorías y los productos suscritos', async () => {
       mocks.renombrarCategoria.mockResolvedValue(undefined);
+      const productosFalsos = [productoDe({ id: 'p1', categoria: 'Quesos' })];
       configurarCategorias({ datos: categoriasFalsas });
+      configurarProductos({ datos: productosFalsos });
       renderizar();
 
       fireEvent.click(screen.getAllByRole('button', { name: 'Renombrar' })[0]!);
@@ -253,7 +288,17 @@ describe('Categorias', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
 
       await waitFor(() => expect(mocks.renombrarCategoria).toHaveBeenCalledTimes(1));
-      expect(mocks.renombrarCategoria).toHaveBeenCalledWith(expect.anything(), 'c1', 'Quesos artesanales');
+      // `crearCategoria`/`renombrarCategoria` ya no leen Firestore: la
+      // pantalla les pasa las suscripciones que ya tiene abiertas —
+      // `categorias` (para el chequeo de duplicados/orden) y `productos`
+      // (para el fan-out del renombre).
+      expect(mocks.renombrarCategoria).toHaveBeenCalledWith(
+        expect.anything(),
+        'c1',
+        'Quesos artesanales',
+        categoriasFalsas,
+        productosFalsos,
+      );
       expect(await screen.findByText('Categoría renombrada.')).toBeTruthy();
     });
 
@@ -283,6 +328,20 @@ describe('Categorias', () => {
 
       expect(await screen.findByText('Ya existe una categoría llamada "Miel".')).toBeTruthy();
       expect(screen.getByLabelText('Nuevo nombre')).toBeTruthy();
+    });
+
+    // El renombre re-etiqueta productos (fan-out denormalizado): exige
+    // ADEMÁS que la suscripción de `productos` esté confirmada, aunque la de
+    // `categorias` ya lo esté — crear y reordenar no dependen de `productos`
+    // y por eso siguen habilitados.
+    it('productos sin confirmar (productos.desdeCache=true): Renombrar queda deshabilitado aunque categorías esté confirmada', () => {
+      configurarCategorias({ datos: categoriasFalsas, desdeCache: false });
+      configurarProductos({ desdeCache: true });
+      renderizar();
+
+      expect(screen.getAllByRole('button', { name: 'Renombrar' })[0]!.hasAttribute('disabled')).toBe(true);
+      expect(screen.getByRole('button', { name: 'Crear categoría' }).hasAttribute('disabled')).toBe(false);
+      expect(screen.getByRole('button', { name: 'Bajar Quesos' }).hasAttribute('disabled')).toBe(false);
     });
   });
 
@@ -351,6 +410,53 @@ describe('Categorias', () => {
       await waitFor(() => expect(mocks.crearCategoria).toHaveBeenCalledTimes(2));
       expect(mocks.crearCategoria.mock.calls[0]![1]).toBe('Miel');
       expect(mocks.crearCategoria.mock.calls[1]![1]).toBe('Quesos');
+      expect(await screen.findByText('Se cargaron tus categorías existentes.')).toBeTruthy();
+    });
+
+    // EL test de la parte que no es mecánica: `crearCategoria` ya NO relee
+    // Firestore en cada llamada (recibe `existentes` por parámetro), así que
+    // el bucle tiene que acumular LOCALMENTE lo que va creando. La prueba: la
+    // suscripción de categorías queda vacía (`estadoCategorias` nunca
+    // cambia, `useCollection` sigue mockeada devolviendo `[]`) durante TODO
+    // el import, y sin embargo cada llamada sucesiva recibe una lista de
+    // `existentes` más larga, con `orden` 0, 1, 2 — la prueba de que esa
+    // lista viene de acumular localmente, no de releer la suscripción (que
+    // seguiría vacía).
+    it('importar con 3 categorías acumula localmente: cada alta ve las anteriores y calcula orden creciente (0, 1, 2)', async () => {
+      mocks.crearCategoria.mockImplementation((_db: unknown, nombre: string) =>
+        Promise.resolve({ categoriaId: nombre.toLowerCase() }),
+      );
+      const productosTresCategorias: Producto[] = [
+        productoDe({ id: 'p1', categoria: 'Quesos' }),
+        productoDe({ id: 'p2', categoria: 'Miel' }),
+        productoDe({ id: 'p3', categoria: 'Embutidos' }),
+      ];
+      configurarCategorias({ datos: [] });
+      configurarProductos({ datos: productosTresCategorias });
+      renderizar();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Importar las categorías en uso' }));
+
+      await waitFor(() => expect(mocks.crearCategoria).toHaveBeenCalledTimes(3));
+
+      // Orden alfabético (es): Embutidos, Miel, Quesos.
+      expect(mocks.crearCategoria.mock.calls[0]![1]).toBe('Embutidos');
+      expect(mocks.crearCategoria.mock.calls[1]![1]).toBe('Miel');
+      expect(mocks.crearCategoria.mock.calls[2]![1]).toBe('Quesos');
+
+      const existentes0 = mocks.crearCategoria.mock.calls[0]![2] as Categoria[];
+      const existentes1 = mocks.crearCategoria.mock.calls[1]![2] as Categoria[];
+      const existentes2 = mocks.crearCategoria.mock.calls[2]![2] as Categoria[];
+
+      expect(existentes0).toEqual([]);
+      expect(existentes1.map((c) => ({ nombre: c.nombre, orden: c.orden }))).toEqual([
+        { nombre: 'Embutidos', orden: 0 },
+      ]);
+      expect(existentes2.map((c) => ({ nombre: c.nombre, orden: c.orden }))).toEqual([
+        { nombre: 'Embutidos', orden: 0 },
+        { nombre: 'Miel', orden: 1 },
+      ]);
+
       expect(await screen.findByText('Se cargaron tus categorías existentes.')).toBeTruthy();
     });
 

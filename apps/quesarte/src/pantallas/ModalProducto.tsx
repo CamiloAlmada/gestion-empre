@@ -68,6 +68,18 @@ export interface ModalProductoProps {
    * llamador). Opciones del select de categoría — se actualiza solo vía la
    * `useCollection` del padre cuando se crea una categoría nueva acá adentro. */
   categorias: Categoria[];
+  /**
+   * `true` si la suscripción de `categorias` del padre está CONFIRMADA por
+   * el servidor (no viene de caché) — `desdeCache` invertido de su
+   * `useCollection({ seguirFrescura: true })`, la señal honesta de
+   * conectividad real: a diferencia de `navigator.onLine`, no miente bajo
+   * "captive portal" (el wifi dice estar conectado pero no pasa tráfico).
+   * Gatea, junto con `enLinea`, el alta inline de categoría de
+   * `CampoCategoria` (ver su JSDoc) — mismo criterio que `Categorias.tsx`.
+   * Este modal NUNCA abre su propia suscripción de categorías: sería un
+   * listener duplicado sin beneficio, la trae siempre el padre.
+   */
+  categoriasFrescas: boolean;
   onGuardar: (datos: DatosProductoFormulario) => void;
   onCerrar: () => void;
 }
@@ -132,6 +144,9 @@ interface CampoCategoriaProps {
    * `ModalProducto`, ver su propio `useEffect`. */
   abierto: boolean;
   categorias: Categoria[];
+  /** Ver el JSDoc de la misma prop en `ModalProductoProps`: viene del padre,
+   * este campo nunca abre su propia suscripción. */
+  categoriasFrescas: boolean;
   value: string;
   onChange: (valor: string) => void;
   error?: string;
@@ -168,28 +183,49 @@ interface CampoCategoriaProps {
  * refrescar nada acá. "Cancelar" vuelve al select dejando `value` como
  * estaba (no crea nada).
  *
- * **Sin conexión, la creación queda BLOQUEADA** (review UI-5, hallazgo M1):
- * `crearCategoria` chequea duplicados con un `getDocs` que offline resuelve
- * de CACHÉ, y el `setDoc` de la categoría nueva se commitea siempre al
- * reconectar — Firestore no revalida duplicados server-side (no hay
- * constraint ni transacción para esto). Con caché stale (dispositivo recién
- * instalado, o categoría creada mientras tanto en otro equipo) el patrón
- * híbrido offline de docs/06-ui-ux.md §8 generaría un duplicado silencioso.
- * Mismo motivo exacto por el que `Categorias.tsx` bloquea TODA mutación de
- * vocabulario sin conexión (ver su JSDoc) — este picker sigue ese mismo
- * criterio: la opción "+ Nueva categoría…" del select queda deshabilitada
- * offline (con un hint visible ANTES de que el usuario llegue a tipear
- * nada) y, si la conexión se corta mientras el sub-formulario ya está
- * abierto, el botón "Crear" también se deshabilita con el mismo aviso. El
- * `<select>` (elegir una categoría YA creada) y el link "Gestionar
- * categorías" siguen usables sin conexión — solo la ESCRITURA se bloquea.
+ * **La creación queda BLOQUEADA sin conexión O sin confirmar por el
+ * servidor** (review UI-5, hallazgo M1; criterio actualizado tras migrar
+ * `crearCategoria`, que dejó de hacer `getDocs`): el chequeo de duplicados
+ * corre sobre `categorias`, la MISMA lista de la suscripción `useCollection`
+ * del padre — id canónico = clave del nombre (ver `categorias.ts` en
+ * `firebase-kit`), así que un duplicado literal ya es estructuralmente
+ * imposible. Lo que sigue siendo un riesgo real es que esa lista esté STALE
+ * mientras el snapshot no esté confirmado por el servidor (`categoriasFrescas`
+ * en `false`, prop de `ModalProducto`, la señal honesta — a diferencia de
+ * `navigator.onLine`, que bajo "captive portal" dice `true` sin que pase
+ * tráfico): un alta contra esa lista vieja no CREARÍA un duplicado, pero SÍ
+ * podría PISAR (`setDoc`, no `merge`) un documento ya existente con datos
+ * desactualizados (el `orden` calculado sobre la lista stale). Mismo motivo
+ * por el que `Categorias.tsx` gatea sus mutaciones con `enLinea &&
+ * !desdeCache` (ver su JSDoc) — este picker sigue el mismo criterio: la
+ * opción "+ Nueva categoría…" del select queda deshabilitada mientras no se
+ * pueda escribir con seguridad (con un hint visible ANTES de que el usuario
+ * llegue a tipear nada) y, si esa condición se pierde mientras el
+ * sub-formulario ya está abierto, el botón "Crear" también se deshabilita
+ * con el mismo aviso. El `<select>` (elegir una categoría YA creada) y el
+ * link "Gestionar categorías" siguen usables igual — solo la ESCRITURA se
+ * bloquea.
  */
-function CampoCategoria({ abierto, categorias, value, onChange, error, onCerrarModal }: CampoCategoriaProps) {
+function CampoCategoria({
+  abierto,
+  categorias,
+  categoriasFrescas,
+  value,
+  onChange,
+  error,
+  onCerrarModal,
+}: CampoCategoriaProps) {
   const id = useId();
   const idError = `${id}-error`;
   const idHint = `${id}-hint`;
   const enLinea = useOnlineStatus();
   const { mostrarToast } = useToasts();
+
+  // Gate combinado (ver el JSDoc de arriba): `enLinea` solo aporta el caso
+  // "sin conexión" clásico; `categoriasFrescas` cubre además el "captive
+  // portal" (conectado pero sin servidor real del otro lado). Ninguno de los
+  // dos alcanza solo — misma regla que `Categorias.tsx`.
+  const puedeCrearCategoria = enLinea && categoriasFrescas;
 
   const [modo, setModo] = useState<'select' | 'crear'>('select');
   const [nombreNuevo, setNombreNuevo] = useState('');
@@ -210,11 +246,11 @@ function CampoCategoria({ abierto, categorias, value, onChange, error, onCerrarM
 
   function handleChangeSelect(valor: string) {
     if (valor === VALOR_NUEVA_CATEGORIA) {
-      // Defensivo: la opción ya viene `disabled` en el `<select>` sin
-      // conexión (un navegador real no dispara `onChange` con ella
+      // Defensivo: la opción ya viene `disabled` en el `<select>` cuando no
+      // se puede crear (un navegador real no dispara `onChange` con ella
       // seleccionada), pero un `change` sintético no respeta eso — sin este
       // guard se podría entrar al sub-formulario igual.
-      if (!enLinea) return;
+      if (!puedeCrearCategoria) return;
       setModo('crear');
       setNombreNuevo('');
       setErrorCrear(undefined);
@@ -233,15 +269,17 @@ function CampoCategoria({ abierto, categorias, value, onChange, error, onCerrarM
    * A diferencia del resto de las escrituras del proyecto (patrón híbrido
    * offline de docs/06-ui-ux.md §8), esta acción NO tiene rama offline
    * (review UI-5, hallazgo M1): el chequeo de duplicados de `crearCategoria`
-   * es un `getDocs` client-side contra caché, nunca revalidado
-   * server-side — crear sin conexión podría generar un duplicado silencioso
-   * si la caché está stale. La UI ya deja esta función inalcanzable offline
-   * (opción del select y botón "Crear" deshabilitados, ver el JSX); el
-   * guard de acá es la defensa de fondo, mismo criterio que
-   * `handleChangeSelect` arriba.
+   * corre sobre `categorias`, la lista en memoria de la suscripción del
+   * padre — mientras no esté confirmada por el servidor (`categoriasFrescas`
+   * en `false`) puede estar stale, y un alta contra esa lista stale no
+   * generaría un duplicado (el id canónico lo impide estructuralmente, ver
+   * el JSDoc de `CampoCategoria`) pero sí podría pisar un documento
+   * existente. La UI ya deja esta función inalcanzable en ese caso (opción
+   * del select y botón "Crear" deshabilitados, ver el JSX); el guard de acá
+   * es la defensa de fondo, mismo criterio que `handleChangeSelect` arriba.
    */
   async function handleCrear() {
-    if (!enLinea) return;
+    if (!puedeCrearCategoria) return;
     const nombreLimpio = nombreNuevo.trim();
     if (nombreLimpio === '') {
       setErrorCrear('Ingresá el nombre de la categoría.');
@@ -251,7 +289,7 @@ function CampoCategoria({ abierto, categorias, value, onChange, error, onCerrarM
 
     setCreando(true);
     try {
-      await crearCategoria(db, nombreLimpio);
+      await crearCategoria(db, nombreLimpio, categorias);
       onChange(nombreLimpio);
       setModo('select');
       setNombreNuevo('');
@@ -275,14 +313,15 @@ function CampoCategoria({ abierto, categorias, value, onChange, error, onCerrarM
           value={nombreNuevo}
           onChange={setNombreNuevo}
           error={errorCrear}
-          disabled={creando || !enLinea}
+          disabled={creando || !puedeCrearCategoria}
           placeholder="Ej: Especias"
         />
-        {/* La conexión se cortó con el sub-formulario ya abierto (si hubiera
-            estado offline desde el principio, ni se podía llegar acá: la
-            opción "+ Nueva categoría…" del select queda deshabilitada más
-            abajo). Mismo tratamiento visual que el banner de `Categorias.tsx`. */}
-        {!enLinea && (
+        {/* La condición para crear se perdió con el sub-formulario ya
+            abierto (si ya hubiera faltado desde el principio, ni se podía
+            llegar acá: la opción "+ Nueva categoría…" del select queda
+            deshabilitada más abajo). Mismo tratamiento visual que el banner
+            de `Categorias.tsx`. */}
+        {!puedeCrearCategoria && (
           <p role="status" className="flex items-center gap-1.5 text-sm text-advertencia">
             <span aria-hidden="true">⚠</span> Necesitás conexión para crear categorías.
           </p>
@@ -291,7 +330,7 @@ function CampoCategoria({ abierto, categorias, value, onChange, error, onCerrarM
           <Button variante="secundaria" onClick={cancelarCreacion} disabled={creando}>
             Cancelar
           </Button>
-          <Button onClick={() => void handleCrear()} disabled={creando || !enLinea}>
+          <Button onClick={() => void handleCrear()} disabled={creando || !puedeCrearCategoria}>
             {creando ? 'Creando…' : 'Crear'}
           </Button>
         </div>
@@ -309,7 +348,9 @@ function CampoCategoria({ abierto, categorias, value, onChange, error, onCerrarM
         value={value}
         onChange={(e) => handleChangeSelect(e.target.value)}
         aria-invalid={error !== undefined ? true : undefined}
-        aria-describedby={error !== undefined ? idError : !enLinea || categorias.length === 0 ? idHint : undefined}
+        aria-describedby={
+          error !== undefined ? idError : !puedeCrearCategoria || categorias.length === 0 ? idHint : undefined
+        }
         className={`min-h-11 rounded-control border bg-superficie px-3 py-2 text-texto outline-none focus-visible:ring-2 focus-visible:ring-primary-600 ${
           error ? 'border-peligro' : 'border-borde'
         }`}
@@ -323,12 +364,13 @@ function CampoCategoria({ abierto, categorias, value, onChange, error, onCerrarM
           </option>
         ))}
         {huerfana && <option value={value}>{value} (sin definir)</option>}
-        {/* Sin conexión, crear queda deshabilitado (review UI-5, M1: el
-            chequeo de duplicados de `crearCategoria` es client-side contra
-            caché, nunca revalidado server-side — ver el JSDoc de
+        {/* Sin conexión o sin confirmar por el servidor, crear queda
+            deshabilitado (review UI-5, M1: el chequeo de duplicados de
+            `crearCategoria` corre sobre la lista en memoria de la
+            suscripción, que puede estar stale — ver el JSDoc de
             `CampoCategoria`). Elegir una categoría YA creada (el resto de
             las opciones de este mismo select) sigue andando offline. */}
-        <option value={VALOR_NUEVA_CATEGORIA} disabled={!enLinea}>
+        <option value={VALOR_NUEVA_CATEGORIA} disabled={!puedeCrearCategoria}>
           + Nueva categoría…
         </option>
       </select>
@@ -336,7 +378,7 @@ function CampoCategoria({ abierto, categorias, value, onChange, error, onCerrarM
         <p id={idError} className="text-sm text-peligro">
           {error}
         </p>
-      ) : !enLinea ? (
+      ) : !puedeCrearCategoria ? (
         <p id={idHint} role="status" className="flex items-center gap-1.5 text-sm text-advertencia">
           <span aria-hidden="true">⚠</span> Necesitás conexión para crear categorías.
         </p>
@@ -375,6 +417,7 @@ export function ModalProducto({
   producto,
   guardando,
   categorias,
+  categoriasFrescas,
   onGuardar,
   onCerrar,
 }: ModalProductoProps) {
@@ -478,6 +521,7 @@ export function ModalProducto({
         <CampoCategoria
           abierto={abierto}
           categorias={categorias}
+          categoriasFrescas={categoriasFrescas}
           value={categoria}
           onChange={setCategoria}
           error={errores.categoria}

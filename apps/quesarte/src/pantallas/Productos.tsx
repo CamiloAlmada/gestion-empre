@@ -144,7 +144,11 @@ export function Productos() {
 
   const productos = useCollection<Producto>(productosQuery);
   const piezas = useCollection<Pieza>(piezasQuery);
-  const categorias = useCollection<Categoria>(categoriasQuery);
+  // `seguirFrescura` para exponerle a `ModalProducto` si esta suscripción está
+  // confirmada por el servidor (no de caché) — gatea el alta inline de
+  // categoría de su picker (ver `ModalProducto`), la misma señal honesta que
+  // usa `Categorias.tsx` en vez de `navigator.onLine`.
+  const categorias = useCollection<Categoria>(categoriasQuery, { seguirFrescura: true });
   // Ventana de aviso de vencimiento del negocio (Ajustes → Alertas de stock),
   // compartida con Reportes y con los badges de cada fila.
   const { contexto: contextoAlertas, cargando: cargandoAlertas } = useContextoAlertas();
@@ -403,6 +407,7 @@ export function Productos() {
           producto={null}
           guardando={guardando}
           categorias={categorias.datos}
+          categoriasFrescas={!categorias.desdeCache}
           onGuardar={handleGuardar}
           onCerrar={() => setAltaAbierta(false)}
         />

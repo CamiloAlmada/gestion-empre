@@ -105,7 +105,10 @@ export function DetalleProductoPantalla() {
   // Vocabulario de categorías, solo para el select de `ModalProducto` en
   // edición (mismo criterio que `Productos.tsx`): colección chica, una sola
   // suscripción memoizada, sin cargando/error propios (la gestión completa
-  // vive en Ajustes → Categorías).
+  // vive en Ajustes → Categorías). `seguirFrescura` para exponerle a
+  // `ModalProducto` si está confirmada por el servidor (no de caché) — gatea
+  // el alta inline de categoría de su picker, misma señal honesta que usa
+  // `Categorias.tsx`.
   const categoriasQuery = useMemo(
     () => query(collection(db, 'categorias').withConverter(categoriaConverter), orderBy('orden')),
     [],
@@ -113,7 +116,7 @@ export function DetalleProductoPantalla() {
 
   const productos = useCollection<Producto>(productosQuery);
   const piezas = useCollection<Pieza>(piezasQuery);
-  const categorias = useCollection<Categoria>(categoriasQuery);
+  const categorias = useCollection<Categoria>(categoriasQuery, { seguirFrescura: true });
 
   // Misma ventana de aviso que la franja de Productos y que Reportes: los
   // badges de vencimiento de las piezas de esta ficha no pueden decir algo
@@ -292,6 +295,7 @@ export function DetalleProductoPantalla() {
             producto={producto}
             guardando={guardandoEdicion}
             categorias={categorias.datos}
+            categoriasFrescas={!categorias.desdeCache}
             onGuardar={handleGuardarEdicion}
             onCerrar={() => setEditando(false)}
           />
