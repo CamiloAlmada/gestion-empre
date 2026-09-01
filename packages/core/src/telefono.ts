@@ -108,3 +108,142 @@ export function normalizarTelefono(raw: string, codigoPais: string = '598'): str
 function enRango(digitos: string): string | null {
   return digitos.length >= MIN_DIGITOS_E164 && digitos.length <= MAX_DIGITOS_E164 ? digitos : null;
 }
+
+/**
+ * Un código de país para el selector de teléfono de la app de clientes.
+ */
+export interface CodigoPais {
+  /** Código sin `+`, solo dígitos. */
+  codigo: string;
+  /** Nombre en español para el selector. */
+  nombre: string;
+}
+
+/**
+ * Códigos de país habilitados en el selector. Uruguay (`598`) encabeza la lista
+ * porque es el default del negocio; el resto cubre la región (compradores de
+ * países vecinos) y los destinos europeos más frecuentes.
+ */
+export const CODIGOS_PAIS: readonly CodigoPais[] = [
+  { codigo: '598', nombre: 'Uruguay' },
+  { codigo: '54', nombre: 'Argentina' },
+  { codigo: '55', nombre: 'Brasil' },
+  { codigo: '595', nombre: 'Paraguay' },
+  { codigo: '591', nombre: 'Bolivia' },
+  { codigo: '56', nombre: 'Chile' },
+  { codigo: '34', nombre: 'España' },
+  { codigo: '1', nombre: 'Estados Unidos' },
+  { codigo: '39', nombre: 'Italia' },
+  { codigo: '351', nombre: 'Portugal' },
+  { codigo: '49', nombre: 'Alemania' },
+  { codigo: '33', nombre: 'Francia' },
+  { codigo: '44', nombre: 'Reino Unido' },
+];
+
+/**
+ * Quita espacios y `+` de un código de país y valida que quede numérico, con el
+ * mismo criterio que `normalizarTelefono` aplica a su `codigoPais`.
+ *
+ * @throws {RangeError} si, tras normalizarlo, no queda una cadena de dígitos.
+ */
+function normalizarCodigo(codigo: string, quien: string): string {
+  const cc = codigo.replace(/[\s+]/g, '');
+  if (!/^\d+$/.test(cc)) {
+    throw new RangeError(`${quien} requiere un código de país numérico, recibió: ${codigo}`);
+  }
+  return cc;
+}
+
+/**
+ * Compone el teléfono a mostrar/guardar a partir del código de país elegido en el
+ * selector (uno de `CODIGOS_PAIS`) y la parte nacional que escribió el usuario.
+ *
+ * El display de un teléfono con el código **default del negocio** (`codigoDefault`,
+ * normalmente `'598'`) no lleva prefijo `+cc`: queda igual que siempre. Es
+ * deliberado — los clientes cargados antes de que existiera este selector tienen
+ * el teléfono guardado sin `+598`, y si esta función le antepusiera el prefijo
+ * cuando el código coincide con el default, cada cliente existente cambiaría de
+ * shape la primera vez que alguien tocara su ficha. Con un código distinto del
+ * default sí se antepone `+cc`, porque ahí no hay compatibilidad hacia atrás que
+ * preservar: son casos nuevos que el selector recién habilita.
+ *
+ * `normalizarTelefono` (más arriba en este archivo) **no se toca**: ya sabe derivar
+ * el E.164 correcto tanto de un display sin prefijo (lo asume local del
+ * `codigoPais` que se le pase) como de uno con `+cc` (lo toma como internacional
+ * explícito y confía en sus dígitos). Esta función solo arma, del lado de la UI, el
+ * string que `normalizarTelefono` va a leer después.
+ *
+ * @param codigo código de país elegido en el selector (tolera espacios y `+`).
+ * @param nacional número tal como lo escribió el usuario en "Número".
+ * @param codigoDefault código de país default del negocio, para decidir si hace
+ *   falta anteponer el prefijo.
+ * @returns el display a guardar, o `''` si `nacional` queda vacío tras recortarlo.
+ * @throws {RangeError} si `codigo` o `codigoDefault` no son numéricos.
+ */
+export function componerTelefono(codigo: string, nacional: string, codigoDefault: string): string {
+  const cc = normalizarCodigo(codigo, 'componerTelefono');
+  const ccDefault = normalizarCodigo(codigoDefault, 'componerTelefono');
+
+  const nacionalTrim = nacional.trim();
+  if (nacionalTrim === '') return '';
+
+  // El usuario ya escribió un internacional completo (con + o 00): no duplicar
+  // el código elegido en el selector.
+  if (nacionalTrim.startsWith('+') || nacionalTrim.startsWith('00')) return nacionalTrim;
+
+  if (cc === ccDefault) return nacionalTrim;
+
+  return `+${cc} ${nacionalTrim}`;
+}
+
+/** Resultado de separar un display de teléfono en código de país y parte nacional. */
+export interface TelefonoSeparado {
+  /** Código de país sin `+` (uno de `CODIGOS_PAIS`, o `codigoDefault` en el fallback). */
+  codigo: string;
+  /** Parte nacional, o —en el fallback— el display crudo intacto. */
+  nacional: string;
+}
+
+/**
+ * Inversa de `componerTelefono`: separa un display guardado en código de país y
+ * parte nacional, para precargar el selector al editar un cliente existente.
+ *
+ * Si `display` (recortado) no empieza con `+` ni con `00` se asume local del
+ * `codigoDefault` —mismo criterio que `normalizarTelefono`— y se devuelve tal cual,
+ * sin tocarlo.
+ *
+ * Si empieza con `+`/`00`, se le quita ese prefijo y se busca en `CODIGOS_PAIS` el
+ * código **más largo** que sea prefijo de los dígitos que siguen — así `+5989…`
+ * matchea `598` y no `5`, y `+5491…` matchea `54` y no `59`—.
+ *
+ * Si ningún código de la lista matchea, o el resto tras quitarlo queda vacío, se
+ * devuelve `{ codigo: codigoDefault, nacional: display }` con el display **crudo**
+ * intacto (incluido su `+`/`00`). Es deliberado: así un número de un país que no
+ * está en la lista (o mal formado) sobrevive a una edición sin corromperse — la UI
+ * lo muestra tal cual en "Número", y como sigue arrancando con `+`/`00`, un
+ * `componerTelefono` posterior no le vuelve a anteponer nada.
+ *
+ * @param display teléfono guardado, tal como lo devuelve `componerTelefono`.
+ * @param codigoDefault código de país default del negocio.
+ */
+export function separarCodigoPais(display: string, codigoDefault: string): TelefonoSeparado {
+  const trimmed = display.trim();
+
+  if (!trimmed.startsWith('+') && !trimmed.startsWith('00')) {
+    return { codigo: codigoDefault, nacional: trimmed };
+  }
+
+  const restante = trimmed.startsWith('+') ? trimmed.slice(1) : trimmed.slice(2);
+  const leadingDigits = restante.match(/^\d+/)?.[0] ?? '';
+
+  const candidato = CODIGOS_PAIS.filter((c) => leadingDigits.startsWith(c.codigo)).sort(
+    (a, b) => b.codigo.length - a.codigo.length,
+  )[0];
+
+  if (candidato) {
+    const nacional = restante.slice(candidato.codigo.length).replace(/^\s+/, '');
+    if (nacional !== '') return { codigo: candidato.codigo, nacional };
+  }
+
+  return { codigo: codigoDefault, nacional: trimmed };
+}

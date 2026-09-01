@@ -348,6 +348,7 @@ export function DetalleClientePantalla() {
             guardando={guardando}
             onGuardar={(datos) => void handleGuardar(datos)}
             onCerrar={cerrarModal}
+            codigoPaisDefault={configuracion.datos?.codigoPaisDefault}
           />
           <ModalDesactivarCliente
             abierto={modal === 'desactivar'}

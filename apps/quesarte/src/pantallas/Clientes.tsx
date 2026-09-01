@@ -262,6 +262,7 @@ export function Clientes() {
         guardando={guardando}
         onGuardar={handleGuardar}
         onCerrar={() => setAltaAbierta(false)}
+        codigoPaisDefault={configuracion.datos?.codigoPaisDefault}
       />
     </div>
   );

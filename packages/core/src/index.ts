@@ -80,7 +80,14 @@ export {
   redondearComercial,
   precioSugerido,
 } from './margen.js';
-export { normalizarTelefono } from './telefono.js';
+export {
+  type CodigoPais,
+  type TelefonoSeparado,
+  CODIGOS_PAIS,
+  normalizarTelefono,
+  componerTelefono,
+  separarCodigoPais,
+} from './telefono.js';
 export {
   type ContextoPlantilla,
   type PlantillaWhatsApp,

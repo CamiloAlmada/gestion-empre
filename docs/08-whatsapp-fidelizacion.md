@@ -27,6 +27,14 @@ número que el cliente ya conoce.
   `packages/core` (`normalizarTelefono(raw, codigoPais)`) con tests: maneja
   `099 123 456` → `59899123456`, números ya internacionales, y devuelve `null`
   si no es normalizable (el botón de WhatsApp no se muestra en ese caso).
+- 2026-09-01: el formulario de cliente (`ModalCliente`) agregó un selector de
+  país al lado del teléfono (motivado por un tester en España cuyo número la
+  app tomó como uruguayo, `+598`). El display se guarda SIN prefijo cuando el
+  país elegido es el default del negocio (mismo shape que siempre, compatible
+  con los clientes cargados antes del selector) y CON `+cc` cuando difiere
+  (`componerTelefono`/`separarCodigoPais`, `packages/core/src/telefono.ts`).
+  `normalizarTelefono` no cambió: ya sabía tratar un display con `+` como
+  internacional explícito.
 
 ## Plantillas de mensajes
 
