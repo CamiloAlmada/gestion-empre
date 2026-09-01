@@ -13,6 +13,17 @@
   color-scheme: light;
 }
 
+/* Sin pull-to-refresh del navegador (2026-09-01, reporte de un tester
+   externo: arrastrar hacia abajo en el POS recargaba la página y perdía el
+   pedido). Solo el eje Y y solo el scroller raíz: los contenedores internos
+   con overflow propio (listado del carrito, Modal, SearchSelect) y el
+   agarre del carrito (touch-none + pointer capture) no cambian. El eje X se
+   deja como está a propósito: no hay reporte de gesto lateral. */
+html,
+body {
+  overscroll-behavior-y: none;
+}
+
 [data-theme='dark'] {
   color-scheme: dark;
 }
