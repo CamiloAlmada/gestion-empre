@@ -35,6 +35,26 @@ número que el cliente ya conoce.
   (`componerTelefono`/`separarCodigoPais`, `packages/core/src/telefono.ts`).
   `normalizarTelefono` no cambió: ya sabía tratar un display con `+` como
   internacional explícito.
+- 2026-09-01, limitación conocida: con `+cc` (país ≠ default) `normalizarTelefono`
+  confía en los dígitos tal cual (caso 1 de su criterio de clasificación, ver
+  el archivo) — un nacional tipeado con el `0` de troncal (Argentina `011…`,
+  Brasil `011 9…`, Reino Unido `07…`, Alemania `0170…`, Francia `06…`) queda
+  cargado en el E.164 CON ese `0`, número inexistente para WhatsApp. No se
+  corrige en `core` quitando el `0` a ciegas: Italia sí lo conserva en sus
+  fijos, así que sacarlo rompería ese caso. El `ModalCliente` solo lo
+  recuerda con un `placeholder` ("Sin el 0 inicial") en el teléfono cuando el
+  país elegido no es el default — no valida ni corrige.
+- 2026-09-01, nota para no leerlo como bug (no hay sección dedicada al
+  formulario de cliente en `docs/06-ui-ux.md`, así que queda acá): un cliente
+  uruguayo cargado A MANO como `+598 99…` (con `+` de más, típico de quien
+  copió el número de otro lado) pasa a guardarse como `99…` la primera vez
+  que un admin abre su ficha y toca "Guardar" — `separarCodigoPais` lo separa
+  en país `598` (el default) + nacional `99…`, y como el país elegido
+  coincide con el default, `componerTelefono` lo vuelve a guardar SIN
+  prefijo. Mismo `telefonoE164` de siempre, no es una regresión. Si en cambio
+  venía como `+598 099…` (con el `0` de troncal colado adentro del `+cc`), la
+  edición CORRIGE un `telefonoE164` que antes salía CON ese `0` (caso 1 de
+  `normalizarTelefono` confiaba en los dígitos tal cual) a uno sin él.
 
 ## Plantillas de mensajes
 

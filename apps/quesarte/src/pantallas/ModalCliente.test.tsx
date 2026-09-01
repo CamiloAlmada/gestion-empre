@@ -120,3 +120,26 @@ describe('ModalCliente - selector de país (tester en España tomado como urugua
     expect(screen.getByText('Código +1234')).toBeTruthy();
   });
 });
+
+describe('ModalCliente - placeholder "Sin el 0 inicial" (país ≠ default: normalizarTelefono confía en los dígitos del +cc tal cual)', () => {
+  it('elegir España (país ≠ default) muestra el placeholder en el teléfono', () => {
+    renderizar();
+
+    expect(telefonoInput().placeholder).toBe('');
+
+    fireEvent.change(paisSelect(), { target: { value: '34' } });
+
+    expect(telefonoInput().placeholder).toBe('Sin el 0 inicial');
+  });
+
+  it('volver a Uruguay (el default) saca el placeholder', () => {
+    renderizar();
+
+    fireEvent.change(paisSelect(), { target: { value: '34' } });
+    expect(telefonoInput().placeholder).toBe('Sin el 0 inicial');
+
+    fireEvent.change(paisSelect(), { target: { value: '598' } });
+
+    expect(telefonoInput().placeholder).toBe('');
+  });
+});

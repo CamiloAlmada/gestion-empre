@@ -145,7 +145,20 @@ export function ModalCliente({
             />
           </div>
           <div className="flex-1">
-            <Input label="Teléfono (opcional)" value={telefonoNacional} onChange={setTelefonoNacional} />
+            <Input
+              label="Teléfono (opcional)"
+              value={telefonoNacional}
+              onChange={setTelefonoNacional}
+              // Con país ≠ default, `componerTelefono` antepone `+cc` y
+              // `normalizarTelefono` confía en los dígitos tal cual (no le
+              // quita ceros troncales): un nacional tipeado con el `0` de
+              // troncal (Argentina "011…", Brasil "011 9…", Reino Unido
+              // "07…", Alemania "0170…", Francia "06…") queda en el E.164
+              // con el `0` adentro, número inexistente. No se puede arreglar
+              // sacando el `0` a ciegas en `core` (Italia SÍ lo conserva en
+              // sus fijos) — es un recordatorio de UI, no una validación.
+              placeholder={codigoPais !== codigoPaisDefault ? 'Sin el 0 inicial' : undefined}
+            />
           </div>
         </div>
         <Input label="Email (opcional)" type="email" value={email} onChange={setEmail} />
