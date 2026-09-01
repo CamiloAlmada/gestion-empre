@@ -223,8 +223,11 @@ describe('Clientes - estados', () => {
 });
 
 describe('Clientes - terna Todos/Activos/Inactivos (WA-G, docs/06-ui-ux.md §3)', () => {
-  const HACE_MUCHO = new Date('2026-04-01T12:00:00'); // ~103 días atrás: inactivo comercial (umbral global 30).
-  const RECIENTE = new Date('2026-07-10T12:00:00');
+  // Relativas a HOY, no fijas (2026-09-01): con fechas absolutas el test se
+  // vencía solo cuando "reciente" superaba el umbral de 30 días de inactividad.
+  const DIA_MS = 24 * 60 * 60 * 1000;
+  const HACE_MUCHO = new Date(Date.now() - 103 * DIA_MS); // inactivo comercial (umbral global 30).
+  const RECIENTE = new Date(Date.now() - 3 * DIA_MS);
 
   const activoAlDia = cliente({
     id: 'c1',
@@ -483,6 +486,24 @@ describe('Clientes - alta', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
 
     expect(await screen.findByText('No se pudo crear el cliente. Intentá de nuevo.')).toBeTruthy();
+  });
+});
+
+describe('Clientes - alta con selector de país (tester en España tomado como uruguayo)', () => {
+  it('elegir España (+34) en el modal de alta llama a crearCliente con telefono con el prefijo "+34"', async () => {
+    configurarClientes(estadoOk([]));
+    mocks.crearCliente.mockReturnValue({ clienteId: 'nuevo', confirmacion: Promise.resolve() });
+    renderizar();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Agregar cliente' })[0]!);
+    fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Cliente España' } });
+    fireEvent.change(screen.getByLabelText('País'), { target: { value: '34' } });
+    fireEvent.change(screen.getByLabelText('Teléfono (opcional)'), { target: { value: '612 345 678' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+    await waitFor(() => expect(mocks.crearCliente).toHaveBeenCalledTimes(1));
+    const [, datos] = mocks.crearCliente.mock.calls[0] as [unknown, { telefono?: string }];
+    expect(datos.telefono).toBe('+34 612 345 678');
   });
 });
 
