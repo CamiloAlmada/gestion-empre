@@ -427,3 +427,34 @@ las notas de esta tanda (reescritas) y perdió 177 líneas no commiteadas de
 `settings.json` (reglas de permisos autogeneradas; no recuperables de git).
 Lección para briefs a `trainee`: prohibir explícitamente `git checkout`,
 `git stash` y `git restore`.
+
+### Llamada 2 (cierre, con todo commiteado en `main`)
+
+**Recomendación textual:** "Entregalo al dueño para probar en el celular tal
+como está. No bloquea nada. Anotá cuatro follow-ups chicos en el plan y
+corregí una línea en doc 08 antes del próximo cliente extranjero: la
+limitación del `0` troncal."
+
+Sobre las preguntas: (1) no hay camino por el que `[]` pise lo guardado; la
+compuerta `pendiente` cubre recargar en otra pestaña, `vaciar` al cobrar
+escribe `[]` correctamente y `''` no lee ni escribe. Único hueco: la variante
+del edge f donde `hidratar` REEMPLAZA un carrito armado en memoria. (2) La
+pieza ajustada no altera el decremento: `increment(-gramos)` usa `item.gramos`
+y `congelarCosteo` lee solo `costoKgCents`/`compraId`. (4) `componerTelefono`
+corre solo al Guardar; el E164 es idéntico en todo round-trip.
+
+**Follow-ups pedidos:** (1) "en memoria gana" al hidratar; (2) placeholder
+"Sin el 0 inicial" cuando el país difiere del default + línea en doc 08 (con
+`+cc` se confía en los dígitos, un `011…` argentino da un E164 inválido —
+preexistente, pero el selector lo vuelve el camino natural; NO quitar el 0 en
+core: Italia lo conserva); (3) guard `> 0` en `gramos`/`unidades` del payload;
+(4) deuda preexistente de granel: dos ítems de 400 g con 500 g de stock pasan
+porque `registrarVenta` valida por ítem. Y una nota en docs: un cliente
+guardado a mano como `+598 99…` pasa a `99…` al editarlo (mismo E164).
+
+**Supuestos verificados por el orquestador:** `RutaProtegida` no renderiza
+`Shell` sin `perfil` (devuelve `Cargando…`, `Navigate` o "Cuenta no
+autorizada"); `ModalAgregarGranel.tsx:48` exige `gramos > 0`.
+
+**Qué se hizo después:** follow-ups 1 y 3 al `senior` (mismo agente, contexto
+intacto), 2 y la nota de docs al `semisenior` del modal, 4 anotado en el plan.

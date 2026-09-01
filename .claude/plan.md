@@ -562,6 +562,12 @@ magnitudes, nunca snapshots, y rehidratando contra las colecciones vivas.
 | C | Carrito persistente en `localStorage` por uid, rehidratación reconciliada | `senior` | ✅ hecha, 49 + 12 + 9 tests nuevos | manual: 3 ítems → recargar → 3 ítems; pieza vendida en otro dispositivo → recargar → toast y 2 ítems |
 | D | `Clientes.test.tsx` con fechas relativas (se vencía al pasar 30 días de `2026-07-10`) | `trainee` | ✅ hecha | 30/30 en verde; preexistente, no lo introdujo la tanda |
 
+**Deuda anotada (advisor, cierre; preexistente, fuera de la tanda):** granel
+permite dos ítems de 400 g con 500 g de stock porque `registrarVenta` valida
+por ítem (`ventas.ts:388`), no en agregado. Las reglas con piso cero lo
+rechazan en el servidor, pero el vendedor se entera tarde. Decidir con el
+dueño si vale una validación agregada en el POS.
+
 **Pendiente del dueño:** probar en el celular (Android: que el arrastre hacia
 abajo ya no recargue; cargar 3 ítems, cerrar la app, volver a abrir), y decidir
 si la lista de países alcanza.
