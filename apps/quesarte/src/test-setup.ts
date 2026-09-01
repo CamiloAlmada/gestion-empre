@@ -1,6 +1,16 @@
 /**
  * Setup de vitest para la app quesarte.
  *
+ * Nota aparte (no resuelta acá, sino en el script "test" de package.json,
+ * igual que en @gestion/ui): Node 22+ trae un `localStorage` global propio
+ * (flag `--experimental-webstorage`, default on) que pisa el
+ * `window.localStorage` de jsdom sin backing file real — queda `undefined` en
+ * vez de funcionar. El script "test" corre con
+ * `NODE_OPTIONS=--no-experimental-webstorage` para que gane el de jsdom, que
+ * es el que necesita la persistencia del carrito (ContextoCarrito.tsx,
+ * 2026-09-01). Correr `vitest` a mano SIN esa variable hace fallar esos tests
+ * con "Cannot read properties of undefined".
+ *
  * jsdom (29.x, la versión usada en todo el monorepo) todavía no implementa
  * `HTMLDialogElement.showModal()`/`close()` ni sus eventos ("cancel"/"close")
  * — ver https://github.com/jsdom/jsdom/issues/3294 — aunque sí soporta la

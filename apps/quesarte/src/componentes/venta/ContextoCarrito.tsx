@@ -2,13 +2,27 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
   type ReactNode,
 } from 'react';
 import type { ClienteVenta } from '@gestion/firebase-kit';
+import {
+  esCarritoPersistidoValido,
+  serializarCarrito,
+  type CarritoPersistido,
+} from './carritoPersistido';
 import type { ItemCarrito } from './itemsCarrito';
+
+/** Estado con el que `hidratar` reemplaza el carrito tras reconciliar el
+ * payload persistido contra las colecciones vivas (ver `rehidratarCarrito`). */
+export interface CarritoHidratado {
+  items: ItemCarrito[];
+  cliente: ClienteVenta | null;
+  proximaClave: number;
+}
 
 interface EstadoCarritoContexto {
   items: ItemCarrito[];
@@ -40,7 +54,9 @@ interface EstadoCarritoContexto {
    * contador reviviera en cada montaje de `Venta`, un ítem agregado antes de
    * navegar y uno agregado después de volver podrían terminar con la MISMA
    * clave (`item-0`), rompiendo tanto la identidad de lista de React como
-   * `quitar` (que filtra por clave). */
+   * `quitar` (que filtra por clave). Por eso también se persiste y se
+   * restaura: si el contador arrancara de cero tras una recarga, las claves
+   * nuevas chocarían con las de los ítems rehidratados. */
   proximaClave: () => string;
   /** Cliente asociado a la venta en curso (docs/07-clientes-proveedores.md
    * §POS). `null` = venta anónima, el caso por defecto. Vive acá por la MISMA
@@ -54,41 +70,124 @@ interface EstadoCarritoContexto {
   /** Quita el cliente asociado (acción reversible, sin confirmación —
    * docs/06-ui-ux.md §6). La venta vuelve a ser anónima. */
   quitarCliente: () => void;
+  /**
+   * Carrito leído de `localStorage` al montar y TODAVÍA NO reconciliado, o
+   * `null` si no había nada guardado (o ya se reconcilió). Es el disparador
+   * de la rehidratación: mientras sea distinto de `null` este proveedor NO
+   * escribe nada (ver `ProveedorCarrito`), y quien lo consuma —hoy solo
+   * `Venta.tsx`, la única pantalla con las colecciones vivas a mano— debe
+   * pasarlo por `rehidratarCarrito` y devolver el resultado con `hidratar`.
+   */
+  pendiente: CarritoPersistido | null;
+  /** Instala el carrito ya reconciliado y libera la escritura (limpia
+   * `pendiente`). Idempotente desde el punto de vista del storage: quien
+   * llama garantiza hacerlo una sola vez por payload. */
+  hidratar: (hidratado: CarritoHidratado) => void;
 }
 
 const ContextoCarrito = createContext<EstadoCarritoContexto | null>(null);
 
 export interface ProveedorCarritoProps {
   children: ReactNode;
+  /**
+   * Uid del vendedor logueado (`perfil.uid`, ver `Shell.tsx`). Aísla el
+   * carrito por usuario: dos personas que comparten el dispositivo no se
+   * pisan la venta. String vacío ⇒ no se persiste nada (defensivo: `Shell`
+   * vive dentro de `RutaProtegida`, que garantiza perfil activo, así que en
+   * la app real nunca llega vacío).
+   */
+  usuarioId: string;
+}
+
+function claveStorage(usuarioId: string): string {
+  return `carrito:${usuarioId}`;
+}
+
+/**
+ * Lee y valida el carrito guardado. Devuelve `null` ante cualquier dato
+ * ausente, JSON roto, versión desconocida o shape inválido — nunca lanza,
+ * nunca adivina (mismo criterio que `leerCacheTemaNegocio` en
+ * `packages/ui/src/temaNegocio.ts`).
+ */
+function leerCarritoPersistido(usuarioId: string): CarritoPersistido | null {
+  if (usuarioId === '') return null;
+  try {
+    const crudo = window.localStorage.getItem(claveStorage(usuarioId));
+    if (crudo === null) return null;
+    const datos: unknown = JSON.parse(crudo);
+    return esCarritoPersistidoValido(datos) ? datos : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Escribe el carrito. `localStorage` que lanza (modo privado, cuota llena)
+ * NO puede romper una venta: se traga el error y el carrito sigue vivo en
+ * memoria, que es como funcionaba antes de esta tanda. */
+function escribirCarritoPersistido(usuarioId: string, payload: CarritoPersistido): void {
+  if (usuarioId === '') return;
+  try {
+    window.localStorage.setItem(claveStorage(usuarioId), JSON.stringify(payload));
+  } catch {
+    // Sin persistencia, el carrito solo pierde la protección contra recargas.
+  }
 }
 
 /**
  * Custodia el estado de la venta en curso — el carrito — para que sobreviva a
- * la navegación entre pestañas (docs/06-ui-ux.md §6, 2026-07-09): antes vivía
- * en `useState` local de `pantallas/Venta.tsx`, así que un toque accidental
- * en la tab bar desmontaba la pantalla y perdía todo lo cargado. Ahora vive
- * en este contexto, montado en `Shell.tsx` POR ENCIMA del `Outlet` (mismo
- * criterio que `ProveedorHeader`) — dentro de la sesión (se pierde al
- * desloguear, correcto) pero fuera del ciclo de vida de cualquier pantalla
- * ruteada.
+ * la navegación entre pestañas (docs/06-ui-ux.md §6, 2026-07-09) y, desde el
+ * 2026-09-01, TAMBIÉN a las recargas de página y al cierre de la app.
  *
- * Solo custodia estado y delega en las funciones puras de `itemsCarrito.ts`
- * (`crearItem*`, `totalCarrito`, etc., llamadas por quien consume este
- * contexto) para construir y calcular ítems: cero lógica de dominio acá,
- * como exige `CLAUDE.md`.
+ * Vive montado en `Shell.tsx` POR ENCIMA del `Outlet` (mismo criterio que
+ * `ProveedorHeader`), fuera del ciclo de vida de cualquier pantalla ruteada.
+ * Solo custodia estado y delega en las funciones puras de `itemsCarrito.ts` y
+ * `carritoPersistido.ts`: cero lógica de dominio acá, como exige `CLAUDE.md`.
  *
- * Deliberadamente NO persiste en `localStorage`/`sessionStorage` (decisión
- * del tech lead, docs/06 §6): el caso real a cubrir es el toque accidental de
- * tab en plena venta, no sobrevivir a un refresh de página — entre recargas
- * las piezas elegidas por FIFO podrían haber cambiado de estado (vendidas,
- * de baja) en Firestore, y reofrecer un carrito viejo con datos vencidos es
- * más peligroso que perderlo. El estado en memoria alcanza para el caso que
- * importa.
+ * ## Persistencia (2026-09-01, pedido del dueño)
+ *
+ * Hasta esta fecha el carrito a propósito NO se persistía: entre recargas las
+ * piezas elegidas por FIFO podían haber cambiado de estado, y reofrecer un
+ * carrito viejo con datos vencidos se consideró más peligroso que perderlo.
+ * Un tester externo perdió su pedido varias veces por un pull-to-refresh
+ * accidental y el dueño pidió lo contrario.
+ *
+ * La protección de fondo se conserva, movida de lugar: se persisten **ids y
+ * magnitudes, nunca snapshots** de `Producto`/`Pieza`/`Cliente` (ver
+ * `carritoPersistido.ts`), y al volver se RECONSTRUYE contra las colecciones
+ * vivas. Lo que ya no existe o no alcanza se descarta y se avisa; el precio,
+ * el costo y el peso de una pieza entera salen siempre del dato de hoy. Un
+ * carrito viejo nunca vuelve tal cual: vuelve reconciliado o no vuelve.
+ *
+ * Detalles que importan:
+ * - **Clave por usuario** (`carrito:{uid}`). NO se limpia al desloguear
+ *   (pedido literal del dueño): otro vendedor en el mismo dispositivo abre su
+ *   propio carrito, y el primero recupera el suyo al volver.
+ * - **Solo se escribe DESPUÉS de hidratar** (o si no había nada guardado). El
+ *   estado arranca vacío, así que escribir antes de reconciliar pisaría el
+ *   carrito guardado con `[]` — justo el bug que esta tanda evita. Mientras
+ *   `pendiente !== null` este proveedor es de solo lectura.
+ * - **Write-through en cada cambio, sin debounce.** Los cambios van a ritmo
+ *   humano (un toque = un ítem); un debounce solo abriría la ventana de
+ *   pérdida que venimos a cerrar.
+ * - **Sin TTL** (decisión del dueño): el carrito dura hasta que se cobre o se
+ *   vacíe a mano.
+ * - **Limitación conocida — dos pestañas.** Dos pestañas del POS del mismo
+ *   usuario escriben la misma clave y gana la última (last-write-wins), sin
+ *   `storage` listener que las sincronice. Aceptable: el mostrador es uno y
+ *   trabaja con una sola pestaña; no vale la pena el mecanismo de
+ *   coordinación para un caso que en el uso real no ocurre.
  */
-export function ProveedorCarrito({ children }: ProveedorCarritoProps) {
+export function ProveedorCarrito({ children, usuarioId }: ProveedorCarritoProps) {
   const [items, setItems] = useState<ItemCarrito[]>([]);
   const [cliente, setCliente] = useState<ClienteVenta | null>(null);
   const proximaClaveRef = useRef(0);
+  // Lectura ÚNICA al montar (initializer perezoso: no se repite en cada
+  // render). `usuarioId` es estable mientras el proveedor vive — `Shell` está
+  // dentro de `RutaProtegida`, que desmonta todo el árbol cuando cambia la
+  // sesión — así que no hace falta reaccionar a que cambie.
+  const [pendiente, setPendiente] = useState<CarritoPersistido | null>(() =>
+    leerCarritoPersistido(usuarioId),
+  );
 
   const agregar = useCallback((item: ItemCarrito) => {
     setItems((actual) => [...actual, item]);
@@ -121,6 +220,23 @@ export function ProveedorCarrito({ children }: ProveedorCarritoProps) {
     setCliente(null);
   }, []);
 
+  const hidratar = useCallback((hidratado: CarritoHidratado) => {
+    proximaClaveRef.current = hidratado.proximaClave;
+    setItems(hidratado.items);
+    setCliente(hidratado.cliente);
+    setPendiente(null);
+  }, []);
+
+  // Write-through. `pendiente === null` es la compuerta: o no había nada
+  // guardado (se puede escribir desde el vamos) o ya se reconcilió. El
+  // contador de claves se lee del ref y no de un estado porque siempre
+  // avanza JUNTO con un `agregar`, que sí dispara este efecto.
+  const listoParaEscribir = pendiente === null;
+  useEffect(() => {
+    if (!listoParaEscribir) return;
+    escribirCarritoPersistido(usuarioId, serializarCarrito(items, cliente, proximaClaveRef.current));
+  }, [listoParaEscribir, items, cliente, usuarioId]);
+
   const valor = useMemo<EstadoCarritoContexto>(
     () => ({
       items,
@@ -132,8 +248,22 @@ export function ProveedorCarrito({ children }: ProveedorCarritoProps) {
       cliente,
       seleccionarCliente,
       quitarCliente,
+      pendiente,
+      hidratar,
     }),
-    [items, agregar, quitar, vaciar, actualizar, proximaClave, cliente, seleccionarCliente, quitarCliente],
+    [
+      items,
+      agregar,
+      quitar,
+      vaciar,
+      actualizar,
+      proximaClave,
+      cliente,
+      seleccionarCliente,
+      quitarCliente,
+      pendiente,
+      hidratar,
+    ],
   );
 
   return <ContextoCarrito.Provider value={valor}>{children}</ContextoCarrito.Provider>;

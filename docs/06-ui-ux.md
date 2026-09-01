@@ -348,8 +348,25 @@ orquestador; no se ignora en silencio.
 - **La venta en curso sobrevive a la navegación** (2026-07-09): cambiar de
   pestaña (a propósito o por toque accidental) NO vacía el carrito; el estado
   vive por encima de la pantalla Venta y se limpia solo al cobrar o al
-  quitarlo explícitamente. No persiste entre recargas (las piezas elegidas
-  pueden quedar viejas).
+  quitarlo explícitamente.
+- **El carrito también sobrevive a recargas y cierres de la app**
+  (2026-09-01, pedido del dueño — revierte la regla anterior de no persistir):
+  un pull-to-refresh accidental hacía perder el pedido entero. Se persiste en
+  `localStorage` bajo `carrito:{uid}` (aislado por usuario; NO se limpia al
+  desloguear: otro vendedor en el mismo dispositivo ve su propio carrito), sin
+  TTL, hasta que se cobre o se vacíe a mano.
+  El motivo original de no persistir —reofrecer un carrito viejo con piezas
+  que ya cambiaron de estado es peor que perderlo— sigue vigente y se resuelve
+  en el mecanismo, no volviendo atrás: se guardan **ids y magnitudes, nunca
+  snapshots** de producto/pieza/cliente, y al volver el carrito se
+  **reconstruye contra las colecciones vivas**. Precio, costo y peso de una
+  pieza entera salen del dato de hoy; lo que ya no existe o no alcanza
+  (producto dado de baja, pieza vendida, stock insuficiente, cliente
+  desactivado) se **descarta con aviso por toast**, nombrando qué se quitó y
+  qué cambió de precio. La reconciliación no es más estricta que agregar: usa
+  el mismo criterio de disponible que los modales del POS, así que un carrito
+  intacto contra un mundo intacto vuelve completo. Se escribe recién después
+  de reconciliar, para que el carrito vacío del arranque no pise lo guardado.
 - **El carrito es editable en el lugar** (2026-07-09): ítems por unidad llevan
   − / + inline (respetando stock); ítems al peso reabren su modal con el valor
   actual al tocarlos; pieza entera abre el modal para sumar otra pieza. La

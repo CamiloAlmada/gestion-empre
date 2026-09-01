@@ -102,13 +102,19 @@ function ChipSinConexion() {
  *
  * También provee `ProveedorCarrito` (docs/06-ui-ux.md §6, 2026-07-09): mismo
  * criterio que `ProveedorHeader` — por encima del `Outlet` para que navegar
- * entre tabs no desmonte la venta en curso, pero dentro de la sesión (se
- * pierde al desloguear, correcto). Hoy solo lo consume `pantallas/Venta.tsx`.
+ * entre tabs no desmonte la venta en curso. Desde el 2026-09-01 el carrito
+ * además se PERSISTE por usuario (`carrito:{uid}`), así que se le pasa el uid
+ * del vendedor logueado: sobrevive a recargas y cierres de la app, y dos
+ * personas que comparten el dispositivo no se pisan la venta (ver
+ * ContextoCarrito.tsx). `RutaProtegida` garantiza perfil activo acá; el `??
+ * ''` es defensivo y equivale a "no persistir". Hoy solo lo consume
+ * `pantallas/Venta.tsx`.
  */
 export function Shell() {
+  const { perfil } = useAuth();
   return (
     <ProveedorHeader>
-      <ProveedorCarrito>
+      <ProveedorCarrito usuarioId={perfil?.uid ?? ''}>
         <ShellInterior />
       </ProveedorCarrito>
     </ProveedorHeader>

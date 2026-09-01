@@ -188,13 +188,13 @@ const mielFrasco = productoDe({
   stockUnidades: 5,
 });
 
-function renderizar() {
+function renderizar(usuarioId = 'u1') {
   return render(
     <MemoryRouter>
       <ProveedorToasts>
         <ProveedorHeader>
           <VisorAccionHeader />
-          <ProveedorCarrito>
+          <ProveedorCarrito usuarioId={usuarioId}>
             <Venta />
           </ProveedorCarrito>
         </ProveedorHeader>
@@ -229,7 +229,7 @@ function renderizarConNavegacion(rutaInicial: string) {
     <MemoryRouter initialEntries={[rutaInicial]}>
       <ProveedorToasts>
         <ProveedorHeader>
-          <ProveedorCarrito>
+          <ProveedorCarrito usuarioId="u1">
             <BotonesDeNavegacion />
             <Routes>
               <Route path="/venta" element={<Venta />} />
@@ -263,12 +263,14 @@ function lecturaPeso(): string | null {
 
 beforeEach(() => {
   configurarConfiguracion(null);
+  window.localStorage.clear();
 });
 
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
   mocks.useOnlineStatus.mockReturnValue(true);
+  window.localStorage.clear();
 });
 
 describe('Venta - estados', () => {
@@ -508,7 +510,7 @@ describe('Venta - editar carrito en el lugar (docs/06-ui-ux.md §6, POS-3)', () 
       <MemoryRouter>
         <ProveedorToasts>
           <ProveedorHeader>
-            <ProveedorCarrito>
+            <ProveedorCarrito usuarioId="u1">
               <Venta />
             </ProveedorCarrito>
           </ProveedorHeader>
@@ -915,7 +917,7 @@ describe('Venta - persistencia entre navegación (docs/06-ui-ux.md §6)', () => 
     await waitFor(() => expect(screen.getAllByText('Todavía no agregaste productos.').length).toBeGreaterThan(0));
   });
 
-  it('desmontar el proveedor (equivalente a desloguear) descarta el carrito', () => {
+  it('desmontar el proveedor (equivalente a desloguear) YA NO descarta el carrito: vuelve rehidratado (2026-09-01)', () => {
     configurarAuth();
     configurarCollections({ productos: estadoOk([mielFrasco]), piezas: estadoOk([]) });
 
@@ -925,7 +927,7 @@ describe('Venta - persistencia entre navegación (docs/06-ui-ux.md §6)', () => 
           <ProveedorToasts>
             <ProveedorHeader>
               {sesionActiva ? (
-                <ProveedorCarrito>
+                <ProveedorCarrito usuarioId="u1">
                   <Venta />
                 </ProveedorCarrito>
               ) : (
@@ -946,8 +948,184 @@ describe('Venta - persistencia entre navegación (docs/06-ui-ux.md §6)', () => 
     rerender(<Envoltorio sesionActiva={false} />);
     expect(screen.getByText('Sesión cerrada')).toBeTruthy();
 
-    // "Volver a loguearse": nuevo ProveedorCarrito, arranca vacío.
+    // "Volver a loguearse" con el MISMO uid: el proveedor nuevo lee el
+    // carrito guardado y Venta lo rehidrata contra las colecciones vivas
+    // (docs/06-ui-ux.md §6, 2026-09-01: el carrito NO se limpia al
+    // desloguear, pedido del dueño).
     rerender(<Envoltorio sesionActiva={true} />);
+    expect(screen.queryByText('Todavía no agregaste productos.')).toBeNull();
+    expect(screen.getAllByText('Miel 500g').length).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * Rehidratación del carrito persistido (docs/06-ui-ux.md §6, 2026-09-01).
+ * `ProveedorCarrito` deja el payload leído en `pendiente` y esta pantalla lo
+ * reconcilia contra productos/piezas/clientes vivos. Acá se prueba el CABLE:
+ * que se dispare una sola vez, que use el dato vivo y que avise lo que
+ * descartó. Las reglas de descarte, una por una, están en
+ * `componentes/venta/carritoPersistido.test.ts`.
+ */
+describe('Venta - rehidratación del carrito guardado (2026-09-01)', () => {
+  function sembrarCarrito(payload: unknown, usuarioId = 'u1') {
+    window.localStorage.setItem(`carrito:${usuarioId}`, JSON.stringify(payload));
+  }
+
+  function carritoDe(items: unknown[], cliente: unknown = null, proximaClave = items.length) {
+    return { v: 1, items, cliente, proximaClave };
+  }
+
+  it('rehidrata con los datos VIVOS: el precio sale del catálogo de hoy, no del guardado', () => {
+    configurarAuth();
+    // Se guardó a $ 450,00/kg; hoy vale $ 520,00/kg.
+    sembrarCarrito(
+      carritoDe([{ clave: 'item-0', productoId: 'p3', gramos: 200, precioUnitCents: 45000 }]),
+    );
+    const masCaro = { ...nuezMariposa, precioVentaCents: money(52000) };
+    configurarCollections({ productos: estadoOk([masCaro]), piezas: estadoOk([]) });
+
+    renderizar();
+
+    // 52000 * 200/1000 = 10400 -> $ 104,00 (no $ 90,00, el subtotal viejo).
+    expect(screen.getAllByText('$ 104,00').length).toBeGreaterThan(0);
+    expect(screen.queryByText('$ 90,00')).toBeNull();
+    expect(screen.getByText('Cambió el precio de: Nuez mariposa.')).toBeTruthy();
+  });
+
+  it('avisa por toast lo que descartó por falta de stock, y no lo muestra en el carrito', () => {
+    configurarAuth();
+    sembrarCarrito(
+      carritoDe([
+        { clave: 'item-0', productoId: 'p3', gramos: 200, precioUnitCents: 45000 },
+        // La pieza pz1 ya no está disponible (no viene en la query).
+        { clave: 'item-1', productoId: 'p1', piezaId: 'pz1', gramos: 500, precioUnitCents: 89900 },
+      ]),
+    );
+    configurarCollections({
+      productos: estadoOk([nuezMariposa, quesoColonia]),
+      piezas: estadoOk([]),
+    });
+
+    renderizar();
+
+    expect(screen.getByText('Se quitaron del carrito por falta de stock: Queso Colonia.')).toBeTruthy();
+    expect(screen.getAllByText('$ 90,00').length).toBeGreaterThan(0); // el granel sí sobrevivió
+    expect(screen.getAllByText('1 ítem').length).toBeGreaterThan(0);
+  });
+
+  it('avisa aparte los ítems que no puede nombrar (su producto ya no está en el catálogo)', () => {
+    configurarAuth();
+    sembrarCarrito(carritoDe([{ clave: 'item-0', productoId: 'borrado', gramos: 200, precioUnitCents: 45000 }]));
+    configurarCollections({ productos: estadoOk([nuezMariposa]), piezas: estadoOk([]) });
+
+    renderizar();
+
+    expect(screen.getByText('Se quitó 1 ítem del carrito: su producto ya no está en el catálogo.')).toBeTruthy();
+    expect(screen.getAllByText('Todavía no agregaste productos.').length).toBeGreaterThan(0);
+  });
+
+  it('rehidrata el cliente refrescándolo contra los clientes activos', () => {
+    configurarAuth();
+    sembrarCarrito(
+      carritoDe([], { id: 'c1', nombre: 'Marta (nombre viejo)', esPrimeraCompra: true }),
+    );
+    configurarCollections({
+      productos: estadoOk([mielFrasco]),
+      piezas: estadoOk([]),
+      clientes: estadoOk([clienteDe({ id: 'c1', nombre: 'Marta Pérez' })]),
+    });
+
+    renderizar();
+
+    // El botón de quitar solo existe cuando hay cliente ASOCIADO a la venta
+    // (Carrito.tsx), a diferencia del nombre suelto, que también aparece en
+    // la lista del SelectorCliente aunque esté cerrado.
+    expect(screen.getAllByRole('button', { name: 'Quitar cliente Marta Pérez' }).length).toBeGreaterThan(0);
+    expect(screen.queryByText('Marta (nombre viejo)')).toBeNull();
+  });
+
+  it('avisa si el cliente asociado ya no está activo y vuelve la venta a anónima', () => {
+    configurarAuth();
+    sembrarCarrito(carritoDe([], { id: 'c1', nombre: 'Marta', esPrimeraCompra: false }));
+    configurarCollections({
+      productos: estadoOk([mielFrasco]),
+      piezas: estadoOk([]),
+      clientes: estadoOk([]),
+    });
+
+    renderizar();
+
+    expect(screen.getByText('Se quitó el cliente de la venta: ya no está activo.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Quitar cliente Marta' })).toBeNull();
+  });
+
+  it('rehidrata UNA sola vez: un rerender posterior no resucita lo que el usuario quitó', () => {
+    configurarAuth();
+    sembrarCarrito(carritoDe([{ clave: 'item-0', productoId: 'p4', unidades: 2, precioUnitCents: 45000 }]));
+    configurarCollections({ productos: estadoOk([mielFrasco]), piezas: estadoOk([]) });
+
+    const arbol = (
+      <MemoryRouter>
+        <ProveedorToasts>
+          <ProveedorHeader>
+            <ProveedorCarrito usuarioId="u1">
+              <Venta />
+            </ProveedorCarrito>
+          </ProveedorHeader>
+        </ProveedorToasts>
+      </MemoryRouter>
+    );
+    const { rerender } = render(arbol);
+    expect(screen.getAllByText('Miel 500g').length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Quitar Miel 500g del carrito' })[0]!);
+    expect(screen.getAllByText('Todavía no agregaste productos.').length).toBeGreaterThan(0);
+
+    // Un nuevo snapshot de Firestore vuelve a renderizar: si la hidratación
+    // no estuviera guardada por el ref, el carrito viejo volvería.
+    rerender(arbol);
+    expect(screen.getAllByText('Todavía no agregaste productos.').length).toBeGreaterThan(0);
+  });
+
+  it('con una colección en error NO hidrata ni pisa lo guardado (queda para el próximo intento)', () => {
+    configurarAuth();
+    const payload = carritoDe([{ clave: 'item-0', productoId: 'p4', unidades: 2, precioUnitCents: 45000 }]);
+    sembrarCarrito(payload);
+    configurarCollections({
+      productos: estadoOk([mielFrasco]),
+      piezas: { datos: [], cargando: false, error: { code: 'unavailable' } as FirestoreError },
+    });
+
+    renderizar();
+
+    // La pantalla muestra el error de catálogo, no el carrito…
+    expect(screen.getByText('No se pudo cargar el catálogo. Revisá tu conexión e intentá de nuevo.')).toBeTruthy();
+    // …y el carrito guardado sigue intacto en localStorage.
+    expect(JSON.parse(window.localStorage.getItem('carrito:u1') ?? 'null')).toEqual(payload);
+  });
+
+  it('mientras las colecciones cargan no hidrata ni escribe', () => {
+    configurarAuth();
+    const payload = carritoDe([{ clave: 'item-0', productoId: 'p4', unidades: 2, precioUnitCents: 45000 }]);
+    sembrarCarrito(payload);
+    configurarCollections({
+      productos: { datos: [], cargando: true, error: null },
+      piezas: estadoOk([]),
+    });
+
+    renderizar();
+
+    expect(screen.getByText('Cargando productos…')).toBeTruthy();
+    expect(JSON.parse(window.localStorage.getItem('carrito:u1') ?? 'null')).toEqual(payload);
+  });
+
+  it('el carrito de otro vendedor en el mismo dispositivo no se mezcla', () => {
+    configurarAuth();
+    sembrarCarrito(carritoDe([{ clave: 'item-0', productoId: 'p4', unidades: 2, precioUnitCents: 45000 }]), 'u1');
+    configurarCollections({ productos: estadoOk([mielFrasco]), piezas: estadoOk([]) });
+
+    renderizar('u2');
+
     expect(screen.getAllByText('Todavía no agregaste productos.').length).toBeGreaterThan(0);
   });
 });

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { collection, doc, orderBy, query, where } from 'firebase/firestore';
 import {
@@ -32,6 +32,7 @@ import { Button, useToasts } from '@gestion/ui';
 import { db } from '../firebase';
 import { IconoHistorial } from '../componentes/iconos';
 import { Carrito } from '../componentes/venta/Carrito';
+import { rehidratarCarrito } from '../componentes/venta/carritoPersistido';
 import { useCarrito } from '../componentes/venta/ContextoCarrito';
 import { GrillaProductos } from '../componentes/venta/GrillaProductos';
 import {
@@ -133,6 +134,8 @@ export function Venta() {
     cliente,
     seleccionarCliente,
     quitarCliente,
+    pendiente,
+    hidratar,
   } = useCarrito();
 
   const [intento, setIntento] = useState(0);
@@ -192,6 +195,66 @@ export function Venta() {
   const categorias = useCollection<Categoria>(categoriasQuery);
 
   const piezasAgrupadas = useMemo(() => agruparPiezasPorProducto(piezas.datos), [piezas.datos]);
+
+  /**
+   * Rehidratación del carrito guardado (docs/06-ui-ux.md §6, 2026-09-01).
+   *
+   * `ProveedorCarrito` leyó el payload de `localStorage` al montar y lo dejó
+   * en `pendiente` SIN aplicarlo (y sin escribir nada mientras tanto). Esta
+   * pantalla es la única con las colecciones vivas a mano, así que es la que
+   * reconcilia: `rehidratarCarrito` reconstruye cada ítem contra productos,
+   * piezas y clientes de hoy, y lo que no sobrevive se avisa por toast.
+   *
+   * Corre UNA sola vez (`rehidratadoRef`) y solo con las tres colecciones
+   * resueltas. Con `persistentLocalCache` el primer snapshot llega de caché
+   * en milisegundos, incluso sin conexión: esperarlas no ata la hidratación a
+   * la red. Si alguna termina en ERROR no se hidrata —ni se escribe, ver
+   * `ContextoCarrito`—: reconstruir contra un catálogo que no cargó tiraría
+   * el carrito entero con descartes falsos, y el usuario ya está viendo el
+   * error de catálogo. El carrito guardado queda intacto para el próximo
+   * intento.
+   *
+   * Que la pantalla Venta pueda no estar montada al recargar (el usuario cae
+   * en otro tab) es aceptable: hasta que entre acá no se hidrata, y como
+   * `ProveedorCarrito` no escribe mientras haya algo pendiente, no hay riesgo
+   * de que el `[]` inicial pise lo guardado. Hoy `useCarrito` solo lo consume
+   * esta pantalla, así que tampoco hay otro camino que mute el carrito antes.
+   */
+  const rehidratadoRef = useRef(false);
+  useEffect(() => {
+    if (pendiente === null || rehidratadoRef.current) return;
+    if (productos.cargando || piezas.cargando || clientes.cargando) return;
+    if (productos.error !== null || piezas.error !== null || clientes.error !== null) return;
+
+    rehidratadoRef.current = true;
+    const resultado = rehidratarCarrito(pendiente, productos.datos, piezas.datos, clientes.datos);
+    hidratar({
+      items: resultado.items,
+      cliente: resultado.cliente,
+      proximaClave: pendiente.proximaClave,
+    });
+
+    if (resultado.descartados.length > 0) {
+      mostrarToast(
+        `Se quitaron del carrito por falta de stock: ${resultado.descartados.join(', ')}.`,
+        'info',
+      );
+    }
+    if (resultado.descartadosSinNombre > 0) {
+      mostrarToast(
+        resultado.descartadosSinNombre === 1
+          ? 'Se quitó 1 ítem del carrito: su producto ya no está en el catálogo.'
+          : `Se quitaron ${resultado.descartadosSinNombre} ítems del carrito: sus productos ya no están en el catálogo.`,
+        'info',
+      );
+    }
+    if (resultado.preciosCambiados.length > 0) {
+      mostrarToast(`Cambió el precio de: ${resultado.preciosCambiados.join(', ')}.`, 'info');
+    }
+    if (resultado.clienteDescartado) {
+      mostrarToast('Se quitó el cliente de la venta: ya no está activo.', 'info');
+    }
+  }, [pendiente, productos, piezas, clientes, hidratar, mostrarToast]);
 
   function reintentar() {
     setIntento((n) => n + 1);
