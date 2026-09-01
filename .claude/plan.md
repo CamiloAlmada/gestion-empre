@@ -543,3 +543,29 @@ Verificación: `pnpm turbo lint test build --force` 12/12, 1844 tests en la app.
 No se implementan antes de esa sesión; el objetivo de la sesión es
 repriorizarlos (docs/10b): pantalla de reporte de merma, proyección del mes,
 próximo viaje / cobertura, preferencias de cliente.
+
+## F1 — Feedback del tester externo (2026-09-01)
+
+Un amigo en común con Adrián (vive en España) usó la app sin instrucciones.
+Tres hallazgos. Diseño en `.claude/advisor-log.md` (llamada 1 del 2026-09-01).
+
+**Decisión revertida (2026-09-01, pedido del dueño):** el carrito SÍ persiste
+entre recargas. La decisión original de no persistir (docs/06 §6, 2026-07-09)
+temía reofrecer piezas/precios vencidos; se resuelve persistiendo ids y
+magnitudes, nunca snapshots, y rehidratando contra las colecciones vivas.
+
+| # | Tarea | Agente | Estado | Criterio de aceptación |
+| --- | --- | --- | --- | --- |
+| A | `overscroll-behavior-y: none` en `html, body` | `trainee` | ✅ hecha, diff verificado | verificación manual en Android por el dueño |
+| B1 | `core/telefono.ts`: `CODIGOS_PAIS`, `componerTelefono`, `separarCodigoPais` + tests | `semisenior` | ✅ hecha, 452 tests de core (43 en telefono) | round-trip separar(componer(x)) = x para cada código |
+| B2 | `ui/Select` + `ModalCliente` con selector de país + callers + doc 08 | `semisenior` | ✅ hecha, 7 tests del modal + 1 de integración | elegir España + `612…` guarda `telefono: '+34 612…'`; editar `+34…` precarga España; local sin `+` no cambia |
+| C | Carrito persistente en `localStorage` por uid, rehidratación reconciliada | `senior` | ✅ hecha, 49 + 12 + 9 tests nuevos | manual: 3 ítems → recargar → 3 ítems; pieza vendida en otro dispositivo → recargar → toast y 2 ítems |
+| D | `Clientes.test.tsx` con fechas relativas (se vencía al pasar 30 días de `2026-07-10`) | `trainee` | ✅ hecha | 30/30 en verde; preexistente, no lo introdujo la tanda |
+
+**Pendiente del dueño:** probar en el celular (Android: que el arrastre hacia
+abajo ya no recargue; cargar 3 ítems, cerrar la app, volver a abrir), y decidir
+si la lista de países alcanza.
+
+**Incidente:** el `trainee` de A revirtió con `git checkout` cuatro archivos
+fuera de su alcance, entre ellos `.claude/settings.json` con 177 líneas de
+permisos no commiteadas. Ver advisor-log.

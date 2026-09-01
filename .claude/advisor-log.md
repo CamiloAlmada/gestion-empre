@@ -357,3 +357,73 @@ central del brief de T1. Lanzadas T1 y T2 en paralelo.
 
 **Divergencias:** ninguna. Me corrigió una premisa falsa —la del read-set— y el
 resto de sus supuestos se sostuvieron. Se anota condicionado, no como pendiente.
+
+---
+
+## 2026-09-01 — Feedback del tester externo: teléfono con país, overscroll, carrito persistente
+
+### Llamada 1 (temprana, antes de elegir enfoque)
+
+**Recomendación textual (resumen fiel):**
+
+1. *Teléfono:* "No tocar `normalizarTelefono` ni `firebase-kit`. En
+   `core/telefono.ts` agregar una lista corta `CODIGOS_PAIS` (598 default, 54,
+   55, 595, 591, 56, 34, 1, 39, 351, 49, 33, 44) y dos funciones puras con
+   tests: `componerTelefono(cc, nacional, ccDefault)` → devuelve `nacional` tal
+   cual si `cc === ccDefault`, o `+cc nacional` si difiere;
+   `separarCodigoPais(display, ccDefault)` → parte un display que arranca con
+   `+`/`00` por prefijo más largo de la lista, y si no matchea devuelve
+   `{cc: ccDefault, nacional: display}`. En `packages/ui` un `Select` nativo
+   mínimo. `ModalCliente` recibe prop `codigoPaisDefault`, muestra Select
+   'País' + Input 'Número', y persiste `componerTelefono` en `telefono`."
+   Descartado: `SearchSelect` (bufferizado, exige `key` en Modal), campo libre
+   sin lista (no permite precargar `+34…`), campo nuevo en `clientes` (rompe
+   `hasOnly` → deploy de reglas, innecesario porque el `+` es autodescriptivo).
+2. *Overscroll:* "`html, body { overscroll-behavior-y: none; }` en `index.css`.
+   Solo Y. El scroller del documento es `body`; los contenedores internos y el
+   agarre del carrito (`touch-none` + pointer capture) no cambian." Y advierte:
+   no considerarlo resuelto solo con CSS, el pedido real es el carrito.
+3. *Carrito:* "`localStorage`, clave `carrito:<uid>`, payload versionado con IDS
+   Y MAGNITUDES, nunca snapshots: `{ v:1, items:[{clave, productoId, piezaId?,
+   gramos?, unidades?, precioUnitCents}], cliente, proximaClave }`.
+   `ProveedorCarrito` recibe `usuarioId` por prop, lee al montar en `pendiente`,
+   y solo escribe (write-through, sin debounce) DESPUÉS de hidratar. Módulo puro
+   `carritoPersistido.ts` con type guard, `serializar` y
+   `rehidratarCarrito(persistidos, productos, piezas, clientes)` que
+   reconstruye con `crearItem*` contra las colecciones vivas y devuelve
+   `{items, descartados}`. `Venta.tsx` lo invoca una vez cuando productos y
+   piezas tienen `cargando=false, error=null`; toast con lo descartado y otro si
+   cambió un precio." Descartado: IndexedDB, persistir snapshots, re-FIFO
+   automático, limpiar al desloguear (contradice el pedido; aislar por uid
+   resuelve multiusuario), debounce.
+
+**Supuestos verificados por el orquestador:** `Shell` vive dentro de
+`RutaProtegida` (`App.tsx:108`); piezas `estado == 'disponible'` y clientes
+`activo == true` (`Venta.tsx:173,178`); reglas de `clientes.telefono` solo
+`is string` (`firestore.rules:176`); `packages/ui` no tiene `Select`;
+`registerType: 'autoUpdate'` (`vite.config.ts:52`).
+
+**Bloqueantes y cómo se resolvieron (decisiones del orquestador, el dueño no
+estaba presente; se le informan al cierre):**
+- Lista de países: la propuesta del advisor tal cual. Ampliable después.
+- TTL del carrito: **sin TTL**, el pedido fue literal ("hasta que lo elimine
+  o lo confirme a propósito").
+- Stock menor al persistido en unidad/granel: **descartar y avisar**, no
+  recortar (una rama menos y no decide en silencio cuánto se vende).
+- Dispositivo del tester: desconocido. El CSS se aplica igual; la verificación
+  en Android la hace el dueño.
+
+**Qué se hizo después:** A (`trainee`), B1 (`semisenior`) y C (`senior`) en
+paralelo; B2 (`semisenior`) tras B1. Todo verificado por diff. El `senior`
+agregó `descartadosSinNombre` al resultado de la rehidratación (un producto que
+ya no está en el catálogo no se puede nombrar porque no se persiste el nombre)
+y calibró los descartes con el mismo criterio que usa "agregar" para no dar
+falsas alarmas.
+
+**Incidente de proceso:** el `trainee` de la tarea A corrió
+`git checkout .claude/advisor-log.md .claude/plan.md .claude/settings.json
+apps/quesarte/.firebase/hosting.ZGlzdA.cache` fuera de su alcance. Revirtió
+las notas de esta tanda (reescritas) y perdió 177 líneas no commiteadas de
+`settings.json` (reglas de permisos autogeneradas; no recuperables de git).
+Lección para briefs a `trainee`: prohibir explícitamente `git checkout`,
+`git stash` y `git restore`.
