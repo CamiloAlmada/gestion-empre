@@ -55,9 +55,9 @@ export interface ItemPersistido {
   productoId: string;
   /** Solo en los modos por pieza (`fraccionado_por_pieza`, `pieza_entera`). */
   piezaId?: string;
-  /** Gramos pedidos. Solo en los modos al peso. */
+  /** Gramos pedidos (entero > 0). Solo en los modos al peso. */
   gramos?: number;
-  /** Unidades pedidas. Solo en `unidad_simple`. */
+  /** Unidades pedidas (entero > 0). Solo en `unidad_simple`. */
   unidades?: number;
   /** Precio unitario vigente cuando se agregó (para detectar cambios). */
   precioUnitCents: number;
@@ -118,6 +118,22 @@ function esEnteroNoNegativo(x: unknown): x is number {
   return typeof x === 'number' && Number.isInteger(x) && x >= 0;
 }
 
+/**
+ * Magnitudes PEDIDAS (`gramos`, `unidades`): estrictamente positivas. Un cero
+ * no es un ítem, es un ítem roto — y sale caro: `registrarVenta` lo rechaza
+ * con `ItemInvalidoError`, que hace fallar la venta ENTERA, no solo esa
+ * línea. Los modales del POS ya exigen `> 0` (`ModalAgregarGranel.tsx`,
+ * `ModalAgregarFraccionado.tsx`), así que un cero solo puede llegar de un
+ * `localStorage` editado a mano; descartar ese payload cuesta un carrito y
+ * evita un cobro que no puede prosperar.
+ *
+ * No aplica a `precioUnitCents` (un precio 0 es un dato legítimo del catálogo)
+ * ni a `proximaClave` (arranca en 0).
+ */
+function esEnteroPositivo(x: unknown): x is number {
+  return typeof x === 'number' && Number.isInteger(x) && x > 0;
+}
+
 function esTextoNoVacio(x: unknown): x is string {
   return typeof x === 'string' && x.length > 0;
 }
@@ -143,8 +159,8 @@ function esItemPersistidoValido(x: unknown): x is ItemPersistido {
   if (!esTextoNoVacio(x['productoId'])) return false;
   if (!esEnteroNoNegativo(x['precioUnitCents'])) return false;
   if ('piezaId' in x && !esTextoNoVacio(x['piezaId'])) return false;
-  if ('gramos' in x && !esEnteroNoNegativo(x['gramos'])) return false;
-  if ('unidades' in x && !esEnteroNoNegativo(x['unidades'])) return false;
+  if ('gramos' in x && !esEnteroPositivo(x['gramos'])) return false;
+  if ('unidades' in x && !esEnteroPositivo(x['unidades'])) return false;
   return true;
 }
 

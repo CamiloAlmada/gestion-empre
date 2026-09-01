@@ -1128,4 +1128,107 @@ describe('Venta - rehidratación del carrito guardado (2026-09-01)', () => {
 
     expect(screen.getAllByText('Todavía no agregaste productos.').length).toBeGreaterThan(0);
   });
+  /** Igual que `renderizar`, pero devolviendo un elemento NUEVO en cada
+   * llamada: `rerender` con el MISMO objeto elemento puede hacer que React
+   * omita el re-render (bailout por identidad de props), y estos tests
+   * necesitan que el árbol vuelva a renderizar con los mocks ya cambiados. */
+  function arbolVenta() {
+    return (
+      <MemoryRouter>
+        <ProveedorToasts>
+          <ProveedorHeader>
+            <ProveedorCarrito usuarioId="u1">
+              <Venta />
+            </ProveedorCarrito>
+          </ProveedorHeader>
+        </ProveedorToasts>
+      </MemoryRouter>
+    );
+  }
+
+  it('"en memoria gana": el carrito guardado NO pisa lo que el vendedor armó antes de poder reconciliar', () => {
+    configurarAuth();
+    // Guardado: 200 g de nuez, y el contador de claves ya en 5.
+    sembrarCarrito(
+      carritoDe([{ clave: 'item-0', productoId: 'p3', gramos: 200, precioUnitCents: 45000 }], null, 5),
+    );
+    // `clientes` en error: el POS lo tolera (la grilla sigue andando,
+    // docs/06 §1 "mostrador primero") pero la hidratación queda bloqueada.
+    configurarCollections({
+      productos: estadoOk([nuezMariposa, mielFrasco]),
+      piezas: estadoOk([]),
+      clientes: { datos: [], cargando: false, error: { code: 'unavailable' } as FirestoreError },
+    });
+
+    const { rerender } = render(arbolVenta());
+
+    // Todavía no se rehidrató nada.
+    expect(screen.getAllByText('Todavía no agregaste productos.').length).toBeGreaterThan(0);
+
+    // El vendedor arma su venta igual: un frasco de miel.
+    fireEvent.click(screen.getByText('Miel 500g'));
+    fireEvent.click(screen.getByRole('button', { name: 'Agregar' }));
+    expect(screen.getAllByRole('button', { name: 'Quitar Miel 500g del carrito' }).length).toBeGreaterThan(0);
+
+    // Ahora sí se resuelven los clientes: se destraba la hidratación.
+    configurarCollections({
+      productos: estadoOk([nuezMariposa, mielFrasco]),
+      piezas: estadoOk([]),
+      clientes: estadoOk([]),
+    });
+    rerender(arbolVenta());
+
+    // Gana lo de memoria: sigue la miel y la nuez guardada no aparece.
+    expect(screen.getAllByRole('button', { name: 'Quitar Miel 500g del carrito' }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('button', { name: 'Quitar Nuez mariposa del carrito' })).toBeNull();
+    expect(screen.getAllByText('1 ítem').length).toBeGreaterThan(0);
+
+    // Y sin toasts: no se descartó nada del carrito que el usuario ve.
+    expect(screen.queryByText(/Se quitaron del carrito/)).toBeNull();
+    expect(screen.queryByText(/Se quitó 1 ítem del carrito/)).toBeNull();
+    expect(screen.queryByText(/Cambió el precio de/)).toBeNull();
+
+    // El carrito de memoria ya se persiste (la compuerta se liberó) y el
+    // contador de claves no retrocedió: max(5 del payload, 1 de memoria).
+    const guardado = JSON.parse(window.localStorage.getItem('carrito:u1') ?? 'null');
+    expect(guardado.items).toHaveLength(1);
+    expect(guardado.items[0].productoId).toBe('p4');
+    expect(guardado.proximaClave).toBe(5);
+  });
+
+  it('"en memoria gana" también cuando lo único en memoria es el cliente elegido', () => {
+    configurarAuth();
+    mocks.crearCliente.mockReturnValue({ clienteId: 'c9', confirmacion: Promise.resolve() });
+    sembrarCarrito(
+      carritoDe([{ clave: 'item-0', productoId: 'p3', gramos: 200, precioUnitCents: 45000 }]),
+    );
+    configurarCollections({
+      productos: estadoOk([nuezMariposa]),
+      piezas: estadoOk([]),
+      clientes: { datos: [], cargando: true, error: null },
+    });
+
+    const { rerender } = render(arbolVenta());
+
+    // Alta rápida (100% client-side) antes de que se pueda hidratar.
+    fireEvent.click(screen.getAllByText('+ Cliente')[0]!);
+    fireEvent.change(screen.getByLabelText('Buscar por nombre, alias o teléfono'), {
+      target: { value: 'Nuevo' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Crear «Nuevo»' }));
+    expect(screen.getAllByText('Cliente: Nuevo').length).toBeGreaterThan(0);
+
+    configurarCollections({
+      productos: estadoOk([nuezMariposa]),
+      piezas: estadoOk([]),
+      clientes: estadoOk([]),
+    });
+    rerender(arbolVenta());
+
+    // El cliente en memoria sobrevive, el ítem guardado no entra, y NO se
+    // avisa un descarte de cliente (el cliente que hay es el de memoria).
+    expect(screen.getAllByText('Cliente: Nuevo').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Todavía no agregaste productos.').length).toBeGreaterThan(0);
+    expect(screen.queryByText(/Se quitó el cliente/)).toBeNull();
+  });
 });

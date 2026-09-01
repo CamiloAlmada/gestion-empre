@@ -179,6 +179,24 @@ describe('esCarritoPersistidoValido', () => {
     ).toBe(false);
   });
 
+  it('rechaza gramos en 0: no es un ítem, y `registrarVenta` haría fallar la venta ENTERA', () => {
+    const base = { clave: 'item-0', productoId: 'p3', precioUnitCents: 45000 };
+    expect(esCarritoPersistidoValido(payload({ items: [{ ...base, gramos: 0 }] as never }))).toBe(false);
+    // Control: con 1 g el mismo payload es válido.
+    expect(esCarritoPersistidoValido(payload({ items: [{ ...base, gramos: 1 }] as never }))).toBe(true);
+  });
+
+  it('rechaza unidades en 0 (mismo motivo)', () => {
+    const base = { clave: 'item-0', productoId: 'p4', precioUnitCents: 45000 };
+    expect(esCarritoPersistidoValido(payload({ items: [{ ...base, unidades: 0 }] as never }))).toBe(false);
+    expect(esCarritoPersistidoValido(payload({ items: [{ ...base, unidades: 1 }] as never }))).toBe(true);
+  });
+
+  it('sigue aceptando precioUnitCents en 0 (un precio 0 es dato legítimo) y proximaClave en 0', () => {
+    const item = { clave: 'item-0', productoId: 'p3', gramos: 200, precioUnitCents: 0 };
+    expect(esCarritoPersistidoValido(payload({ items: [item] as never, proximaClave: 0 }))).toBe(true);
+  });
+
   it('rechaza piezaId nulo o vacío (un `null` de JSON no es "ausente")', () => {
     const base = { clave: 'item-0', productoId: 'p1', precioUnitCents: 10 };
     expect(esCarritoPersistidoValido(payload({ items: [{ ...base, piezaId: null }] as never }))).toBe(false);

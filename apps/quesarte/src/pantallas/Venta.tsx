@@ -219,6 +219,19 @@ export function Venta() {
    * `ProveedorCarrito` no escribe mientras haya algo pendiente, no hay riesgo
    * de que el `[]` inicial pise lo guardado. Hoy `useCarrito` solo lo consume
    * esta pantalla, así que tampoco hay otro camino que mute el carrito antes.
+   *
+   * **En memoria gana.** Si cuando por fin se puede reconciliar YA hay algo
+   * cargado en memoria, el payload guardado se descarta entero y se instala
+   * lo que el vendedor tiene delante. Esto no es una preferencia estética:
+   * hidratar hace `setItems(...)`, o sea REEMPLAZA. La ventana existe de
+   * verdad — con `clientes` en error (que el POS tolera: la grilla sigue
+   * andando, `SelectorCliente` muestra su propio error) la hidratación queda
+   * bloqueada mientras el vendedor arma su venta; si esa colección se
+   * resuelve después, sin esta guarda el carrito guardado le borraría en
+   * silencio lo que acaba de cargar. Un carrito viejo jamás puede pisar una
+   * venta en curso. Sin toasts en este camino: no se descartó nada del
+   * carrito que el usuario ve, y avisarle de un payload que nunca llegó a
+   * mostrarse solo confunde.
    */
   const rehidratadoRef = useRef(false);
   useEffect(() => {
@@ -227,6 +240,15 @@ export function Venta() {
     if (productos.error !== null || piezas.error !== null || clientes.error !== null) return;
 
     rehidratadoRef.current = true;
+
+    if (carrito.length > 0 || cliente !== null) {
+      // `hidratar` clampea el contador de claves al máximo entre este valor y
+      // el que ya avanzó en memoria, así que las claves nuevas no chocan ni
+      // con las de memoria ni con las del payload descartado.
+      hidratar({ items: carrito, cliente, proximaClave: pendiente.proximaClave });
+      return;
+    }
+
     const resultado = rehidratarCarrito(pendiente, productos.datos, piezas.datos, clientes.datos);
     hidratar({
       items: resultado.items,
@@ -254,7 +276,7 @@ export function Venta() {
     if (resultado.clienteDescartado) {
       mostrarToast('Se quitó el cliente de la venta: ya no está activo.', 'info');
     }
-  }, [pendiente, productos, piezas, clientes, hidratar, mostrarToast]);
+  }, [pendiente, productos, piezas, clientes, carrito, cliente, hidratar, mostrarToast]);
 
   function reintentar() {
     setIntento((n) => n + 1);

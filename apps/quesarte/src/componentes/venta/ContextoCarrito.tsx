@@ -81,7 +81,9 @@ interface EstadoCarritoContexto {
   pendiente: CarritoPersistido | null;
   /** Instala el carrito ya reconciliado y libera la escritura (limpia
    * `pendiente`). Idempotente desde el punto de vista del storage: quien
-   * llama garantiza hacerlo una sola vez por payload. */
+   * llama garantiza hacerlo una sola vez por payload. `proximaClave` se
+   * aplica como MÁXIMO contra el contador vigente, nunca en crudo: el
+   * contador no puede retroceder (ver la implementación). */
   hidratar: (hidratado: CarritoHidratado) => void;
 }
 
@@ -221,7 +223,13 @@ export function ProveedorCarrito({ children, usuarioId }: ProveedorCarritoProps)
   }, []);
 
   const hidratar = useCallback((hidratado: CarritoHidratado) => {
-    proximaClaveRef.current = hidratado.proximaClave;
+    // El contador NUNCA retrocede: se toma el máximo entre el del payload y el
+    // que ya avanzó en memoria. Sin ese clamp, hidratar después de que el
+    // vendedor agregó ítems (caso "en memoria gana", ver `Venta.tsx`) haría
+    // que la próxima clave repita una en uso, rompiendo la identidad de lista
+    // de React y `quitar`, que filtra por clave. Vive acá y no en quien llama
+    // para que el invariante no dependa de que cada caller se acuerde.
+    proximaClaveRef.current = Math.max(hidratado.proximaClave, proximaClaveRef.current);
     setItems(hidratado.items);
     setCliente(hidratado.cliente);
     setPendiente(null);
