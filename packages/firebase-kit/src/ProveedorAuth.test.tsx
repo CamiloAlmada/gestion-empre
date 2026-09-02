@@ -34,9 +34,17 @@ const dbFalso = {} as Firestore;
 
 /** Captura el callback que `onAuthStateChanged` recibe, para dispararlo a mano. */
 let emitirAuth: (usuario: User | null) => void;
+/** Forma mínima del `DocumentSnapshot` que el provider consume. */
+interface SnapshotFalso {
+  exists: () => boolean;
+  data: () => Usuario;
+  metadata: { fromCache: boolean };
+}
 /** Callbacks que `onSnapshot` recibe (next/error) por cada suscripción abierta. */
-let onNextSnapshot: (snap: { exists: () => boolean; data: () => Usuario }) => void;
+let onNextSnapshot: (snap: SnapshotFalso) => void;
 let onErrorSnapshot: (error: unknown) => void;
+/** Opciones con las que se abrió la última suscripción al perfil. */
+let opcionesSnapshot: { includeMetadataChanges?: boolean } | undefined;
 
 function envolver({ children }: { children: ReactNode }) {
   return (
@@ -46,10 +54,15 @@ function envolver({ children }: { children: ReactNode }) {
   );
 }
 
-function snapshotDe(usuario: Usuario | null) {
+/**
+ * Snapshot falso. `fromCache` por defecto en `false` = confirmado por el
+ * servidor, que es el caso normal de los tests que ya existían.
+ */
+function snapshotDe(usuario: Usuario | null, fromCache = false): SnapshotFalso {
   return {
     exists: () => usuario !== null,
     data: () => usuario as Usuario,
+    metadata: { fromCache },
   };
 }
 
@@ -70,12 +83,17 @@ describe('ProveedorAuth / useAuth', () => {
       return mocks.desuscribirAuth;
     });
     mocks.doc.mockReturnValue({ withConverter: () => ({}) });
+    opcionesSnapshot = undefined;
     mocks.onSnapshot.mockImplementation(
       (
         _ref: unknown,
-        next: (snap: { exists: () => boolean; data: () => Usuario }) => void,
+        // El provider siempre suscribe con opciones: `onSnapshot(ref, opciones,
+        // next, error)`. Capturarlas por posición como hace `useCollection.test.ts`.
+        opciones: { includeMetadataChanges?: boolean },
+        next: (snap: SnapshotFalso) => void,
         error: (e: unknown) => void,
       ) => {
+        opcionesSnapshot = opciones;
         onNextSnapshot = next;
         onErrorSnapshot = error;
         return mocks.desuscribirSnapshot;
@@ -147,20 +165,135 @@ describe('ProveedorAuth / useAuth', () => {
     expect(result.current.perfil?.activo).toBe(false);
   });
 
-  it('perfil inexistente (snapshot sin doc): perfil null, cargando false', async () => {
+  it('perfil inexistente confirmado por el servidor: perfil null, cargando false', async () => {
     const { result } = renderHook(() => useAuth(), { wrapper: envolver });
 
     act(() => {
       emitirAuth(usuarioAuthFalso);
     });
     act(() => {
-      onNextSnapshot(snapshotDe(null));
+      onNextSnapshot(snapshotDe(null, false));
     });
 
     await waitFor(() => {
       expect(result.current.cargando).toBe(false);
     });
     expect(result.current.perfil).toBeNull();
+  });
+
+  it('suscribe el perfil con includeMetadataChanges', () => {
+    renderHook(() => useAuth(), { wrapper: envolver });
+
+    act(() => {
+      emitirAuth(usuarioAuthFalso);
+    });
+
+    expect(opcionesSnapshot).toEqual({ includeMetadataChanges: true });
+  });
+
+  // Bug de producción 2026-09-02: con la caché de Firestore vacía y sin red,
+  // el SDK no falla — entrega un snapshot vacío desde caché. Tomarlo como
+  // "no existe" mostraba "Cuenta no autorizada" a un admin con doc válido.
+  it('snapshot vacío desde caché: NO resuelve, sigue cargando y no toca el perfil', () => {
+    const { result } = renderHook(() => useAuth(), { wrapper: envolver });
+
+    act(() => {
+      emitirAuth(usuarioAuthFalso);
+    });
+    act(() => {
+      onNextSnapshot(snapshotDe(null, true));
+    });
+
+    expect(result.current.cargando).toBe(true);
+    expect(result.current.perfil).toBeNull();
+  });
+
+  it('snapshot vacío desde caché y luego confirmación del servidor: recién ahí resuelve en null', async () => {
+    const { result } = renderHook(() => useAuth(), { wrapper: envolver });
+
+    act(() => {
+      emitirAuth(usuarioAuthFalso);
+    });
+    act(() => {
+      onNextSnapshot(snapshotDe(null, true));
+    });
+    expect(result.current.cargando).toBe(true);
+
+    act(() => {
+      onNextSnapshot(snapshotDe(null, false));
+    });
+
+    await waitFor(() => {
+      expect(result.current.cargando).toBe(false);
+    });
+    expect(result.current.perfil).toBeNull();
+  });
+
+  it('snapshot vacío desde caché y luego el perfil real: entra sin haber pasado por no autorizado', async () => {
+    const { result } = renderHook(() => useAuth(), { wrapper: envolver });
+
+    act(() => {
+      emitirAuth(usuarioAuthFalso);
+    });
+    act(() => {
+      onNextSnapshot(snapshotDe(null, true));
+    });
+    expect(result.current.cargando).toBe(true);
+
+    act(() => {
+      onNextSnapshot(snapshotDe(perfilActivo, false));
+    });
+
+    await waitFor(() => {
+      expect(result.current.cargando).toBe(false);
+    });
+    expect(result.current.perfil).toEqual(perfilActivo);
+  });
+
+  // Regla de oro 6: el mostrador puede quedarse sin internet. Un perfil
+  // cacheado es una respuesta válida, a diferencia de un "no existe" cacheado.
+  it('perfil existente desde caché: se acepta y resuelve (offline-first)', async () => {
+    const { result } = renderHook(() => useAuth(), { wrapper: envolver });
+
+    act(() => {
+      emitirAuth(usuarioAuthFalso);
+    });
+    act(() => {
+      onNextSnapshot(snapshotDe(perfilActivo, true));
+    });
+
+    await waitFor(() => {
+      expect(result.current.cargando).toBe(false);
+    });
+    expect(result.current.perfil).toEqual(perfilActivo);
+  });
+
+  it('la confirmación del servidor con los mismos datos no cambia la identidad del perfil', async () => {
+    const { result } = renderHook(() => useAuth(), { wrapper: envolver });
+
+    act(() => {
+      emitirAuth(usuarioAuthFalso);
+    });
+    act(() => {
+      onNextSnapshot(snapshotDe(perfilActivo, true));
+    });
+    await waitFor(() => {
+      expect(result.current.cargando).toBe(false);
+    });
+    const perfilDesdeCache = result.current.perfil;
+
+    // Mismo contenido, objeto distinto: no debe propagarse un objeto nuevo a
+    // los consumidores de useAuth().
+    act(() => {
+      onNextSnapshot(snapshotDe({ ...perfilActivo }, false));
+    });
+    expect(result.current.perfil).toBe(perfilDesdeCache);
+
+    // Un cambio real sí se propaga.
+    act(() => {
+      onNextSnapshot(snapshotDe({ ...perfilActivo, activo: false }, false));
+    });
+    expect(result.current.perfil?.activo).toBe(false);
   });
 
   it('error de lectura del perfil (reglas): perfil null, cargando false, sin excepción', async () => {

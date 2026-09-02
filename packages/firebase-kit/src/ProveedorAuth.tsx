@@ -26,8 +26,10 @@ import { usuarioConverter } from './converters/usuario';
  * - `perfil`: documento `usuarios/{uid}` en vivo (o `null` si no existe / no se
  *   puede leer). El guard de la app decide el acceso según `perfil.activo`.
  * - `cargando`: `true` mientras la sesión O el perfil estén resolviéndose. Con
- *   sesión activa no vuelve a `false` hasta que el primer snapshot del perfil
- *   llegó, para no exponer un instante de `perfil: null` engañoso.
+ *   sesión activa no vuelve a `false` hasta que el perfil resolvió DE VERDAD,
+ *   para no exponer un instante de `perfil: null` engañoso. Un "no existe"
+ *   que viene de la caché local no cuenta como resolución (ver el JSDoc de
+ *   `ProveedorAuth`).
  */
 export interface EstadoAuth {
   usuario: User | null;
@@ -39,6 +41,38 @@ export interface EstadoAuth {
 }
 
 const ContextoAuth = createContext<EstadoAuth | null>(null);
+
+/**
+ * Los campos de `Usuario` que se comparan para decidir si un snapshot trae
+ * algo nuevo. El `satisfies` obliga a que estén TODOS: si mañana se le agrega
+ * un campo al tipo, esto deja de compilar en vez de comparar de menos —y
+ * dejar la UI vieja— en silencio.
+ */
+const CLAVES_USUARIO = {
+  uid: true,
+  nombre: true,
+  email: true,
+  rol: true,
+  activo: true,
+} satisfies Record<keyof Usuario, true>;
+
+/**
+ * Igualdad campo a campo entre el perfil vigente y el que trae un snapshot.
+ * Todos los campos de `Usuario` son primitivos, así que `===` alcanza.
+ *
+ * Sirve para no crear un objeto nuevo cuando el snapshot del servidor
+ * confirma lo que ya teníamos de la caché: con `includeMetadataChanges: true`
+ * ese segundo snapshot llega SIEMPRE, y sin esta comparación re-renderizaría
+ * a todos los consumidores de `useAuth()` por nada.
+ */
+function mismoPerfil(anterior: Usuario | null, nuevo: Usuario): boolean {
+  if (anterior === null) {
+    return false;
+  }
+  return (Object.keys(CLAVES_USUARIO) as Array<keyof Usuario>).every(
+    (clave) => anterior[clave] === nuevo[clave],
+  );
+}
 
 export interface ProveedorAuthProps {
   auth: Auth;
@@ -56,6 +90,32 @@ export interface ProveedorAuthProps {
  *
  * Los métodos de sesión no atrapan errores: los propagan para que el llamador
  * decida cómo mostrarlos.
+ *
+ * ## Por qué el listener del perfil mira `metadata.fromCache` (2026-09-02)
+ *
+ * Bug de producción: el dueño borró los datos del sitio en Chrome Android
+ * (lo que vacía la persistencia de Firestore), volvió a loguearse y vio
+ * "Cuenta no autorizada" con su doc `usuarios/{uid}` intacto y `activo: true`.
+ *
+ * Con la caché vacía, si el watch stream falla una vez o pasan ~10 s sin
+ * respuesta, el SDK pasa a `OnlineState.Offline` y le entrega al listener un
+ * snapshot VACÍO servido desde la caché (`exists() === false`,
+ * `metadata.fromCache === true`). El `unavailable` nunca llega al callback de
+ * error: el SDK degrada a caché en vez de fallar. Ese "no existe" de una
+ * caché vacía se volvía `perfil: null` con `cargando: false`, y el guard lo
+ * leía como cuenta no autorizada.
+ *
+ * De ahí las tres ramas del `next` (con `includeMetadataChanges: true`, sin
+ * el cual el snapshot del servidor puede no re-emitirse si trae los mismos
+ * datos):
+ * - `exists()` — se acepta venga de caché o del servidor. Un vendedor con el
+ *   perfil ya cacheado tiene que poder entrar sin red (regla de oro 6).
+ * - `!exists()` desde caché — NO es una respuesta, es la ausencia de una: no
+ *   se toca el estado, `cargando` sigue en `true` y el listener (que queda
+ *   vivo) entregará el snapshot real al reconectar. El costo aceptado es que
+ *   un usuario sin doc Y sin red se queda en el spinner en vez de ver
+ *   "Cuenta no autorizada"; el falso negativo era mucho peor.
+ * - `!exists()` confirmado por el servidor — ahí sí, `perfil: null` resuelto.
  */
 export function ProveedorAuth({ auth, db, children }: ProveedorAuthProps) {
   const [usuario, setUsuario] = useState<User | null>(null);
@@ -92,13 +152,36 @@ export function ProveedorAuth({ auth, db, children }: ProveedorAuthProps) {
     const ref = doc(db, 'usuarios', usuario.uid).withConverter(usuarioConverter);
     const desuscribir = onSnapshot(
       ref,
+      // Sin esto, el snapshot del servidor que solo confirma lo que ya está
+      // en caché no se re-emite, y nunca sabríamos que el "no existe" de la
+      // caché quedó descartado.
+      { includeMetadataChanges: true },
       (snapshot) => {
-        setPerfil(snapshot.exists() ? snapshot.data() : null);
+        if (snapshot.exists()) {
+          // Hay perfil: vale igual venga de caché o del servidor (offline-first).
+          const datos = snapshot.data();
+          setPerfil((anterior) => (mismoPerfil(anterior, datos) ? anterior : datos));
+          setUidPerfilResuelto(usuario.uid);
+          return;
+        }
+        if (snapshot.metadata.fromCache) {
+          // "No existe" según una caché que puede estar vacía (datos del sitio
+          // borrados, primer login en el dispositivo, red caída). No es una
+          // respuesta: no se toca el estado, así que `cargando` sigue en `true`
+          // y este mismo listener entregará el snapshot del servidor al
+          // reconectar. Ver el bloque "Por qué el listener del perfil mira
+          // `metadata.fromCache`" en el JSDoc de arriba.
+          return;
+        }
+        // El servidor confirmó que el doc no existe: cuenta no autorizada de verdad.
+        setPerfil(null);
         setUidPerfilResuelto(usuario.uid);
       },
       () => {
-        // Un error de lectura por reglas (usuario sin doc, sin permiso) no es
-        // excepción de negocio: se traduce a `perfil: null` con `cargando: false`.
+        // Solo llega `permission-denied` (reglas): la indisponibilidad de red
+        // NO cae acá, el SDK la degrada al snapshot desde caché que maneja el
+        // callback de arriba. Un rechazo por reglas no es excepción de
+        // negocio: se traduce a `perfil: null` con `cargando: false`.
         setPerfil(null);
         setUidPerfilResuelto(usuario.uid);
       },

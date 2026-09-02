@@ -458,3 +458,47 @@ autorizada"); `ModalAgregarGranel.tsx:48` exige `gramos > 0`.
 
 **Qué se hizo después:** follow-ups 1 y 3 al `senior` (mismo agente, contexto
 intacto), 2 y la nota de docs al `semisenior` del modal, 4 anotado en el plan.
+
+---
+
+## 2026-09-02 — Perfil desde caché vacía y barra de estado en Android
+
+### Llamada 1 (temprana)
+
+**Contexto:** el dueño borró los datos del sitio y vio "Cuenta no autorizada"
+con perfil correcto en prod (verificado por REST: Auth `wd4U7i…` = doc
+`usuarios/wd4U7i…`, admin activo). Y tras poner `theme_color: '#040302'` en el
+manifest, en modo claro la barra queda negra con iconos negros.
+
+**Recomendación textual:** "Bug 1 (`senior`): en ProveedorAuth.tsx:93
+suscribí con `{ includeMetadataChanges: true }`. Si `!snapshot.exists() &&
+snapshot.metadata.fromCache` no toques estado (sigue `cargando`); `exists()`
+se acepta venga de caché o del servidor; error callback como hoy. En
+RutaProtegida, a los ~10 s de `cargando` cambiá el texto a 'No pudimos
+verificar tu cuenta, revisá la conexión; seguimos intentando' + Salir. Sin
+botón Reintentar. Bug 2 (`semisenior`): en MetaThemeColor.tsx y en el anti-FOUC
+de index.html, si `matchMedia('(display-mode: standalone)').matches`, fijá
+`#040302` (igual al manifest) ignorando la cascada."
+
+**Por qué (verificado por el advisor en `@firebase/firestore@4.16.0`):** un
+snapshot vacío desde caché solo se levanta cuando OnlineState es Offline, y eso
+llega tras UNA falla del watch stream o 10 s sin respuesta. `unavailable` nunca
+cae al error callback, así que distinguir códigos de error es inalcanzable. El
+listener queda vivo y entrega `fromCache:false` al reconectar: Reintentar sobra.
+
+**Descartado:** distinguir errores (inalcanzable); sin tope de tiempo (cargando
+eterno sin red); tope que muestre "no autorizada" (mismo bug con otra forma);
+fullscreen (pierde reloj/batería); quitar `theme_color` del manifest (ciclo de
+feedback de días, pierde el splash); color de marca en la barra (el dueño pidió
+negro).
+
+**Bloqueantes:** versión de Android/Chrome del teléfono (en Android 15 con
+Chrome reciente la barra puede ser translúcida edge-to-edge y la lectura "fondo
+fijo del manifest" sería incorrecta); confirmación del dueño de la franja negra
+en claro; reproducción controlada del bug 1 (borrar datos + modo avión + abrir →
+mensaje de conexión, no "no autorizada"; sacar modo avión → entra solo).
+
+**Decisión del orquestador:** T1 (`senior`), T2 y T3 (`semisenior`) en
+paralelo sin esperar la versión de Android: el override a negro da iconos
+blancos sobre negro en cualquiera de las dos lecturas del comportamiento. La
+verificación en el teléfono la hace el dueño (T4).

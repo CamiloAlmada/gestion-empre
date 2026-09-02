@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { RutaProtegida } from './RutaProtegida';
 
@@ -64,6 +64,78 @@ describe('RutaProtegida', () => {
     expect(screen.queryByText('Contenido protegido')).toBeNull();
     expect(screen.queryByText('Pantalla de login')).toBeNull();
     expect(screen.getByText('Cargando…')).toBeTruthy();
+    expect(
+      screen.queryByText('No pudimos verificar tu cuenta. Revisá la conexión; seguimos intentando.'),
+    ).toBeNull();
+  });
+
+  it('si cargando se extiende más de 10s, muestra el mensaje de conexión y permite cerrar sesión', () => {
+    vi.useFakeTimers();
+    try {
+      const auth = configurarAuth({ cargando: true });
+
+      renderizarConRutas();
+
+      expect(
+        screen.queryByText('No pudimos verificar tu cuenta. Revisá la conexión; seguimos intentando.'),
+      ).toBeNull();
+
+      act(() => {
+        vi.advanceTimersByTime(10_000);
+      });
+
+      expect(
+        screen.getByText('No pudimos verificar tu cuenta. Revisá la conexión; seguimos intentando.'),
+      ).toBeTruthy();
+      expect(screen.queryByText('Cargando…')).toBeNull();
+
+      fireEvent.click(screen.getByText('Cerrar sesión'));
+
+      expect(auth.salir).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('si cargando pasa a false antes de los 10s, el mensaje de conexión nunca aparece', () => {
+    vi.useFakeTimers();
+    try {
+      configurarAuth({ cargando: true });
+
+      const { rerender } = renderizarConRutas();
+
+      act(() => {
+        vi.advanceTimersByTime(5_000);
+      });
+
+      configurarAuth({ usuario: { uid: 'u1' }, perfil: { activo: true }, cargando: false });
+      rerender(
+        <MemoryRouter initialEntries={['/']}>
+          <Routes>
+            <Route path="/login" element={<div>Pantalla de login</div>} />
+            <Route
+              path="/"
+              element={
+                <RutaProtegida>
+                  <div>Contenido protegido</div>
+                </RutaProtegida>
+              }
+            />
+          </Routes>
+        </MemoryRouter>,
+      );
+
+      act(() => {
+        vi.advanceTimersByTime(10_000);
+      });
+
+      expect(
+        screen.queryByText('No pudimos verificar tu cuenta. Revisá la conexión; seguimos intentando.'),
+      ).toBeNull();
+      expect(screen.getByText('Contenido protegido')).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('sin usuario, redirige a /login', () => {
