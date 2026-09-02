@@ -58,7 +58,10 @@ export default defineConfig({
         lang: 'es',
         start_url: '/',
         display: 'standalone',
-        background_color: '#ffffff',
+        // Mismo negro que theme_color (2026-09-02): es el fondo de la pantalla
+        // de arranque y del marco con que Chrome envuelve la app instalada en
+        // Android 15+. En blanco, el splash parpadeaba claro en modo oscuro.
+        background_color: '#040302',
         // Negro del fondo oscuro Minimalista (MAPA_THEME_COLOR.minimalista.dark en
         // apps/quesarte/src/componentes/MetaThemeColor.tsx). Antes era el ámbar
         // primario, y en el WebAPK de Android la barra de estado tomaba ESTE
