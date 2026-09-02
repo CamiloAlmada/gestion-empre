@@ -3,7 +3,21 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/icons/icon-source.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover (2026-09-02): desde Chrome 135 el contenido se
+         extiende bajo la barra de gestos de Android; sin esta declaración
+         Chrome dibuja una franja propia abajo que aparece y se esconde al
+         hacer scroll. El header y la barra de pestañas ya reservan los
+         márgenes seguros con env(safe-area-inset-*). En iOS habilita que el
+         contenido se dibuje bajo la barra de estado (ver la meta de Apple
+         más abajo). -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- iOS (2026-09-02, sin verificar en dispositivo real): en la app
+         agregada a la pantalla de inicio, la barra de estado no sigue al
+         theme-color; con "black-translucent" se vuelve transparente y se ve
+         el fondo de la app detrás (negro en oscuro, claro en claro), que es
+         la única forma adaptable en Safari. No tiene efecto en Android. -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <!-- Fallback estático para cuando JS está deshabilitado (el script de
          abajo lo sobreescribe en el caso normal): color de --fondo del
          estado por defecto (Minimalista, light). Mismo valor que
