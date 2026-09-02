@@ -575,3 +575,18 @@ si la lista de países alcanza.
 **Incidente:** el `trainee` de A revirtió con `git checkout` cuatro archivos
 fuera de su alcance, entre ellos `.claude/settings.json` con 177 líneas de
 permisos no commiteadas. Ver advisor-log.
+
+## F2 — Pruebas del dueño en Android (2026-09-02)
+
+Todo desplegado en producción. Detalle de la consulta al advisor en
+`.claude/advisor-log.md` (2026-09-02).
+
+| # | Tarea | Agente | Estado | Notas |
+| --- | --- | --- | --- | --- |
+| A | "Cuenta no autorizada" tras borrar datos del sitio | `senior` + `semisenior` | ✅ `e81b370` | Causa: snapshot vacío desde caché al arrancar sin servidor; el proveedor lo tomaba como veredicto. Ahora un "no existe" de caché no resuelve; RutaProtegida avisa a los 10 s. Pendiente: reproducción controlada en el teléfono (borrar datos + modo avión → mensaje de conexión; sacar modo avión → entra solo) |
+| B | Barra de estado de Android con los colores del negocio | orquestador | ⏸️ limitación de Chrome | En el WebAPK (Android 16, Chrome 152) el fondo de la barra sale del `theme_color` fijo del manifest y solo el tinte de los iconos sigue al meta dinámico. Es un "known shortcoming" reconocido por Chrome (marzo 2026), arreglo "short-edges cutout mode" en desarrollo. Manifest en negro `#040302` (`07952a2`). El dueño rechazó forzar iconos blancos fijos: quiere adaptable, y eso llega solo con el arreglo de Chrome. Cuando salga, no hay que tocar nada: el meta ya manda el color por modo |
+| C | `viewport-fit=cover` + meta de barra translúcida iOS | orquestador | ✅ `f33be26` | La franja de colores raros abajo era el "chin" de Chrome 135+ sin `viewport-fit=cover`. iOS: sin verificar en dispositivo |
+
+**Deuda:** `useDoc.ts` tiene el mismo patrón de listener que tenía
+`ProveedorAuth` (un "no existe" de caché indistinguible); menos grave porque
+no decide acceso. Revisar si algún consumidor lo usa para una decisión binaria.
