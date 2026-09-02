@@ -59,8 +59,15 @@ export default defineConfig({
         start_url: '/',
         display: 'standalone',
         background_color: '#ffffff',
-        // Ámbar primario (primary-600 del tema Quesarte, packages/config/tailwind.css).
-        theme_color: '#976b19',
+        // Negro del fondo oscuro Minimalista (MAPA_THEME_COLOR.minimalista.dark en
+        // apps/quesarte/src/componentes/MetaThemeColor.tsx). Antes era el ámbar
+        // primario, y en el WebAPK de Android la barra de estado tomaba ESTE
+        // valor e ignoraba el <meta name="theme-color"> que la app actualiza al
+        // cambiar los colores del negocio: quedaba una franja dorada fija sobre
+        // una app azul (reporte del dueño, 2026-09-02). El manifest admite un solo
+        // color, y el dueño pidió negro: integra con el fondo oscuro y es neutro
+        // frente a cualquier paleta de marca.
+        theme_color: '#040302',
         icons: [
           {
             src: 'icons/pwa-192x192.png',
