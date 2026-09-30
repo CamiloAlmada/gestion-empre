@@ -612,6 +612,7 @@ export function Venta() {
         onCerrar={() => setModalCobroAbierto(false)}
         total={totalCarrito(carrito)}
         procesando={cobrando}
+        hayCliente={cliente !== null}
         onConfirmar={(medioPago) => void confirmarCobro(medioPago)}
       />
     </div>
