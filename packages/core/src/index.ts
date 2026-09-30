@@ -22,6 +22,7 @@ export type {
   ModoPrecio,
   ModoStock,
   EstadoPieza,
+  MedioPagoReal,
   MedioPago,
   EstadoVenta,
   TipoMovimiento,
@@ -33,6 +34,8 @@ export type {
   Producto,
   Pieza,
   ItemVenta,
+  PagoVenta,
+  CobroVenta,
   Venta,
   MovimientoStock,
   Usuario,
@@ -40,6 +43,7 @@ export type {
   StatsCliente,
   Cliente,
   DatosPago,
+  CuentaNegocio,
   Proveedor,
   EstadoCompra,
   ConceptoGasto,
@@ -59,6 +63,14 @@ export {
   clasificarCosteo,
   costoCongeladoDe,
 } from './costeo.js';
+export {
+  type EstadoCobro,
+  cobroInicial,
+  aplicarPago,
+  deshacerUltimoPago,
+  saldoPendienteCents,
+  estadoCobro,
+} from './cobro.js';
 export { type PiezaElegida, elegirPieza } from './fifo.js';
 export {
   type MetodoProrrateo,

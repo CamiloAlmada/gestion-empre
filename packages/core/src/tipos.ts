@@ -26,8 +26,15 @@ export type ModoStock = 'fraccionado_por_pieza' | 'pieza_entera' | 'granel' | 'u
 /** Estado de una pieza física. */
 export type EstadoPieza = 'disponible' | 'agotada' | 'merma_total';
 
-/** Medio de pago de una venta. */
-export type MedioPago = 'efectivo' | 'debito' | 'credito' | 'transferencia';
+/** Medio con el que realmente se recibe plata (el de cada `PagoVenta`). */
+export type MedioPagoReal = 'efectivo' | 'debito' | 'credito' | 'transferencia';
+
+/**
+ * Medio de pago con el que se cerró una venta en el mostrador. `'a_cobrar'`: el
+ * cliente se llevó la mercadería sin pagar; el valor no cambia nunca y el medio
+ * real vive en cada `PagoVenta` (ver `CobroVenta` y `docs/11-cobros-diferidos.md`).
+ */
+export type MedioPago = MedioPagoReal | 'a_cobrar';
 
 /** Estado de una venta. La anulación no borra: cambia estado y genera reversos. */
 export type EstadoVenta = 'completada' | 'anulada';
@@ -215,6 +222,52 @@ export interface ItemVenta {
   costeo?: CosteoItem;
 }
 
+/**
+ * Un pago recibido contra una venta a cobrar (`CobroVenta.pagos`). Con pagos
+ * parciales de medios distintos no existe "el medio" de la venta: el medio real
+ * vive acá.
+ */
+export interface PagoVenta {
+  id: string;
+  /** Fecha y hora del pago (la del comprobante). Editable; por defecto, ahora. */
+  fecha: Date;
+  /** Cuándo se cargó en el sistema. No editable (auditoría). */
+  registradoEn: Date;
+  /** Monto de este pago. Siempre > 0. */
+  montoCents: Money;
+  medioPago: MedioPagoReal;
+  /** Quién lo registró. */
+  usuarioId: string;
+  /** Número de operación (transferencia, voucher…). */
+  referencia?: string;
+  /** Cuenta del negocio que recibió el pago (`CuentaNegocio.id`). */
+  cuentaId?: string;
+  /** Etiqueta denormalizada de la cuenta ("PREX ···1234"): sobrevive a su baja. */
+  cuentaEtiqueta?: string;
+}
+
+/**
+ * Seguimiento de cobro de una venta a cobrar. Mapa **opcional y versionado**,
+ * embebido en la venta.
+ *
+ * - Una venta `a_cobrar` nace con `cobroInicial()`; sin ese valor inicial la
+ *   consulta de pendientes no la encontraría.
+ * - **La AUSENCIA del mapa** significa "cobrada en el acto" (o venta anterior a
+ *   esta capacidad). Un consumidor NUNCA pregunta por `venta.cobro === undefined`
+ *   a mano: usa `estadoCobro` / `saldoPendienteCents` (ver `cobro.ts`).
+ * - `cobradoCents` y `estado` son derivados de `pagos`, pero se persisten para
+ *   poder filtrar pendientes sin leer la lista; `aplicarPago` los mantiene
+ *   coherentes.
+ */
+export interface CobroVenta {
+  /** Versión del esquema de cobro. Hoy siempre `1`. */
+  v: 1;
+  estado: 'pendiente' | 'cobrada';
+  /** Suma de `pagos[].montoCents`. */
+  cobradoCents: Money;
+  pagos: PagoVenta[];
+}
+
 /** Ticket de mostrador. Cabecera + ítems embebidos. */
 export interface Venta {
   id: string;
@@ -233,6 +286,12 @@ export interface Venta {
    */
   clienteId?: string;
   clienteNombre?: string;
+  /**
+   * Seguimiento de cobro. Solo lo llevan las ventas `medioPago === 'a_cobrar'`;
+   * ausente ⇔ cobrada en el acto (o venta anterior a los cobros diferidos). NO
+   * se interpreta a mano: ver `estadoCobro` en `cobro.ts`.
+   */
+  cobro?: CobroVenta;
 }
 
 /**
@@ -372,6 +431,18 @@ export interface DatosPago {
   cuenta: string;
   titular?: string;
   moneda?: string;
+}
+
+/**
+ * Cuenta del negocio donde se reciben pagos (transferencias). Reutiliza
+ * `DatosPago` (el mismo shape que las cuentas de proveedores). `etiqueta` es el
+ * nombre corto que se elige en la UI y se copia a `PagoVenta.cuentaEtiqueta`.
+ * No se borra: se da de baja con `activa: false`.
+ */
+export interface CuentaNegocio extends DatosPago {
+  id: string;
+  etiqueta: string;
+  activa: boolean;
 }
 
 /**

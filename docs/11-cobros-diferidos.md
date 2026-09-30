@@ -108,7 +108,7 @@ pagos: [] }`: sin ese valor inicial, la consulta de pendientes no la encontrarí
 - `cobroInicial()`.
 - `aplicarPago(cobro, pago, totalCents)`: agrega el pago, suma y recalcula el
   estado; lanza si el monto es ≤ 0 o si lo cobrado superaría el total.
-- `deshacerUltimoPago(cobro)`.
+- `deshacerUltimoPago(cobro, totalCents)`: recalcula el estado contra el total.
 - `saldoPendienteCents(venta)`.
 - `estadoCobro(venta): 'cobrada' | 'pendiente' | 'parcial' | 'anulada'`: la **única**
   función que interpreta `venta.cobro`, con la misma disciplina que

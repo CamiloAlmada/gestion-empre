@@ -610,10 +610,10 @@ pago es el saldo completo (campo visible pero bloqueado).
 
 | # | Tarea | Agente | Estado |
 | --- | --- | --- | --- |
-| A1 | core: tipos + `cobro.ts` | `semisenior` | 🔄 en curso |
+| A1 | core: tipos + `cobro.ts` | `semisenior` | ✅ 470 tests en core (18 de cobro) |
 | A2-spike | Comprobar rangos de lista en reglas (emulador) | `senior` | 🔄 en curso |
 | A2+A3 | Reglas + kit, mismo commit | `senior` | ⏳ depende de A1 y del spike |
-| A4 | `ModalCobro` con "A cobrar" | `semisenior` | ⏳ depende de A1 |
+| A4 | `ModalCobro` con "A cobrar" | `semisenior` | 🔄 en curso |
 | A5 | Detalle de venta: registrar pago / deshacer; badges | `semisenior` | ⏳ depende de A3, A4 |
 | A6 | Docs 02 y 07 | `semisenior` | ⏳ depende de A2 |
 | B, C | ver doc 11 | — | ⏸️ |

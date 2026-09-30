@@ -6,6 +6,7 @@ export const ETIQUETAS_MEDIO_PAGO: Record<MedioPago, string> = {
   debito: 'Débito',
   credito: 'Crédito',
   transferencia: 'Transferencia',
+  a_cobrar: 'A cobrar',
 };
 
 /**
