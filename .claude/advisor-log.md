@@ -543,3 +543,29 @@ cliente.
 
 **Qué se hizo después:** roadmap escrito en `docs/11-cobros-diferidos.md`, sin
 implementar nada. Divergencias: ninguna.
+
+### Llamada 2 (después de las respuestas de Adrián, antes de arrancar la Fase A)
+
+**Contexto nuevo:** parciales "quizás sí, dejemos abierta la opción"; solo
+Adrián registra cobros; se guarda número de operación, fecha y hora, cliente y
+**monto**; nunca a cobrar sin cliente.
+
+**Recomendación textual:** "Lista embebida desde el día 1. `Venta.cobro?: { v:1,
+estado:'pendiente'|'cobrada', cobradoCents, pagos: PagoVenta[] }`, `PagoVenta =
+{ id, fecha, montoCents, medioPago: MedioPagoReal, usuarioId, referencia?,
+cuentaId?, cuentaEtiqueta? }`. `medioPago` de la venta queda fijo en
+`'a_cobrar'`; el medio real vive en cada pago. Contradigo la llamada 1 ('medioPago
+pasa al medio real'): con pagos parciales de medios distintos no existe 'el medio
+real' de la venta. Fase A escribe siempre un solo pago por el saldo; parciales
+después = solo habilitar el campo monto. Reverso = 'deshacer último pago' (LIFO).
+Solo admin escribe `cobro`."
+
+**Contradicción declarada:** la llamada 1 proponía mapa único + flip de
+`medioPago`. La 2 lo descarta porque obligaría a migrar al primer parcial. Se
+adopta la 2.
+
+**Bloqueantes:** (1) spike en el emulador de `pagos[0:n] == anterior` y del
+indexado del último elemento, antes de la regla definitiva (plan B: índices fijos
+con tope chico, o validar el prefijo solo en el cliente); (2) ¿parciales ya en A?
+Resuelto por el orquestador: no, monto = saldo bloqueado; (3) leer los tests de
+reglas de `ventas` antes de extenderlos: va en el brief de A2.

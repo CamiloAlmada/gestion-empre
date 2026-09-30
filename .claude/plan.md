@@ -591,23 +591,29 @@ Todo desplegado en producción. Detalle de la consulta al advisor en
 `ProveedorAuth` (un "no existe" de caché indistinguible); menos grave porque
 no decide acceso. Revisar si algún consumidor lo usa para una decisión binaria.
 
-## F3 — Cobros diferidos y cuentas del negocio (planificado 2026-09-30)
+## F3 — Cobros diferidos y cuentas del negocio (2026-09-30)
 
-Pedido de Adrián: la venta y el pago no ocurren al mismo tiempo; necesita saber
-quién le pagó y quién no, cuándo, por qué medio y a qué cuenta (PREX, Santander).
-**Diseño y roadmap completo en `docs/11-cobros-diferidos.md`.** Consulta al
-advisor en `.claude/advisor-log.md` (2026-09-30).
+Pedido de Adrián: la venta y el pago no ocurren al mismo tiempo. **Diseño y
+roadmap en `docs/11-cobros-diferidos.md`.** Dos consultas al advisor en
+`.claude/advisor-log.md` (2026-09-30).
 
-**Decisión (no re-discutir sin evidencia nueva):** el estado de cobro vive en la
-venta (`medioPago: 'a_cobrar'` + mapa `cobro`), no en una cuenta corriente por
-cliente ni en una colección `cobros` aparte. La cuenta corriente sigue diferida
-(doc 04). Captura del comprobante: sin Storage (exige Blaze desde 2026-02-03);
-si hace falta, colección `comprobantes` con imagen comprimida, en Fase C.
+**Decisión (no re-discutir sin evidencia nueva):** lista de pagos embebida en la
+venta (`cobro: { v, estado, cobradoCents, pagos[] }`); `medioPago: 'a_cobrar'`
+fijo para siempre en esas ventas y el medio real en cada pago; solo admin
+registra y deshace (LIFO). La cuenta corriente sigue diferida (doc 04). Sin
+Storage.
 
-| Fase | Contenido | Estado |
-| --- | --- | --- |
-| A | "A cobrar" en el POS + registrar cobro desde el detalle (A1-A6) | ⏳ lista para arrancar; no depende de Adrián |
-| B | Cuentas del negocio en Ajustes, lista "Por cobrar", card en Reportes | ⏳ conviene tener las respuestas de Adrián antes |
-| C | Captura, WhatsApp, pagos parciales, vista de caja | ⏸️ condicional a las respuestas |
+Respuestas de Adrián: parciales "quizás sí" (modelo listo, UI no en A); solo él
+registra cobros; guarda número de operación, fecha y hora, cliente y monto; nunca
+a cobrar sin cliente. Supuesto del orquestador: en la Fase A el monto de cada
+pago es el saldo completo (campo visible pero bloqueado).
 
-**Pendiente del dueño:** hacerle a Adrián las 8 preguntas del final del doc 11.
+| # | Tarea | Agente | Estado |
+| --- | --- | --- | --- |
+| A1 | core: tipos + `cobro.ts` | `semisenior` | 🔄 en curso |
+| A2-spike | Comprobar rangos de lista en reglas (emulador) | `senior` | 🔄 en curso |
+| A2+A3 | Reglas + kit, mismo commit | `senior` | ⏳ depende de A1 y del spike |
+| A4 | `ModalCobro` con "A cobrar" | `semisenior` | ⏳ depende de A1 |
+| A5 | Detalle de venta: registrar pago / deshacer; badges | `semisenior` | ⏳ depende de A3, A4 |
+| A6 | Docs 02 y 07 | `semisenior` | ⏳ depende de A2 |
+| B, C | ver doc 11 | — | ⏸️ |
