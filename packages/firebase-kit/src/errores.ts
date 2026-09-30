@@ -64,6 +64,30 @@ export class AnulacionInvalidaError extends ErrorEscrituraPOS {
 }
 
 /**
+ * Una venta `a_cobrar` se intentó registrar sin cliente: una deuda sin deudor
+ * no se puede cobrar (doc 11). Las reglas lo exigen igual (`clienteId` string).
+ */
+export class ClienteRequeridoError extends ErrorEscrituraPOS {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ClienteRequeridoError';
+  }
+}
+
+/**
+ * Registrar o deshacer un pago no es posible sobre esa venta (no está
+ * `completada`, no es una venta a cobrar, ya tiene el máximo de pagos, o no hay
+ * ventas para cobrar), o los datos del pago exceden un tope de largo. El monto
+ * inválido y el sobrepago los rechaza `aplicarPago` de core con `RangeError`.
+ */
+export class CobroInvalidoError extends ErrorEscrituraPOS {
+  constructor(message: string) {
+    super(message);
+    this.name = 'CobroInvalidoError';
+  }
+}
+
+/**
  * Un ajuste de stock es incoherente: el signo del delta no corresponde al tipo
  * (`ajuste_positivo` con delta ≤ 0, etc.), falta el delta correcto para el
  * `modoStock` del producto, o falta la pieza cuando el producto va por piezas.

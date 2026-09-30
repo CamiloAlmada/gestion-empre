@@ -16,6 +16,7 @@ import {
 } from './ventas';
 import {
   AnulacionInvalidaError,
+  ClienteRequeridoError,
   ItemInvalidoError,
   StockInsuficienteError,
   TotalIncoherenteError,
@@ -580,6 +581,41 @@ describe('registrarVenta con cliente', () => {
     expect(update['stats.primeraCompra']).toBeInstanceOf(Date);
     expect(update['stats.ultimaCompra']).toBeInstanceOf(Date);
   });
+});
+
+describe('registrarVenta y el cobro diferido (doc 11)', () => {
+  it('a_cobrar sin cliente: lanza ClienteRequeridoError sin escribir nada', async () => {
+    const entrada: EntradaVenta = { ...entradaDe([itemGranel(100, 4500)], 4500), medioPago: 'a_cobrar' };
+
+    await expect(registrarVenta(db, entrada)).rejects.toThrow(ClienteRequeridoError);
+    expect(mocks.batch.set).not.toHaveBeenCalled();
+    expect(mocks.batch.update).not.toHaveBeenCalled();
+    expect(mocks.batch.commit).not.toHaveBeenCalled();
+  });
+
+  it('a_cobrar con cliente: la venta nace con cobroInicial()', async () => {
+    const entrada: EntradaVenta = {
+      ...entradaDe([itemGranel(100, 4500)], 4500),
+      medioPago: 'a_cobrar',
+      cliente: { id: 'cli-1', nombre: 'Marta', esPrimeraCompra: false },
+    };
+    await registrarVenta(db, entrada);
+
+    const [, ventaDoc] = mocks.batch.set.mock.calls[0] as [RefFalsa, Venta];
+    expect(ventaDoc.medioPago).toBe('a_cobrar');
+    expect(ventaDoc.cobro).toEqual({ v: 1, estado: 'pendiente', cobradoCents: 0, pagos: [] });
+    expect(mocks.batch.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['efectivo', 'debito', 'credito', 'transferencia'] as const)(
+    'medio real (%s): la venta NO lleva cobro',
+    async (medioPago) => {
+      await registrarVenta(db, { ...entradaDe([itemGranel(100, 4500)], 4500), medioPago });
+
+      const [, ventaDoc] = mocks.batch.set.mock.calls[0] as [RefFalsa, Venta];
+      expect(ventaDoc.cobro).toBeUndefined();
+    },
+  );
 });
 
 describe('anularVenta', () => {

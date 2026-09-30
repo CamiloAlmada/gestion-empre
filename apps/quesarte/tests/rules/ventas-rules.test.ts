@@ -7,13 +7,25 @@ import {
   initializeTestEnvironment,
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { doc, getDoc, increment, setDoc, writeBatch, type Firestore } from 'firebase/firestore';
+import {
+  doc,
+  getDoc,
+  increment,
+  setDoc,
+  updateDoc,
+  writeBatch,
+  type Firestore,
+} from 'firebase/firestore';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { money, peso, type Pieza, type Producto, type Venta } from '@gestion/core';
 import {
   anularVenta,
+  deshacerUltimoPago,
+  registrarPago,
+  registrarPagos,
   registrarVenta,
   ventaConverter,
+  type DatosRegistroPago,
   type EntradaVenta,
 } from '@gestion/firebase-kit';
 
@@ -466,5 +478,311 @@ describe('anularVenta', () => {
     expect(despues.data()?.stockGranelGramos).toBe(10000);
     const ventaAnulada = await getDoc(doc(db(ADMIN), 'ventas', venta.id));
     expect(ventaAnulada.data()?.estado).toBe('anulada');
+  });
+});
+
+// ── Cobros diferidos (docs/11-cobros-diferidos.md, tareas A2 + A3) ──────────
+//
+// Dos tipos de caso: los ✓ pasan por las funciones REALES del kit
+// (`registrarVenta`, `registrarPago`, `registrarPagos`, `deshacerUltimoPago`),
+// que es lo que la app manda; los ✗ son writes crudos que el kit nunca armaría,
+// para probar que la regla los frena por sí sola.
+
+const TOTAL_AC = 10000;
+
+interface PagoCrudo {
+  id: string;
+  fecha: Date | string;
+  registradoEn: Date;
+  montoCents: number;
+  medioPago: string;
+  usuarioId: string;
+  referencia?: string;
+}
+
+function pagoCrudo(id: string, montoCents: number, minuto: number, usuarioId = ADMIN): PagoCrudo {
+  return {
+    id,
+    fecha: new Date(Date.UTC(2026, 8, 30, 12, minuto)),
+    registradoEn: new Date(Date.UTC(2026, 8, 30, 12, minuto, 30)),
+    montoCents,
+    medioPago: 'transferencia',
+    usuarioId,
+  };
+}
+
+function cobroCrudo(pagos: PagoCrudo[], cobradoCents: number, estado?: string) {
+  return {
+    v: 1,
+    estado: estado ?? (cobradoCents === TOTAL_AC ? 'cobrada' : 'pendiente'),
+    cobradoCents,
+    pagos,
+  };
+}
+
+// Pagos previos sembrados. `B` y `C` tienen el mismo monto a propósito: así
+// "deshacer el del medio" deja la aritmética válida y SOLO el espejo lo frena.
+const PA = pagoCrudo('p-a', 2000, 1);
+const PB = pagoCrudo('p-b', 2500, 2);
+const PC = pagoCrudo('p-c', 2500, 3);
+const PNUEVO = pagoCrudo('p-nuevo', 1000, 10);
+
+function ventaACobrarCruda(usuarioId: string, cobro: unknown = cobroCrudo([], 0)) {
+  return {
+    numero: Date.now(),
+    fecha: new Date(),
+    usuarioId,
+    items: [{ productoId: 'prod-granel', gramos: 100, precioUnitCents: 45000, subtotalCents: TOTAL_AC }],
+    totalCents: TOTAL_AC,
+    medioPago: 'a_cobrar',
+    estado: 'completada',
+    clienteId: 'cli-1',
+    clienteNombre: 'Marta',
+    cobro,
+  };
+}
+
+/** Copia de `obj` sin las claves indicadas (para armar payloads a los que les falta algo). */
+function sin(obj: Record<string, unknown>, ...claves: string[]): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(obj).filter(([k]) => !claves.includes(k)));
+}
+
+async function leerVenta(ventaId: string): Promise<Venta> {
+  const snap = await getDoc(doc(db(ADMIN), 'ventas', ventaId).withConverter(ventaConverter));
+  const venta = snap.data();
+  if (venta === undefined) throw new Error(`venta ${ventaId} no encontrada`);
+  return venta;
+}
+
+async function leerCobroCrudo(ventaId: string): Promise<Record<string, unknown>> {
+  const snap = await getDoc(doc(db(ADMIN), 'ventas', ventaId));
+  return snap.data()?.cobro as Record<string, unknown>;
+}
+
+function actualizarCobro(uid: string, ventaId: string, cobro: unknown): Promise<void> {
+  return updateDoc(doc(db(uid), 'ventas', ventaId), { cobro });
+}
+
+function datosPago(over: Partial<DatosRegistroPago> = {}): DatosRegistroPago {
+  return {
+    montoCents: money(TOTAL_AC),
+    medioPago: 'transferencia',
+    fecha: new Date(Date.UTC(2026, 8, 30, 15)),
+    referencia: 'OP-123',
+    usuarioId: ADMIN,
+    ...over,
+  };
+}
+
+describe('cobros diferidos — create de la venta', () => {
+  function ventaACobrarKit(): EntradaVenta {
+    return {
+      ...ventaGranel(),
+      medioPago: 'a_cobrar',
+      cliente: { id: 'cli-1', nombre: 'Marta', esPrimeraCompra: true },
+    };
+  }
+
+  it('✓ el vendedor registra una venta a_cobrar con cliente (registrarVenta) y nace con cobroInicial', async () => {
+    const { ventaId } = await assertSucceeds(registrarVenta(db(VENDEDOR), ventaACobrarKit()));
+    expect(await leerCobroCrudo(ventaId)).toEqual({ v: 1, estado: 'pendiente', cobradoCents: 0, pagos: [] });
+  });
+
+  it('✓ una venta con medio real se persiste SIN cobro', async () => {
+    const { ventaId } = await assertSucceeds(registrarVenta(db(VENDEDOR), ventaGranel()));
+    const snap = await getDoc(doc(db(ADMIN), 'ventas', ventaId));
+    expect(snap.data()).not.toHaveProperty('cobro');
+  });
+
+  it('✓ (control) el payload crudo a_cobrar completo pasa: los ✗ de abajo fallan por lo que les falta', async () => {
+    await assertSucceeds(setDoc(doc(db(VENDEDOR), 'ventas', 'v-control'), ventaACobrarCruda(VENDEDOR)));
+  });
+
+  it('✗ a_cobrar sin cliente', async () => {
+    const sinCliente = sin(ventaACobrarCruda(VENDEDOR), 'clienteId', 'clienteNombre');
+    await assertFails(setDoc(doc(db(VENDEDOR), 'ventas', 'v-sin-cli'), sinCliente));
+  });
+
+  it('✗ create con cobro y medio real', async () => {
+    await assertFails(
+      setDoc(doc(db(VENDEDOR), 'ventas', 'v-real-cobro'), {
+        ...ventaACobrarCruda(VENDEDOR),
+        medioPago: 'efectivo',
+      }),
+    );
+  });
+
+  it('✗ a_cobrar sin cobro', async () => {
+    const sinCobro = sin(ventaACobrarCruda(VENDEDOR), 'cobro');
+    await assertFails(setDoc(doc(db(VENDEDOR), 'ventas', 'v-sin-cobro'), sinCobro));
+  });
+
+  it('✗ a_cobrar con un cobro distinto del valor inicial (nace con algo cobrado)', async () => {
+    const venta = ventaACobrarCruda(VENDEDOR, cobroCrudo([pagoCrudo('p', 1000, 1, VENDEDOR)], 1000));
+    await assertFails(setDoc(doc(db(VENDEDOR), 'ventas', 'v-cobro-no-inicial'), venta));
+  });
+
+  it('✗ medioPago fuera de la unión', async () => {
+    const base = sin(ventaACobrarCruda(VENDEDOR), 'cobro');
+    await assertFails(setDoc(doc(db(VENDEDOR), 'ventas', 'v-cheque'), { ...base, medioPago: 'cheque' }));
+  });
+});
+
+describe('cobros diferidos — registrar pago y deshacer', () => {
+  beforeEach(async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const seed = ctx.firestore();
+      await setDoc(doc(seed, 'ventas', 'ac-vacia'), ventaACobrarCruda(VENDEDOR));
+      await setDoc(doc(seed, 'ventas', 'ac-uno'), ventaACobrarCruda(VENDEDOR, cobroCrudo([PA], 2000)));
+      await setDoc(doc(seed, 'ventas', 'ac-dos'), ventaACobrarCruda(VENDEDOR, cobroCrudo([PA, PB], 4500)));
+      await setDoc(
+        doc(seed, 'ventas', 'ac-tres'),
+        ventaACobrarCruda(VENDEDOR, cobroCrudo([PA, PB, PC], 7000)),
+      );
+      await setDoc(doc(seed, 'ventas', 'ac-anulada'), {
+        ...ventaACobrarCruda(VENDEDOR),
+        estado: 'anulada',
+      });
+    });
+  });
+
+  // ── ✓ por el kit ──
+  it('✓ admin registra el PRIMER pago sobre la lista vacía (registrarPago) y queda cobrada', async () => {
+    await assertSucceeds(registrarPago(db(ADMIN), await leerVenta('ac-vacia'), datosPago()));
+    const venta = await leerVenta('ac-vacia');
+    expect(venta.cobro?.estado).toBe('cobrada');
+    expect(venta.cobro?.pagos).toHaveLength(1);
+  });
+
+  it('✓ admin registra un pago con pagos previos (prefijo n >= 1, fechas ida y vuelta por Date)', async () => {
+    await assertSucceeds(
+      registrarPago(db(ADMIN), await leerVenta('ac-dos'), datosPago({ montoCents: money(1000) })),
+    );
+    // Y otro más encima del que acaba de escribir el kit.
+    await assertSucceeds(
+      registrarPago(db(ADMIN), await leerVenta('ac-dos'), datosPago({ montoCents: money(4500) })),
+    );
+    const venta = await leerVenta('ac-dos');
+    expect(venta.cobro?.cobradoCents).toBe(TOTAL_AC);
+    expect(venta.cobro?.estado).toBe('cobrada');
+    expect(venta.cobro?.pagos).toHaveLength(4);
+  });
+
+  it('✓ registrarPagos: un batch que salda dos ventas, cada una por su saldo', async () => {
+    const ventas = [await leerVenta('ac-vacia'), await leerVenta('ac-dos')];
+    const { medioPago, fecha, referencia, usuarioId } = datosPago();
+    await assertSucceeds(registrarPagos(db(ADMIN), ventas, { medioPago, fecha, referencia, usuarioId }));
+    expect((await leerVenta('ac-vacia')).cobro?.estado).toBe('cobrada');
+    expect((await leerVenta('ac-dos')).cobro?.estado).toBe('cobrada');
+  });
+
+  it('✓ admin deshace el último pago (deshacerUltimoPago)', async () => {
+    await assertSucceeds(deshacerUltimoPago(db(ADMIN), await leerVenta('ac-tres')));
+    const venta = await leerVenta('ac-tres');
+    expect(venta.cobro?.pagos.map((p) => p.id)).toEqual(['p-a', 'p-b']);
+    expect(venta.cobro?.cobradoCents).toBe(4500);
+  });
+
+  it('✓ admin deshace el ÚNICO pago (espejo con n == 0, guarda de [0:0])', async () => {
+    await assertSucceeds(deshacerUltimoPago(db(ADMIN), await leerVenta('ac-uno')));
+    expect(await leerCobroCrudo('ac-uno')).toEqual({ v: 1, estado: 'pendiente', cobradoCents: 0, pagos: [] });
+  });
+
+  it('✓ una venta a cobrar con pagos se sigue anulando (solo cambia estado)', async () => {
+    await assertSucceeds(anularVenta(db(ADMIN), await leerVenta('ac-dos'), ADMIN));
+  });
+
+  // ── Controles: los writes crudos válidos pasan, así que cada ✗ de abajo falla
+  // por lo único que cambia respecto de su control. ──
+  it('✓ (control) append crudo válido sobre una lista de 2', async () => {
+    await assertSucceeds(actualizarCobro(ADMIN, 'ac-dos', cobroCrudo([PA, PB, PNUEVO], 5500)));
+  });
+
+  it('✓ (control) deshacer crudo válido (3 → 2)', async () => {
+    await assertSucceeds(actualizarCobro(ADMIN, 'ac-tres', cobroCrudo([PA, PB], 4500)));
+  });
+
+  it('✓ (control) primer pago crudo sobre la venta sembrada vacía', async () => {
+    await assertSucceeds(actualizarCobro(ADMIN, 'ac-vacia', cobroCrudo([pagoCrudo('p', 1000, 10)], 1000)));
+  });
+
+  // ── ✗ crudos ──
+  it('✗ el vendedor registra un pago (por el kit, con su propio uid)', async () => {
+    await assertFails(
+      registrarPago(db(VENDEDOR), await leerVenta('ac-vacia'), datosPago({ usuarioId: VENDEDOR })),
+    );
+  });
+
+  it('✗ usuarioId ajeno en el pago nuevo', async () => {
+    const ajeno = pagoCrudo('p-ajeno', 1000, 10, VENDEDOR);
+    await assertFails(actualizarCobro(ADMIN, 'ac-dos', cobroCrudo([PA, PB, ajeno], 5500)));
+  });
+
+  it('✗ sobrepago (lo cobrado supera el total)', async () => {
+    const grande = pagoCrudo('p-grande', 6000, 10);
+    await assertFails(actualizarCobro(ADMIN, 'ac-dos', cobroCrudo([PA, PB, grande], 10500, 'pendiente')));
+  });
+
+  it('✗ suma mal', async () => {
+    await assertFails(actualizarCobro(ADMIN, 'ac-dos', cobroCrudo([PA, PB, PNUEVO], 5501)));
+  });
+
+  it('✗ estado incoherente (cobrada sin llegar al total)', async () => {
+    await assertFails(actualizarCobro(ADMIN, 'ac-dos', cobroCrudo([PA, PB, PNUEVO], 5500, 'cobrada')));
+  });
+
+  it('✗ estado incoherente (pendiente habiendo llegado al total)', async () => {
+    const saldo = pagoCrudo('p-saldo', 5500, 10);
+    await assertFails(actualizarCobro(ADMIN, 'ac-dos', cobroCrudo([PA, PB, saldo], TOTAL_AC, 'pendiente')));
+  });
+
+  it('✗ pagos anteriores alterados (monto de pagos[0]; la suma sobre el nuevo es correcta)', async () => {
+    await assertFails(
+      actualizarCobro(ADMIN, 'ac-dos', cobroCrudo([{ ...PA, montoCents: 1 }, PB, PNUEVO], 5500)),
+    );
+  });
+
+  it('✗ pagos anteriores reordenados', async () => {
+    await assertFails(actualizarCobro(ADMIN, 'ac-dos', cobroCrudo([PB, PA, PNUEVO], 5500)));
+  });
+
+  it('✗ dos pagos a la vez', async () => {
+    const otro = pagoCrudo('p-otro', 500, 11);
+    await assertFails(actualizarCobro(ADMIN, 'ac-dos', cobroCrudo([PA, PB, PNUEVO, otro], 6000)));
+  });
+
+  it('✗ pago nuevo con shape inválido (fecha string)', async () => {
+    const malo = { ...PNUEVO, fecha: '2026-09-30' };
+    await assertFails(actualizarCobro(ADMIN, 'ac-dos', cobroCrudo([PA, PB, malo], 5500)));
+  });
+
+  it('✗ pago nuevo con clave desconocida', async () => {
+    const malo = { ...PNUEVO, extra: true };
+    await assertFails(actualizarCobro(ADMIN, 'ac-dos', cobroCrudo([PA, PB, malo as PagoCrudo], 5500)));
+  });
+
+  it('✗ registrar pago tocando además otro campo de la venta', async () => {
+    await assertFails(
+      updateDoc(doc(db(ADMIN), 'ventas', 'ac-vacia'), {
+        cobro: cobroCrudo([pagoCrudo('p', TOTAL_AC, 10)], TOTAL_AC),
+        medioPago: 'efectivo',
+      }),
+    );
+  });
+
+  it('✗ registrar pago sobre una venta anulada', async () => {
+    await assertFails(actualizarCobro(ADMIN, 'ac-anulada', cobroCrudo([pagoCrudo('p', 1000, 10)], 1000)));
+  });
+
+  it('✗ deshacer el pago del medio (aritmética válida: solo el espejo lo frena)', async () => {
+    await assertFails(actualizarCobro(ADMIN, 'ac-tres', cobroCrudo([PA, PC], 4500)));
+  });
+
+  it('✗ deshacer restando mal', async () => {
+    await assertFails(actualizarCobro(ADMIN, 'ac-tres', cobroCrudo([PA, PB], 4000)));
+  });
+
+  it('✗ el vendedor deshace un pago', async () => {
+    await assertFails(actualizarCobro(VENDEDOR, 'ac-tres', cobroCrudo([PA, PB], 4500)));
   });
 });

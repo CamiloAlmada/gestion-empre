@@ -7,6 +7,7 @@ import {
   type Firestore,
 } from 'firebase/firestore';
 import {
+  cobroInicial,
   congelarCosteo,
   peso,
   sumarMoney,
@@ -24,6 +25,7 @@ import { ventaConverter } from './converters/venta';
 import { movimientoConverter } from './converters/movimiento';
 import {
   AnulacionInvalidaError,
+  ClienteRequeridoError,
   ItemInvalidoError,
   StockInsuficienteError,
   TotalIncoherenteError,
@@ -145,10 +147,17 @@ interface EfectoVenta {
  *   `primeraCompra`/`ultimaCompra` es last-write-wins: dos ventas offline
  *   concurrentes pueden pisarse la fecha, aceptable para un cache aproximado.
  *
- * Valida antes de tocar el batch: ítems no vacíos, `totalCents` == suma de
- * subtotales, y stock/peso suficiente según los datos recibidos.
+ * Cobro diferido (doc 11): una venta `medioPago: 'a_cobrar'` exige `cliente` (a
+ * quién se le cobra) y nace con `cobro: cobroInicial()`, que es lo que la lista
+ * de pendientes consulta. Con un medio real la venta NO lleva `cobro` (omitido,
+ * nunca `null`): su ausencia significa "cobrada en el acto".
+ *
+ * Valida antes de tocar el batch: ítems no vacíos, cliente si es `a_cobrar`,
+ * `totalCents` == suma de subtotales, y stock/peso suficiente según los datos
+ * recibidos.
  *
  * @throws {VentaVaciaError} si no hay ítems.
+ * @throws {ClienteRequeridoError} si `medioPago === 'a_cobrar'` y no hay cliente.
  * @throws {TotalIncoherenteError} si `totalCents` no es la suma de subtotales.
  * @throws {ItemInvalidoError} si un ítem no trae los datos que su `modoStock` exige.
  * @throws {StockInsuficienteError} si el stock/peso local no alcanza para un ítem.
@@ -161,6 +170,10 @@ export async function registrarVenta(
 
   if (items.length === 0) {
     throw new VentaVaciaError('No se puede registrar una venta sin ítems.');
+  }
+
+  if (medioPago === 'a_cobrar' && cliente === undefined) {
+    throw new ClienteRequeridoError('Una venta a cobrar necesita un cliente.');
   }
 
   // El total debe ser la suma EXACTA de los subtotales (sin perder ni inventar
@@ -193,6 +206,8 @@ export async function registrarVenta(
     // que una venta anónima queda byte-idéntica a como era antes de la Fase 1.5.
     clienteId: cliente?.id,
     clienteNombre: cliente?.nombre,
+    // Solo las ventas a cobrar llevan `cobro`; el converter omite el `undefined`.
+    cobro: medioPago === 'a_cobrar' ? cobroInicial() : undefined,
   };
   batch.set(ventaRef, venta);
 

@@ -30,6 +30,17 @@ export {
   type ClienteVenta,
 } from './ventas';
 export {
+  registrarPago,
+  registrarPagos,
+  deshacerUltimoPago,
+  MAX_PAGOS_POR_VENTA,
+  LARGO_MAX_REFERENCIA_PAGO,
+  LARGO_MAX_CUENTA_ID_PAGO,
+  LARGO_MAX_CUENTA_ETIQUETA_PAGO,
+  type DatosRegistroPago,
+  type DatosPagoComunes,
+} from './cobros';
+export {
   crearCliente,
   actualizarCliente,
   desactivarCliente,
@@ -85,6 +96,8 @@ export {
   TotalIncoherenteError,
   ItemInvalidoError,
   AnulacionInvalidaError,
+  ClienteRequeridoError,
+  CobroInvalidoError,
   AjusteInvalidoError,
   IngresoInvalidoError,
   ErrorCategoria,

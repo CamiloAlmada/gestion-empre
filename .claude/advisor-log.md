@@ -569,3 +569,13 @@ indexado del último elemento, antes de la regla definitiva (plan B: índices fi
 con tope chico, o validar el prefijo solo en el cliente); (2) ¿parciales ya en A?
 Resuelto por el orquestador: no, monto = saldo bloqueado; (3) leer los tests de
 reglas de `ventas` antes de extenderlos: va en el brief de A2.
+
+**Resultado del bloqueante 1 (spike del `senior`, emulador firebase-tools 15):**
+el rango funciona con n ≥ 1, pero `lista[0:0]` lanza "Index out of bound" en vez
+de devolver `[]`, lo que rompía el primer pago y el deshacer del único pago.
+Decisión del orquestador (no contradice al advisor, ajusta su plan A con
+evidencia): regla con guarda `viejo.size() == 0 || nuevo[0:viejo.size()] ==
+viejo` y su espejo; cumplió los 22 casos. Hallazgo adicional: un pago escrito
+con precisión de µs (Admin SDK/script) deja de ser igual si el cliente lo relee
+como `Date` y lo reescribe → restricción documentada: los pagos solo los escribe
+el kit desde el cliente.

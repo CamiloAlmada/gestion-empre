@@ -1,0 +1,20 @@
+rules_version = '2';
+
+// Reglas MÍNIMAS de regresión (no se despliegan): fijan cómo evalúa el emulador
+// el operador de rango de listas `l[i:j]`. Las carga solo
+// emulador-rango-lista-rules.test.ts. Ver por qué importa en ese test y en la
+// sección "Cobros diferidos" de firestore.rules.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /rango00/{id} { allow create: if request.resource.data.l[0:0] == []; }
+    match /rango11/{id} { allow create: if request.resource.data.l[1:1] == []; }
+    match /rango0n/{id} {
+      allow create: if request.resource.data.l[0:request.resource.data.n] == request.resource.data.esperado;
+    }
+    // La forma que usa firestore.rules: guarda para n == 0.
+    match /rangoConGuarda/{id} {
+      allow create: if request.resource.data.n == 0
+        || request.resource.data.l[0:request.resource.data.n] == request.resource.data.esperado;
+    }
+  }
+}

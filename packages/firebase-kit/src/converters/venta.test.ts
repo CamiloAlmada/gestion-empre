@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import type { QueryDocumentSnapshot } from 'firebase/firestore';
-import { clasificarCosteo, money, peso, type CosteoItem, type Venta } from '@gestion/core';
-import { ventaConverter } from './venta';
+import {
+  clasificarCosteo,
+  estadoCobro,
+  money,
+  peso,
+  type CobroVenta,
+  type CosteoItem,
+  type Venta,
+} from '@gestion/core';
+import { cobroADoc, ventaConverter } from './venta';
 
 function timestampFalso(fecha: Date) {
   return { toDate: () => fecha };
@@ -326,5 +334,120 @@ describe('ventaConverter.toFirestore', () => {
     );
     expect(reconstruido.clienteId).toBe('cli-1');
     expect(reconstruido.clienteNombre).toBe('Marta');
+  });
+});
+
+describe('ventaConverter y el cobro diferido (cobro, doc 11)', () => {
+  const fechaPago = new Date('2026-09-30T15:00:00.000Z');
+  const registradoEn = new Date('2026-09-30T15:01:00.000Z');
+
+  const cobro: CobroVenta = {
+    v: 1,
+    estado: 'pendiente',
+    cobradoCents: money(30000),
+    pagos: [
+      {
+        id: 'pago-1',
+        fecha: fechaPago,
+        registradoEn,
+        montoCents: money(30000),
+        medioPago: 'transferencia',
+        usuarioId: 'admin-1',
+        referencia: 'OP-123',
+      },
+    ],
+  };
+
+  // Doc tal como lo devuelve Firestore: fechas de los pagos como Timestamp.
+  function docConCobro(mapa: unknown) {
+    return { ...docCompleto, medioPago: 'a_cobrar', clienteId: 'cli-1', cobro: mapa };
+  }
+
+  it('venta vieja sin cobro: se lee igual, con cobro undefined', () => {
+    const venta = ventaConverter.fromFirestore(snapshotDe('v1', docCompleto), {});
+    expect(venta.cobro).toBeUndefined();
+    expect(estadoCobro(venta)).toBe('cobrada');
+  });
+
+  it('venta sin cobro: toFirestore NO escribe la clave (nunca null)', () => {
+    const venta = ventaConverter.fromFirestore(snapshotDe('v1', docCompleto), {});
+    expect(ventaConverter.toFirestore(venta)).not.toHaveProperty('cobro');
+  });
+
+  it('lee cobro con pagos: Timestamp → Date y montos como Money', () => {
+    const venta = ventaConverter.fromFirestore(
+      snapshotDe(
+        'v1',
+        docConCobro({
+          v: 1,
+          estado: 'pendiente',
+          cobradoCents: 30000,
+          pagos: [
+            {
+              id: 'pago-1',
+              fecha: timestampFalso(fechaPago),
+              registradoEn: timestampFalso(registradoEn),
+              montoCents: 30000,
+              medioPago: 'transferencia',
+              usuarioId: 'admin-1',
+              referencia: 'OP-123',
+            },
+          ],
+        }),
+      ),
+      {},
+    );
+    expect(venta.cobro).toEqual(cobro);
+    expect(venta.cobro?.pagos[0]?.fecha).toBeInstanceOf(Date);
+  });
+
+  it('valor inicial (sin pagos) se lee como pendiente', () => {
+    const venta = ventaConverter.fromFirestore(
+      snapshotDe('v1', docConCobro({ v: 1, estado: 'pendiente', cobradoCents: 0, pagos: [] })),
+      {},
+    );
+    expect(venta.cobro).toEqual({ v: 1, estado: 'pendiente', cobradoCents: 0, pagos: [] });
+    expect(estadoCobro(venta)).toBe('pendiente');
+  });
+
+  it('versión de cobro desconocida: LANZA (no degrada a "cobrada")', () => {
+    const snap = snapshotDe('v1', docConCobro({ v: 2, estado: 'pendiente', cobradoCents: 0, pagos: [] }));
+    expect(() => ventaConverter.fromFirestore(snap, {})).toThrow(RangeError);
+  });
+
+  it('cobradoCents no entero: lanza (doc corrupto)', () => {
+    const snap = snapshotDe('v1', docConCobro({ v: 1, estado: 'pendiente', cobradoCents: 1.5, pagos: [] }));
+    expect(() => ventaConverter.fromFirestore(snap, {})).toThrow();
+  });
+
+  it('toFirestore escribe cobro con las fechas como Date y omite los opcionales ausentes', () => {
+    const venta = ventaConverter.fromFirestore(snapshotDe('v1', docCompleto), {});
+    const doc = ventaConverter.toFirestore({ ...venta, medioPago: 'a_cobrar', cobro });
+    const mapa = doc.cobro as { pagos: Record<string, unknown>[] };
+
+    expect(mapa).toEqual({
+      v: 1,
+      estado: 'pendiente',
+      cobradoCents: 30000,
+      pagos: [
+        {
+          id: 'pago-1',
+          fecha: fechaPago,
+          registradoEn,
+          montoCents: 30000,
+          medioPago: 'transferencia',
+          usuarioId: 'admin-1',
+          referencia: 'OP-123',
+        },
+      ],
+    });
+    expect(mapa.pagos[0]).not.toHaveProperty('cuentaId');
+    expect(mapa.pagos[0]).not.toHaveProperty('cuentaEtiqueta');
+  });
+
+  it('cobroADoc (el que usan los updates) coincide con lo que escribe el converter', () => {
+    const venta = ventaConverter.fromFirestore(snapshotDe('v1', docCompleto), {});
+    const doc = ventaConverter.toFirestore({ ...venta, cobro });
+    expect(cobroADoc(cobro)).toEqual(doc.cobro);
   });
 });

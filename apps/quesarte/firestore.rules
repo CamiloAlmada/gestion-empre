@@ -330,6 +330,114 @@ service cloud.firestore {
                 && (d.pagos.size() == 0 || pagoValido(d.pagos[0]))));
     }
 
+    // --- Cobros diferidos (docs/11-cobros-diferidos.md, "Reglas") ---
+    //
+    // Una venta `a_cobrar` lleva el mapa `cobro = { v, estado, cobradoCents,
+    // pagos }`. El admin registra pagos (la lista crece en uno) y puede deshacer
+    // el último (la lista se achica en uno). En los dos casos los pagos que
+    // quedan tienen que estar INTACTOS: se verifica con rangos de lista, que el
+    // lenguaje de reglas sí soporta (spike A2 contra el emulador) con UNA
+    // excepción: `lista[0:0]` NO devuelve `[]`, lanza "Index out of bound"
+    // (fijado por tests/rules/emulador-rango-lista-rules.test.ts). Por eso cada
+    // rango lleva la guarda `n == 0 || ...`: con n == 0 el prefijo vacío es
+    // trivialmente válido y el rango no se evalúa.
+    //
+    // Los timestamps de los pagos se comparan POR VALOR (µs incluidos). Los
+    // escribe solo `packages/firebase-kit/src/cobros.ts`, desde el cliente, con
+    // precisión de milisegundos; un pago escrito con microsegundos (Admin SDK,
+    // script) no sobreviviría al ida y vuelta por `Date` del cliente y haría
+    // rechazar el pago siguiente.
+
+    // Valor inicial exacto del cobro de una venta que nace `a_cobrar`
+    // (`cobroInicial()` de core).
+    function cobroInicialValido(c) {
+      return c == {'v': 1, 'estado': 'pendiente', 'cobradoCents': 0, 'pagos': []};
+    }
+
+    // Create de venta: medio de pago en la unión `MedioPago`. `a_cobrar` exige
+    // cliente (a quién se le cobra) y el valor inicial de `cobro`; cualquier
+    // otro medio NO lleva `cobro` (su ausencia significa "cobrada en el acto").
+    function ventaCobroCreateValido() {
+      let d = request.resource.data;
+      return d.medioPago in ['efectivo', 'debito', 'credito', 'transferencia', 'a_cobrar']
+        && (d.medioPago == 'a_cobrar'
+          ? ('clienteId' in d && d.clienteId is string && 'cobro' in d && cobroInicialValido(d.cobro))
+          : !('cobro' in d));
+    }
+
+    // Shape de UN pago de venta (`PagoVenta` de core). Los topes de largo espejan
+    // los `LARGO_MAX_*` de `packages/firebase-kit/src/cobros.ts`. `usuarioId`
+    // tiene que ser quien escribe: nadie registra pagos a nombre de otro.
+    function pagoVentaValido(p) {
+      return p is map
+        && p.keys().hasAll(['id', 'fecha', 'registradoEn', 'montoCents', 'medioPago', 'usuarioId'])
+        && p.keys().hasOnly(['id', 'fecha', 'registradoEn', 'montoCents', 'medioPago', 'usuarioId',
+                             'referencia', 'cuentaId', 'cuentaEtiqueta'])
+        && p.id is string && p.id.size() >= 1 && p.id.size() <= 40
+        && p.montoCents is int && p.montoCents > 0
+        && p.medioPago in ['efectivo', 'debito', 'credito', 'transferencia']
+        && p.fecha is timestamp
+        && p.registradoEn is timestamp
+        && p.usuarioId == request.auth.uid
+        && (!('referencia' in p) || (p.referencia is string && p.referencia.size() <= 60))
+        && (!('cuentaId' in p) || (p.cuentaId is string && p.cuentaId.size() <= 40))
+        && (!('cuentaEtiqueta' in p) || (p.cuentaEtiqueta is string && p.cuentaEtiqueta.size() <= 60));
+    }
+
+    // Estado coherente con la suma: 'cobrada' si y solo si se cobró el total.
+    function cobroEstadoCoherente(c, totalCents) {
+      return c.estado == (c.cobradoCents == totalCents ? 'cobrada' : 'pendiente');
+    }
+
+    // Parte común de registrar/deshacer pago: venta completada que ya tiene
+    // `cobro`, el write solo toca `cobro`, y el `cobro` nuevo tiene sus claves
+    // exactas. Una venta anulada no se cobra ni se "descobra".
+    function ventaCobroUpdateComun() {
+      let nuevo = request.resource.data.cobro;
+      return resource.data.estado == 'completada'
+        && 'cobro' in resource.data
+        && soloCambian(['cobro'])
+        && nuevo is map
+        && nuevo.keys().hasOnly(['v', 'estado', 'cobradoCents', 'pagos'])
+        && nuevo.keys().hasAll(['v', 'estado', 'cobradoCents', 'pagos'])
+        && nuevo.v == 1
+        && nuevo.cobradoCents is int
+        && nuevo.pagos is list;
+    }
+
+    // Registrar pago: la lista crece en exactamente uno (tope 20), los pagos
+    // anteriores quedan intactos (prefijo, con la guarda de `[0:0]`), el último
+    // tiene shape válido, lo cobrado es lo anterior más su monto sin superar el
+    // total, y el estado es coherente con la suma.
+    function ventaRegistraPago() {
+      let viejo = resource.data.cobro;
+      let nuevo = request.resource.data.cobro;
+      let n = viejo.pagos.size();
+      return ventaCobroUpdateComun()
+        && nuevo.pagos.size() == n + 1
+        && nuevo.pagos.size() <= 20
+        && (n == 0 || nuevo.pagos[0:n] == viejo.pagos)
+        && pagoVentaValido(nuevo.pagos[n])
+        && nuevo.cobradoCents == viejo.cobradoCents + nuevo.pagos[n].montoCents
+        && nuevo.cobradoCents <= resource.data.totalCents
+        && cobroEstadoCoherente(nuevo, resource.data.totalCents);
+    }
+
+    // Deshacer el último pago: el espejo. La lista se achica en exactamente uno,
+    // lo que queda es el prefijo de la lista vieja (con la guarda de `[0:0]`) y
+    // lo cobrado baja exactamente el monto del pago quitado.
+    function ventaDeshaceUltimoPago() {
+      let viejo = resource.data.cobro;
+      let nuevo = request.resource.data.cobro;
+      let n = nuevo.pagos.size();
+      return ventaCobroUpdateComun()
+        && viejo.pagos.size() >= 1
+        && n == viejo.pagos.size() - 1
+        && (n == 0 || nuevo.pagos == viejo.pagos[0:n])
+        && nuevo.cobradoCents == viejo.cobradoCents - viejo.pagos[n].montoCents
+        && cobroEstadoCoherente(nuevo, resource.data.totalCents);
+    }
+
     // --- Colecciones ---
 
     match /usuarios/{uid} {
@@ -420,13 +528,19 @@ service cloud.firestore {
         && request.resource.data.totalCents is int
         && request.resource.data.items is list
         && (!('clienteId' in request.resource.data) || request.resource.data.clienteId is string)
-        && (!('clienteNombre' in request.resource.data) || request.resource.data.clienteNombre is string);
-      // Única mutación permitida: anulación por admin (completada -> anulada),
-      // sin tocar ningún otro campo (la reversa de stock va por movimientos).
+        && (!('clienteNombre' in request.resource.data) || request.resource.data.clienteNombre is string)
+        && ventaCobroCreateValido();
+      // Anulación por admin (completada -> anulada), sin tocar ningún otro campo
+      // (la reversa de stock va por movimientos). Una venta con `cobro` se anula
+      // igual: sus pagos quedan como estaban (auditoría).
       allow update: if esAdmin()
         && resource.data.estado == 'completada'
         && request.resource.data.estado == 'anulada'
         && soloCambian(['estado']);
+      // Cobros diferidos (doc 11), solo admin: registrar un pago o deshacer el
+      // último. El vendedor no gana ninguna regla de update.
+      allow update: if esAdmin() && ventaRegistraPago();
+      allow update: if esAdmin() && ventaDeshaceUltimoPago();
       // Las ventas no se borran (auditoría).
       allow delete: if false;
     }

@@ -611,14 +611,14 @@ pago es el saldo completo (campo visible pero bloqueado).
 | # | Tarea | Agente | Estado |
 | --- | --- | --- | --- |
 | A1 | core: tipos + `cobro.ts` | `semisenior` | ✅ 470 tests en core (18 de cobro) |
-| A2-spike | Comprobar rangos de lista en reglas (emulador) | `senior` | 🔄 en curso |
-| A2+A3 | Reglas + kit, mismo commit | `senior` | ⏳ depende de A1 y del spike |
+| A2-spike | Comprobar rangos de lista en reglas (emulador) | `senior` | ✅ `[0:0]` lanza en el emulador; se adopta la regla con guarda `viejo.size() == 0 \|\| prefijo` (todos los casos OK) |
+| A2+A3 | Reglas + kit, mismo commit | `senior` | ✅ 238 tests de reglas (33 nuevos + 5 de regresión de `[0:0]`), 416 en firebase-kit |
 | A4 | `ModalCobro` con "A cobrar" | `semisenior` | ✅ commit local, 263 tests de venta |
-| A5 | Detalle de venta: registrar pago / deshacer; badges | `semisenior` | ⏳ depende de A3, A4 |
-| A6 | Docs 02 y 07 | `semisenior` | ⏳ depende de A2 |
+| A5 | Detalle de venta: registrar pago / deshacer; badges | `semisenior` | 🔄 en curso |
+| A6 | Docs 02 y 07 | `semisenior` | 🔄 en curso |
 | B, C | ver doc 11 | — | ⏸️ |
 
-**⚠️ NO PUSHEAR `main` hasta que A2+A3 estén commiteados.** Desde A4 el POS
+**⚠️ NO PUSHEAR `main` hasta cerrar A5** (antes decía A2+A3; con A2+A3 ya no hay riesgo de datos, pero sin A5 el vendedor podría dejar ventas a cobrar y Adrián no tendría cómo registrar el pago). Desde A4 el POS
 puede emitir `a_cobrar`, pero `registrarVenta` todavía no escribe el cobro
 inicial ni exige cliente, y las reglas de producción no validan `medioPago`: un
 push dispara el deploy y permitiría ventas a cobrar sin su lista de pagos.
