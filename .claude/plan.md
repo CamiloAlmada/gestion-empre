@@ -590,3 +590,24 @@ Todo desplegado en producción. Detalle de la consulta al advisor en
 **Deuda:** `useDoc.ts` tiene el mismo patrón de listener que tenía
 `ProveedorAuth` (un "no existe" de caché indistinguible); menos grave porque
 no decide acceso. Revisar si algún consumidor lo usa para una decisión binaria.
+
+## F3 — Cobros diferidos y cuentas del negocio (planificado 2026-09-30)
+
+Pedido de Adrián: la venta y el pago no ocurren al mismo tiempo; necesita saber
+quién le pagó y quién no, cuándo, por qué medio y a qué cuenta (PREX, Santander).
+**Diseño y roadmap completo en `docs/11-cobros-diferidos.md`.** Consulta al
+advisor en `.claude/advisor-log.md` (2026-09-30).
+
+**Decisión (no re-discutir sin evidencia nueva):** el estado de cobro vive en la
+venta (`medioPago: 'a_cobrar'` + mapa `cobro`), no en una cuenta corriente por
+cliente ni en una colección `cobros` aparte. La cuenta corriente sigue diferida
+(doc 04). Captura del comprobante: sin Storage (exige Blaze desde 2026-02-03);
+si hace falta, colección `comprobantes` con imagen comprimida, en Fase C.
+
+| Fase | Contenido | Estado |
+| --- | --- | --- |
+| A | "A cobrar" en el POS + registrar cobro desde el detalle (A1-A6) | ⏳ lista para arrancar; no depende de Adrián |
+| B | Cuentas del negocio en Ajustes, lista "Por cobrar", card en Reportes | ⏳ conviene tener las respuestas de Adrián antes |
+| C | Captura, WhatsApp, pagos parciales, vista de caja | ⏸️ condicional a las respuestas |
+
+**Pendiente del dueño:** hacerle a Adrián las 8 preguntas del final del doc 11.

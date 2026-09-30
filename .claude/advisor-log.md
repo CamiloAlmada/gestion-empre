@@ -502,3 +502,44 @@ mensaje de conexión, no "no autorizada"; sacar modo avión → entra solo).
 paralelo sin esperar la versión de Android: el override a negro da iconos
 blancos sobre negro en cualquiera de las dos lecturas del comportamiento. La
 verificación en el teléfono la hace el dueño (T4).
+
+---
+
+## 2026-09-30 — Cobros diferidos y cuentas del negocio
+
+### Llamada 1 (temprana, antes de fijar el modelo)
+
+**Recomendación textual:** "Estado de cobro EN la venta, no cuenta corriente.
+Agregá `'a_cobrar'` a `MedioPago` y un mapa opcional `cobro` `{ v: 1, fecha,
+usuarioId, cuentaId?, cuentaEtiqueta?, referencia? }`. Una sola transición nueva
+en reglas: `a_cobrar → medio real` con `soloCambian(['medioPago', 'cobro'])`;
+`clienteId` obligatorio cuando `medioPago == 'a_cobrar'`. Cuentas del negocio en
+`configuracion/cuentas` (patrón `plantillasWhatsApp`). Comprobante: referencia de
+texto; una imagen jamás dentro del doc de venta. Fases: A modelo + POS + marcar
+cobrada; B cuentas + pantalla 'Por cobrar' + card en Reportes; C condicional a lo
+que diga Adrián."
+
+**Por qué:** Adrián pidió un estado binario por venta; en la venta se lee en los
+scans que ya existen (Historial, Reportes, DetalleCliente) sin joins, se escribe
+sin lecturas (offline §8), y "una transferencia paga N ventas" es un batch de N
+updates. Un ledger por cliente pierde qué venta se pagó.
+
+**Descartado:** cuenta corriente (doc 04:494 la difiere; no responde el pedido);
+colección `cobros` con estado derivado (joins en Reportes, pendientes no
+filtrables por índice; queda para Fase C si hay parciales); `cobro` con `estado`
+propio dejando `medioPago` fijo (7 consumidores con accesor); base64 en la venta
+(30 MB por apertura de Reportes); Storage con Blaze; `stats.pendienteCents` en el
+cliente.
+
+**Bloqueantes y cómo se resolvieron (orquestador):**
+1. `match /configuracion/{id}` es genérico con cláusulas por id
+   (`firestore.rules:503-507`): `cuentas` entra con una cláusula más. Resuelto.
+2. Preguntas a Adrián: van al final de `docs/11-cobros-diferidos.md`. Abierto.
+3. Verificar en el emulador el update con `cobro` como mapa entero + `fecha is
+   timestamp`: queda en la DoD de A2. Abierto.
+4. Etiquetas de medio de pago: todas salen de `ETIQUETAS_MEDIO_PAGO:
+   Record<MedioPago, string>` (`componentes/historial/formato.ts:4`); TS obliga a
+   etiquetar `a_cobrar`. No hay `switch` con `default` silencioso. Resuelto.
+
+**Qué se hizo después:** roadmap escrito en `docs/11-cobros-diferidos.md`, sin
+implementar nada. Divergencias: ninguna.
