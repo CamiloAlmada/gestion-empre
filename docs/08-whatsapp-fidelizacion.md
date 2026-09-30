@@ -59,8 +59,9 @@ número que el cliente ya conoce.
 ## Plantillas de mensajes
 
 Colección `configuracion/plantillasWhatsApp` (editable solo por `admin`, en
-Ajustes): lista de plantillas `{ id, nombre, contexto, texto }` con
-placeholders que la app resuelve al generar el link:
+Ajustes): lista de plantillas `{ id, nombre, contexto, texto, activa? }` con
+placeholders que la app resuelve al generar el link (`activa` se explica en
+"ABM de plantillas en Ajustes"):
 
 - `{cliente}` — nombre o alias
 - `{total}` — total de la venta formateado ($ x.xxx)
@@ -100,23 +101,100 @@ ellas. **Nunca pisa ni reordena** lo guardado: lo que Adrián editó queda como
 está. La usan dos lugares:
 
 - `BotonWhatsApp`: ofrece las plantillas del contexto sobre
-  `completarConSeed(plantillasDoc.datos ?? [], PLANTILLAS_SEED)`; con el doc
-  ausente o vacío queda el seed completo.
+  `plantillasActivas(completarConSeed(plantillasDoc.datos ?? [], PLANTILLAS_SEED))`
+  (solo las activas, ver abajo); con el doc ausente o vacío queda el seed
+  completo.
 - `SeccionPlantillasWhatsApp` (Ajustes): lista
   `completarConSeed(guardadas, PLANTILLAS_SEED)` cuando hay plantillas
   guardadas, así la nueva aparece y la primera edición persiste las 4. Con el
   doc ausente o vacío conserva el estado vacío ("Cargar plantillas iniciales").
 
 Nota de diseño: como toda plantilla del seed cuyo `id` falte se vuelve a sumar,
-**borrar una plantilla de fábrica del documento la haría reaparecer**. Hoy
-Ajustes no ofrece borrar (solo editar y restaurar el texto original), pero una
-futura baja de plantillas tiene que ser **lógica** (un campo que la marque como
-dada de baja), no quitarla de la lista.
+**borrar una plantilla de fábrica del documento la haría reaparecer**. Por eso
+la baja de plantillas es **lógica** (campo `activa`, ver abajo) y nunca
+física: Ajustes no ofrece borrar, solo desactivar.
 
 Contextos aceptados: `'venta' | 'cliente' | 'inactivo' | 'cobro'`
 (`ContextoPlantilla`). `CONTEXTOS` en `packages/firebase-kit/src/configuracion.ts`
 y `plantillaWhatsAppValida` en `apps/quesarte/firestore.rules` los espejan (las
 reglas no pueden importar la lista de core).
+
+### ABM de plantillas en Ajustes (2026-09-30)
+
+Lo pidió el dueño: Adrián tiene que poder armar sus propias plantillas sin
+tocar código. Implementado en `SeccionPlantillasWhatsApp`
+(`apps/quesarte/src/componentes/ajustes/`), solo admin.
+
+**Qué puede hacer Adrián**
+
+- **Crear** plantillas propias (botón "Nueva plantilla"): nombre, contexto y
+  texto, en `ModalPlantillaWhatsApp`. El `id` es un id generado por el SDK de
+  Firestore (`doc(collection(db, 'configuracion')).id`), sin escribir nada por sí
+  solo.
+- **Editar cualquiera**: nombre y texto de todas; el **contexto** solo en las
+  propias (en las de fábrica el modal lo muestra de solo lectura).
+- **Desactivar y reactivar solo las propias** (botones "Desactivar" /
+  "Reactivar" en la fila, badge "Inactiva"). Desactivar pide confirmación
+  (`ModalConfirmarDesactivarPlantilla`: deja de aparecer en el botón de WhatsApp,
+  se puede reactivar); reactivar es directo.
+- Las **de fábrica** (las de `PLANTILLAS_SEED`) **no se desactivan ni cambian de
+  contexto**. Se sabe cuáles son con `esPlantillaDeFabrica(id)`
+  (`packages/core/src/whatsapp.ts`), derivado del seed: no hay un campo
+  `origen` persistido.
+- **Tope de 20 plantillas en total** (`MAX_PLANTILLAS`), y **las inactivas
+  cuentan**. Al llegar al tope "Nueva plantilla" se deshabilita y se muestra
+  "Llegaste al máximo de 20 plantillas".
+- Toda acción reescribe la lista completa del documento único
+  (`guardarPlantillasWhatsApp`), con el patrón de escritura offline de
+  docs/06 §8.
+
+**Cómo se guarda: `activa` opcional, solo se persiste `false`**
+
+`PlantillaWhatsApp.activa?: boolean` (`packages/core/src/whatsapp.ts`). Ausente
+(o `true`) = activa; el converter y el kit **solo escriben `activa: false`**
+(`plantillasWhatsAppConverter`, `exigirPlantillaValida`). Así el documento de
+producción (sin la clave) y el seed siguen siendo válidos sin migrar datos, y una
+plantilla de fábrica leída sigue siendo igual a la del seed. `plantillasActivas`
+filtra las de `activa !== false`; es lo que usa `BotonWhatsApp`.
+
+**Por qué la baja es lógica y por qué siempre queda ≥ 1 activa por contexto**
+
+- Lógica, no borrado: `completarConSeed` vuelve a agregar toda plantilla del seed
+  cuyo `id` falte, así que borrar una de fábrica la haría reaparecer.
+- Cada contexto tiene exactamente una plantilla de fábrica en el seed, y esas no
+  se pueden desactivar ni recontextualizar. Por lo tanto, **siempre queda al menos
+  una plantilla activa por contexto** y el botón de WhatsApp nunca se queda sin
+  opciones (condición que, de darse, lo oculta: `plantillasContexto.length === 0`
+  en `BotonWhatsApp`).
+
+**"Restaurar iniciales" (redefinido)**
+
+Antes escribía el seed entero (y habría borrado las plantillas propias). Ahora
+es `restaurarPlantillasDeFabrica(lista)` (`packages/core/src/whatsapp.ts`):
+completa con el seed (`completarConSeed`) y devuelve cada plantilla de fábrica al
+valor del seed (nombre, texto, contexto, sin `activa`); las **propias quedan
+intactas**, con su `activa` y su posición. La confirmación
+(`ModalConfirmarRestaurarPlantillas`) lo dice: "Repone nombre y texto de las
+plantillas iniciales. Tus plantillas propias no cambian." El "Restaurar texto
+original" dentro del modal de una de fábrica sigue siendo solo un borrador que
+requiere "Guardar".
+
+**Quién hace cumplir qué**
+
+| Capa | Qué impone |
+| --- | --- |
+| `guardarPlantillasWhatsApp` (kit, `packages/firebase-kit/src/configuracion.ts`) | Tope de 20, ids únicos, rangos de cada campo, `activa` booleana; una de fábrica **no puede** llevar `activa: false` ni cambiar de contexto (`ConfiguracionInvalidaError`). |
+| `plantillaWhatsAppValida` (reglas, `apps/quesarte/firestore.rules`) | Solo el shape del **primer elemento** de la lista: `activa` es una clave opcional y, si está, booleana. Las reglas no conocen qué ids son de fábrica ni iteran la lista. |
+| UI (`SeccionPlantillasWhatsApp`, `ModalPlantillaWhatsApp`) | No ofrece "Desactivar" en las de fábrica, muestra su contexto de solo lectura y deshabilita "Nueva plantilla" en el tope. |
+
+**Compatibilidad con bundles viejos**
+
+Un bundle anterior a este cambio que guarde desde Ajustes **descarta `activa`**
+(su converter solo mapeaba `id`, `nombre`, `contexto` y `texto`) y por lo tanto
+**reactivaría las plantillas propias que estaban inactivas**. No hay migración: se
+corrige desde Ajustes (volver a desactivarlas) y, como la PWA se autoactualiza
+(`registerType: 'autoUpdate'` en `apps/quesarte/vite.config.ts`), el bundle viejo
+deja de usarse solo.
 
 ## Puntos de contacto (dónde aparecen botones)
 
@@ -191,5 +269,11 @@ reglas no pueden importar la lista de core).
       resuelta ({deuda}, {diasDeuda}, {negocio}).
 - [ ] Un doc de plantillas guardado con las 3 originales igual ofrece la de
       cobro, sin migrar y sin alterar las plantillas guardadas.
+- [ ] En Ajustes (solo admin) se pueden crear plantillas propias, editar
+      cualquiera y desactivar / reactivar solo las propias; las de fábrica no
+      se desactivan ni cambian de contexto y el tope es 20 (las inactivas
+      cuentan).
+- [ ] Una plantilla desactivada no aparece en el botón de WhatsApp, y "Restaurar
+      iniciales" repone solo las de fábrica sin tocar las propias.
 - [ ] No existe ningún código de envío automático/masivo (revisión de
       senior sobre este punto).
