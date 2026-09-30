@@ -259,10 +259,14 @@ export function Clientes() {
       return <p className="py-8 text-center text-texto-secundario">Cargando deudas…</p>;
     }
     if (deudas.error !== null) {
+      // `failed-precondition` = índice compuesto todavía en construcción (recién
+      // desplegado): no es un problema de conexión, se resuelve solo.
       return (
         <div className="flex flex-col items-center gap-3 rounded-card border border-borde bg-superficie p-8 text-center">
           <p role="alert" className="text-peligro">
-            No se pudieron cargar las deudas. Revisá tu conexión e intentá de nuevo.
+            {deudas.error.code === 'failed-precondition'
+              ? 'Esta consulta todavía se está preparando. Probá en unos minutos.'
+              : 'No se pudieron cargar las deudas. Revisá tu conexión e intentá de nuevo.'}
           </p>
           <Button onClick={reintentar}>Reintentar</Button>
         </div>

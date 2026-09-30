@@ -641,7 +641,7 @@ propuesto por el advisor, editable en Ajustes.
 | T4 | Ajustes y `BotonWhatsApp` con `completarConSeed`; etiquetas y placeholders | `semisenior` | ✅ (rompió 30 tests de otros archivos con mocks viejos; arreglados. Lección: el criterio de un brief que cambia un componente compartido es el monorepo entero, no su carpeta) |
 | T5 | Docs 08 y 11 | `semisenior` | ✅ |
 | T6 | Publicado en producción (`3946921`, run 36747950110); índice READY a los ~3 min. Prueba manual pendiente del dueño | dueño | ✅ publicado |
-| T7 | Follow-ups del cierre: mensaje propio para `failed-precondition` (índice construyéndose) en el chip; badge "Dado de baja" en `ListaClientesConDeuda`; tests de cliente dado de baja en "Deben" y casos faltantes de `agruparDeudaPorCliente` | `trainee`/`semisenior` | ⏳ después de publicar |
+| T7 | Follow-ups del cierre: mensaje propio para `failed-precondition` (índice construyéndose) en el chip; badge "Dado de baja" en `ListaClientesConDeuda`; tests de cliente dado de baja en "Deben" y casos faltantes de `agruparDeudaPorCliente` | `semisenior` | ✅ commit local, se publica con el ABM |
 
 **Siguiente (pedido del dueño, 2026-09-30): ABM de plantillas de WhatsApp en
 Ajustes** — Adrián crea, edita y da de baja/alta plantillas. Hoy solo edita las

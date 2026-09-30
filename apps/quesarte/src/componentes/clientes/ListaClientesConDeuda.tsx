@@ -28,7 +28,9 @@ function textoDiasDeuda(dias: number): string {
  * orden recibido (core ya lo entrega con la deuda más vieja primero). A
  * diferencia de `ListaClientesInactivos`, la fila lleva a la ficha del cliente
  * (donde está el detalle de las ventas a cobrar): el área de texto es un botón
- * y WhatsApp queda como hermano, nunca un botón anidado en otro.
+ * y WhatsApp queda como hermano, nunca un botón anidado en otro. Si el cliente
+ * está dado de baja (`activo: false`) la fila sigue: la deuda existe igual, y
+ * lleva el badge "Dado de baja" (mismo estilo que el "Inactivo" de `ListaClientes`).
  */
 export function ListaClientesConDeuda({ filas, db, onSeleccionar }: ListaClientesConDeudaProps) {
   return (
@@ -46,7 +48,14 @@ export function ListaClientesConDeuda({ filas, db, onSeleccionar }: ListaCliente
               onClick={() => onSeleccionar(deuda.clienteId)}
               className="flex min-h-[56px] min-w-0 flex-1 flex-col justify-center gap-0.5 rounded-control text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
             >
-              <span className="font-semibold text-texto">{nombre}</span>
+              <span className="flex flex-wrap items-center gap-2">
+                <span className="font-semibold text-texto">{nombre}</span>
+                {cliente?.activo === false && (
+                  <span className="rounded-full border border-borde px-2 py-0.5 text-xs text-texto-secundario">
+                    Dado de baja
+                  </span>
+                )}
+              </span>
               <span className="text-sm text-texto-secundario">
                 {`Debe ${deudaFormateada} · ${textoCantidadVentas(deuda.cantidadVentas)} · ${textoDiasDeuda(deuda.diasDeuda)}`}
               </span>

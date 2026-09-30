@@ -598,9 +598,9 @@ describe('Clientes - chip "Deben" (doc 11, cobros diferidos, solo admin)', () =>
     expect(screen.getByText('Cargando deudas…')).toBeTruthy();
   });
 
-  it('error: mensaje y botón Reintentar', () => {
+  it('error de conexión: mensaje genérico y botón Reintentar', () => {
     configurarConDeudas({
-      ventas: { datos: [], cargando: false, error: { code: 'failed-precondition' } as FirestoreError },
+      ventas: { datos: [], cargando: false, error: { code: 'unavailable' } as FirestoreError },
     });
     renderizar();
 
@@ -608,6 +608,42 @@ describe('Clientes - chip "Deben" (doc 11, cobros diferidos, solo admin)', () =>
 
     expect(screen.getByRole('alert').textContent).toContain('No se pudieron cargar las deudas.');
     expect(screen.getByRole('button', { name: 'Reintentar' })).toBeTruthy();
+  });
+
+  it('índice en construcción (failed-precondition): mensaje propio y botón Reintentar', () => {
+    configurarConDeudas({
+      ventas: { datos: [], cargando: false, error: { code: 'failed-precondition' } as FirestoreError },
+    });
+    renderizar();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Deben' }));
+
+    const alerta = screen.getByRole('alert').textContent ?? '';
+    expect(alerta).toContain('Esta consulta todavía se está preparando. Probá en unos minutos.');
+    expect(alerta).not.toContain('conexión');
+    expect(screen.getByRole('button', { name: 'Reintentar' })).toBeTruthy();
+  });
+
+  it('cliente dado de baja con deuda: la fila aparece con el nombre del cliente, el badge "Dado de baja" y WhatsApp', () => {
+    const baja = cliente({ id: 'c9', nombre: 'Dora Vigente', activo: false, telefonoE164: '59899000009' });
+    configurarConDeudas({
+      clientes: [baja],
+      ventas: {
+        ...estadoOk([ventaACobrar('v9', 'c9', 'Dora (nombre viejo)', new Date(2026, 8, 28, 10, 0, 0), 70000)]),
+        desdeCache: false,
+      },
+    });
+    renderizar();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Deben' }));
+
+    const filas = screen.getAllByRole('listitem');
+    expect(filas).toHaveLength(1);
+    expect(filas[0]?.textContent).toContain('Dora Vigente');
+    expect(filas[0]?.textContent).not.toContain('nombre viejo');
+    expect(filas[0]?.textContent).toContain('Dado de baja');
+    expect(filas[0]?.textContent).toContain('Debe $ 700,00 · 1 venta · hace 2 días');
+    expect(within(filas[0]!).getByRole('button', { name: 'Enviar WhatsApp a Dora Vigente' })).toBeTruthy();
   });
 
   it('datos de caché: avisa "Sin conexión: puede faltar información" y sigue mostrando la lista', () => {
