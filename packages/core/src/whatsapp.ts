@@ -10,7 +10,7 @@
  */
 
 /** Contexto donde se ofrece la plantilla (dónde aparece el botón, doc 08). */
-export type ContextoPlantilla = 'venta' | 'cliente' | 'inactivo';
+export type ContextoPlantilla = 'venta' | 'cliente' | 'inactivo' | 'cobro';
 
 /** Plantilla de mensaje de WhatsApp con placeholders `{clave}`. */
 export interface PlantillaWhatsApp {
@@ -20,7 +20,11 @@ export interface PlantillaWhatsApp {
   readonly nombre: string;
   /** Contexto en el que se ofrece. */
   readonly contexto: ContextoPlantilla;
-  /** Texto con placeholders `{cliente}`, `{total}`, `{items}`, `{diasSinVenir}`, `{negocio}`. */
+  /**
+   * Texto con placeholders `{cliente}`, `{total}`, `{items}`, `{diasSinVenir}`,
+   * `{negocio}`, `{deuda}` (deuda pendiente ya formateada) y `{diasDeuda}` (días
+   * desde la venta pendiente más vieja).
+   */
   readonly texto: string;
 }
 
@@ -31,7 +35,7 @@ const PLACEHOLDER = /\{([^{}]+)\}/g;
  * Resuelve los placeholders `{clave}` de `texto` con `valores`. Genérico: reemplaza
  * cualquier `{clave}` cuya `clave` exista como propiedad propia de `valores` (las
  * claves las define el caller; doc 08 usa `cliente`, `total`, `items`,
- * `diasSinVenir`, `negocio`).
+ * `diasSinVenir`, `negocio`, y el contexto `cobro` suma `deuda` y `diasDeuda`).
  *
  * Decisiones (documentadas a propósito):
  * - **Placeholder sin valor** → se deja **literal** (`{clave}` visible en el
@@ -103,4 +107,27 @@ export const PLANTILLAS_SEED: readonly PlantillaWhatsApp[] = [
     contexto: 'cliente',
     texto: 'Hola {cliente}! Llegó mercadería nueva que suele gustarte. ¡Te esperamos!',
   },
+  {
+    id: 'recordatorio-cobro',
+    nombre: 'Recordatorio de cobro',
+    contexto: 'cobro',
+    texto:
+      'Hola {cliente}! Te recuerdo que tenés pendiente {deuda} en {negocio}. Cuando puedas, avisame por acá cómo te queda mejor abonarlo. ¡Gracias!',
+  },
 ] as const;
+
+/**
+ * Devuelve `plantillas` más, al final, las plantillas de `seed` cuyo `id` no esté
+ * en `plantillas`. Nunca pisa ni reordena las existentes.
+ *
+ * Motivo: producción tiene guardado un documento con las 3 plantillas viejas; sin
+ * esto la plantilla de cobro (agregada después) no aparecería nunca. Así entra sin
+ * migrar datos y sin pisar lo que el dueño editó.
+ */
+export function completarConSeed(
+  plantillas: readonly PlantillaWhatsApp[],
+  seed: readonly PlantillaWhatsApp[],
+): PlantillaWhatsApp[] {
+  const ids = new Set(plantillas.map((p) => p.id));
+  return [...plantillas, ...seed.filter((p) => !ids.has(p.id))];
+}

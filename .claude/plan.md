@@ -624,3 +624,29 @@ pago es el saldo completo (campo visible pero bloqueado).
 puede emitir `a_cobrar`, pero `registrarVenta` todavía no escribe el cobro
 inicial ni exige cliente, y las reglas de producción no validan `medioPago`: un
 push dispara el deploy y permitiría ventas a cobrar sin su lista de pagos.
+
+### F3-B' — Chip "Deben" + recordatorio de cobro (2026-09-30)
+
+Pedido del dueño tras probar la Fase A en producción. Reemplaza la B2 original
+(pantalla "Por cobrar"): la multi-selección, si hace falta, irá en la ficha del
+cliente. Diseño en `.claude/advisor-log.md` (chip "Deben", llamada 1).
+Defaults tomados (informados al dueño): chip solo admin; texto del recordatorio
+propuesto por el advisor, editable en Ajustes.
+
+| # | Tarea | Agente | Estado |
+| --- | --- | --- | --- |
+| T1 | core: `agruparDeudaPorCliente` + contexto `'cobro'` + seed + `completarConSeed` | `semisenior` | ✅ 491 tests en core |
+| T2 | Reglas (`'cobro'` en `plantillaWhatsAppValida`) + kit `configuracion.ts` + índice `ventas (estado, cobro.estado, fecha DESC)`, mismo commit | `senior` | ✅ 242 tests de reglas, 420 en el kit |
+| T3 | Chip "Deben" en `Clientes.tsx` + `ListaClientesConDeuda` | `semisenior` | ✅ |
+| T4 | Ajustes y `BotonWhatsApp` con `completarConSeed`; etiquetas y placeholders | `semisenior` | ✅ (rompió 30 tests de otros archivos con mocks viejos; arreglados. Lección: el criterio de un brief que cambia un componente compartido es el monorepo entero, no su carpeta) |
+| T5 | Docs 08 y 11 | `semisenior` | 🔄 en curso |
+| T6 | Prueba manual | dueño | ⏳ |
+
+**Siguiente (pedido del dueño, 2026-09-30): ABM de plantillas de WhatsApp en
+Ajustes** — Adrián crea, edita y da de baja/alta plantillas. Hoy solo edita las
+de fábrica. Restricción de diseño: la baja tiene que ser **lógica** (campo
+`activa`), nunca borrar, porque `completarConSeed` re-agrega cualquier plantilla
+de fábrica cuyo `id` falte. Toca formato guardado, converter, reglas
+(`plantillaWhatsAppValida` con `hasOnly`) y Ajustes; el botón de WhatsApp filtra
+activas. Arranca después de publicar el chip "Deben", con consulta temprana al
+advisor.

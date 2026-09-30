@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  agruparDeudaPorCliente,
   aplicarPago,
   cobradoCents,
   cobroInicial,
@@ -189,5 +190,137 @@ describe('deudaTotalCents', () => {
         venta(), // 0
       ]),
     ).toBe(16000);
+  });
+});
+
+describe('agruparDeudaPorCliente', () => {
+  // Fechas a mediodía local: el cálculo es por día calendario local, así que las
+  // pruebas no dependen de la zona horaria de la máquina.
+  const AHORA = new Date(2026, 8, 30, 10, 0);
+  const dia = (d: number, h = 12) => new Date(2026, 8, d, h, 0);
+
+  function ventaCliente(
+    id: string,
+    clienteId: string | undefined,
+    opts: {
+      fecha?: Date;
+      totalCents?: number;
+      cobradoCents?: number;
+      estado?: Venta['estado'];
+      aCobrar?: boolean;
+      clienteNombre?: string;
+    } = {},
+  ): Venta {
+    const aCobrar = opts.aCobrar ?? true;
+    const total = money(opts.totalCents ?? 10000);
+    const cobrado = money(opts.cobradoCents ?? 0);
+    return {
+      id,
+      numero: 1,
+      fecha: opts.fecha ?? dia(29),
+      usuarioId: 'u1',
+      items: [],
+      totalCents: total,
+      medioPago: aCobrar ? 'a_cobrar' : 'efectivo',
+      estado: opts.estado ?? 'completada',
+      ...(clienteId !== undefined ? { clienteId } : {}),
+      ...(opts.clienteNombre !== undefined ? { clienteNombre: opts.clienteNombre } : {}),
+      ...(aCobrar
+        ? {
+            cobro: {
+              v: 1 as const,
+              estado: cobrado === total ? ('cobrada' as const) : ('pendiente' as const),
+              cobradoCents: cobrado,
+              pagos: [],
+            },
+          }
+        : {}),
+    };
+  }
+
+  it('lista vacía → []', () => {
+    expect(agruparDeudaPorCliente([], AHORA)).toEqual([]);
+  });
+
+  it('las anuladas, las cobradas y las del mostrador no aparecen', () => {
+    const ventas = [
+      ventaCliente('anulada', 'c1', { estado: 'anulada', clienteNombre: 'Ana' }),
+      ventaCliente('cobrada', 'c2', { cobradoCents: 10000, clienteNombre: 'Beto' }),
+      ventaCliente('mostrador', 'c3', { aCobrar: false, clienteNombre: 'Carla' }),
+    ];
+    expect(agruparDeudaPorCliente(ventas, AHORA)).toEqual([]);
+  });
+
+  it('una venta parcial aporta su saldo, no su total', () => {
+    const [d] = agruparDeudaPorCliente(
+      [ventaCliente('v1', 'c1', { totalCents: 10000, cobradoCents: 4000, clienteNombre: 'Ana' })],
+      AHORA,
+    );
+    expect(d?.deudaCents).toBe(6000);
+    expect(d?.cantidadVentas).toBe(1);
+  });
+
+  it('una venta sin cliente se ignora', () => {
+    expect(agruparDeudaPorCliente([ventaCliente('v1', undefined)], AHORA)).toEqual([]);
+  });
+
+  it('dos ventas del mismo cliente suman y los días salen de la más vieja', () => {
+    const ventas = [
+      ventaCliente('reciente', 'c1', { fecha: dia(29), totalCents: 3000, clienteNombre: 'Ana R.' }),
+      ventaCliente('vieja', 'c1', { fecha: dia(20), totalCents: 5000, clienteNombre: 'Ana' }),
+      ventaCliente('cobrada', 'c1', { fecha: dia(1), cobradoCents: 10000 }),
+    ];
+    const resultado = agruparDeudaPorCliente(ventas, AHORA);
+    expect(resultado).toHaveLength(1);
+    expect(resultado[0]).toEqual({
+      clienteId: 'c1',
+      clienteNombre: 'Ana R.', // el de la venta más reciente
+      deudaCents: 8000,
+      cantidadVentas: 2,
+      fechaMasAntigua: dia(20),
+      diasDeuda: 10,
+    });
+  });
+
+  it('cuenta días calendario locales: ayer de noche mirado hoy a la mañana es 1', () => {
+    const [d] = agruparDeudaPorCliente(
+      [ventaCliente('v1', 'c1', { fecha: dia(29, 23), clienteNombre: 'Ana' })],
+      AHORA,
+    );
+    expect(d?.diasDeuda).toBe(1);
+  });
+
+  it('una venta de hoy da 0 días, y una fecha futura no da negativo', () => {
+    const [hoy] = agruparDeudaPorCliente([ventaCliente('v1', 'c1', { fecha: dia(30, 8) })], AHORA);
+    expect(hoy?.diasDeuda).toBe(0);
+    const [futura] = agruparDeudaPorCliente([ventaCliente('v2', 'c1', { fecha: dia(31) })], AHORA);
+    expect(futura?.diasDeuda).toBe(0);
+  });
+
+  it('ordena por días descendente y desempata por deuda descendente, luego por nombre', () => {
+    const ventas = [
+      ventaCliente('a', 'c-poca', { fecha: dia(25), totalCents: 1000, clienteNombre: 'Zoe' }),
+      ventaCliente('b', 'c-vieja', { fecha: dia(10), totalCents: 500, clienteNombre: 'Vieja' }),
+      ventaCliente('c', 'c-mucha', { fecha: dia(25), totalCents: 9000, clienteNombre: 'Yuri' }),
+      ventaCliente('d', 'c-b', { fecha: dia(28), totalCents: 700, clienteNombre: 'Bea' }),
+      ventaCliente('e', 'c-a', { fecha: dia(28), totalCents: 700, clienteNombre: 'Abel' }),
+    ];
+    expect(agruparDeudaPorCliente(ventas, AHORA).map((d) => d.clienteId)).toEqual([
+      'c-vieja',
+      'c-mucha',
+      'c-poca',
+      'c-a',
+      'c-b',
+    ]);
+  });
+
+  it('no muta la lista recibida', () => {
+    const ventas = [
+      ventaCliente('a', 'c1', { fecha: dia(29) }),
+      ventaCliente('b', 'c2', { fecha: dia(20) }),
+    ];
+    const copia = [...ventas];
+    agruparDeudaPorCliente(ventas, AHORA);
+    expect(ventas).toEqual(copia);
   });
 });

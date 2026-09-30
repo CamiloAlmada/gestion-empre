@@ -3,6 +3,7 @@ import {
   resolverPlantilla,
   construirLinkWhatsApp,
   PLANTILLAS_SEED,
+  completarConSeed,
   type PlantillaWhatsApp,
 } from './whatsapp.js';
 
@@ -101,12 +102,13 @@ describe('seed "Te extrañamos" resuelto de punta a punta', () => {
 });
 
 describe('PLANTILLAS_SEED', () => {
-  it('trae las 3 plantillas del doc 08 con sus contextos', () => {
-    expect(PLANTILLAS_SEED).toHaveLength(3);
+  it('trae las 4 plantillas (3 del doc 08 + cobro) con sus contextos', () => {
+    expect(PLANTILLAS_SEED).toHaveLength(4);
     const porId = new Map(PLANTILLAS_SEED.map((p) => [p.id, p]));
     expect(porId.get('pedido-listo')?.contexto).toBe('venta');
     expect(porId.get('te-extranamos')?.contexto).toBe('inactivo');
     expect(porId.get('aviso-llegada')?.contexto).toBe('cliente');
+    expect(porId.get('recordatorio-cobro')?.contexto).toBe('cobro');
   });
 
   it('los textos seed son los exactos del doc 08', () => {
@@ -127,5 +129,61 @@ describe('PLANTILLAS_SEED', () => {
   it('el tipo exportado describe las plantillas', () => {
     const p: PlantillaWhatsApp = PLANTILLAS_SEED[0]!;
     expect(typeof p.nombre).toBe('string');
+  });
+});
+
+describe('plantilla de cobro', () => {
+  it('reemplaza {cliente}, {deuda} y {negocio}', () => {
+    const plantilla = PLANTILLAS_SEED.find((p) => p.id === 'recordatorio-cobro')!;
+    expect(plantilla.nombre).toBe('Recordatorio de cobro');
+    expect(plantilla.texto).toBe(
+      'Hola {cliente}! Te recuerdo que tenés pendiente {deuda} en {negocio}. Cuando puedas, avisame por acá cómo te queda mejor abonarlo. ¡Gracias!',
+    );
+    const mensaje = resolverPlantilla(plantilla.texto, {
+      cliente: 'Ana',
+      deuda: '$ 1.500,00',
+      negocio: 'Quesarte',
+    });
+    expect(mensaje).toBe(
+      'Hola Ana! Te recuerdo que tenés pendiente $ 1.500,00 en Quesarte. Cuando puedas, avisame por acá cómo te queda mejor abonarlo. ¡Gracias!',
+    );
+    expect(mensaje).not.toMatch(/\{/);
+  });
+});
+
+describe('completarConSeed', () => {
+  const [pedido, extranamos, aviso, cobro] = PLANTILLAS_SEED as readonly [
+    PlantillaWhatsApp,
+    PlantillaWhatsApp,
+    PlantillaWhatsApp,
+    PlantillaWhatsApp,
+  ];
+
+  it('con lista vacía devuelve el seed', () => {
+    expect(completarConSeed([], PLANTILLAS_SEED)).toEqual([...PLANTILLAS_SEED]);
+  });
+
+  it('conserva las 3 plantillas editadas y agrega solo la de cobro, al final', () => {
+    const editadas: PlantillaWhatsApp[] = [aviso, pedido, extranamos].map((p) => ({
+      ...p,
+      texto: `${p.texto} (editado)`,
+    }));
+    const resultado = completarConSeed(editadas, PLANTILLAS_SEED);
+    expect(resultado).toHaveLength(4);
+    expect(resultado.slice(0, 3)).toEqual(editadas); // mismas, mismo orden, ediciones intactas
+    expect(resultado[3]).toEqual(cobro);
+  });
+
+  it('si la plantilla de cobro ya está, no duplica ni pisa su edición', () => {
+    const editada = { ...cobro, texto: 'Hola {cliente}, me debés {deuda}' };
+    const existentes = [pedido, extranamos, aviso, editada];
+    const resultado = completarConSeed(existentes, PLANTILLAS_SEED);
+    expect(resultado).toEqual(existentes);
+  });
+
+  it('no muta la lista recibida', () => {
+    const existentes = [pedido];
+    completarConSeed(existentes, PLANTILLAS_SEED);
+    expect(existentes).toEqual([pedido]);
   });
 });

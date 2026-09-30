@@ -603,3 +603,36 @@ validación de precio > 0 → fix antes del merge (tarea A7, `semisenior`: modal
 kit y reglas). (2) ¿El preview sube reglas a dev? Sí: el job de PR corre `deploy
 --only firestore --project quesarte-uy-dev` antes del hosting. (3) Prueba
 manual offline: pendiente, la hace el dueño en el preview.
+
+---
+
+## 2026-09-30 — Chip "Deben" en Clientes + recordatorio de cobro por WhatsApp
+
+### Llamada 1 (temprana)
+
+**Pedido del dueño:** filtrar clientes que deben, los que deben hace más tiempo,
+y mandarles recordatorios.
+
+**Recomendación textual:** "Chip 'Deben' en Clientes, solo admin; sin pantalla
+'Por cobrar'. Datos: al elegir el chip, suscribí (lazy) `ventas where
+estado=='completada' && cobro.estado=='pendiente' orderBy fecha desc` (índice
+del doc 11) y agrupá en memoria con una función pura de core; nada denormalizado
+en `clientes.stats`. Contexto WhatsApp `'cobro'` con `{deuda}` y `{diasDeuda}`;
+sin migración: una función pura `completarConSeed` que suma al doc de producción
+las plantillas del seed que le falten, usada por `BotonWhatsApp` y por Ajustes."
+
+**Por qué:** la fila del chip Inactivos ya es exactamente eso; denormalizar
+exigiría mantener 4 caminos de escritura y reglas nuevas en `clientes`; el
+fallback actual de `BotonWhatsApp` es todo-o-nada y con el doc de producción (3
+plantillas) el botón de cobro no aparecería nunca.
+
+**Descartado:** pantalla "Por cobrar" con multi-selección ahora (depende de B1 y
+de la pregunta 1 abierta; cuando llegue va en la ficha del cliente); stats
+denormalizados; suscripción permanente; chip visible al vendedor; migrar el doc
+con script; placeholder `{monto}` (ambiguo con `{total}`).
+
+**Bloqueantes y resolución (orquestador):** (1) ¿el deploy sube índices? Sí:
+`apps/quesarte/firebase.json` declara `firestore.indexes`. (2) Texto de la
+plantilla: se adopta la propuesta del advisor; editable desde Ajustes. (3) Chip
+solo admin: se adopta como default, informado al dueño. (4) Multi-selección en
+la ficha: sigue abierta (pregunta 1 del doc 11).

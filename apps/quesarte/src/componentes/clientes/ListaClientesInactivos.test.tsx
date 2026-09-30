@@ -67,7 +67,7 @@ describe('ListaClientesInactivos', () => {
     mocks.useDoc.mockImplementation((ref: { __path: string } | null) => {
       if (ref?.__path === 'configuracion/plantillasWhatsApp') {
         return {
-          datos: [{ id: 'p1', nombre: 'Te extrañamos', contexto: 'inactivo', texto: 'Hola {cliente}, hace {diasSinVenir} días' }],
+          datos: [{ id: 'te-extranamos', nombre: 'Te extrañamos', contexto: 'inactivo', texto: 'Hola {cliente}, hace {diasSinVenir} días' }],
           cargando: false,
           error: null,
         };

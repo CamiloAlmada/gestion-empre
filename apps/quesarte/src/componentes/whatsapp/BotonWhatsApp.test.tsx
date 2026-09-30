@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { FirestoreError } from 'firebase/firestore';
-import { peso, type Configuracion, type PlantillaWhatsApp } from '@gestion/core';
+import { PLANTILLAS_SEED, peso, type Configuracion, type PlantillaWhatsApp } from '@gestion/core';
 import { BotonWhatsApp } from './BotonWhatsApp';
 
 const mocks = vi.hoisted(() => ({ useDoc: vi.fn() }));
@@ -47,6 +47,13 @@ function configuracionDe(over: Partial<Configuracion> = {}): Configuracion {
     ...over,
   };
 }
+
+/**
+ * OJO con los `id` de los fixtures: `BotonWhatsApp` completa el doc con
+ * `completarConSeed`, que agrega las plantillas del seed cuyo `id` falte. Los
+ * tests que quieren "solo estas plantillas" para un contexto usan el `id` del
+ * seed de ese contexto (`pedido-listo`, `te-extranamos`, `aviso-llegada`).
+ */
 
 /** Configura `useDoc` según el path de la ref (BotonWhatsApp suscribe DOS
  * documentos: `configuracion/general` y `configuracion/plantillasWhatsApp`). */
@@ -96,7 +103,7 @@ describe('BotonWhatsApp - fallback de normalización (cliente pre-WA-B)', () => 
   it('sin telefonoE164, normaliza `telefono` con el codigoPaisDefault de configuracion/general', () => {
     configurarDocs({
       configuracion: okConfig(configuracionDe()),
-      plantillas: okPlantillas([plantilla({ id: 'p1', contexto: 'cliente', texto: 'Hola {cliente}!' })]),
+      plantillas: okPlantillas([plantilla({ id: 'aviso-llegada', contexto: 'cliente', texto: 'Hola {cliente}!' })]),
     });
     const spy = vi.spyOn(window, 'open').mockImplementation(() => null);
 
@@ -114,7 +121,7 @@ describe('BotonWhatsApp - link resuelto (UNA plantilla, click directo)', () => {
     configurarDocs({
       configuracion: okConfig(null),
       plantillas: okPlantillas([
-        plantilla({ id: 'p1', contexto: 'inactivo', nombre: 'Te extrañamos', texto: 'Hola {cliente}! {diasSinVenir} días 😊' }),
+        plantilla({ id: 'te-extranamos', contexto: 'inactivo', nombre: 'Te extrañamos', texto: 'Hola {cliente}! {diasSinVenir} días 😊' }),
       ]),
     });
     const spy = vi.spyOn(window, 'open').mockImplementation(() => null);
@@ -141,7 +148,7 @@ describe('BotonWhatsApp - link resuelto (UNA plantilla, click directo)', () => {
   it('resuelve {negocio} desde configuracion/general, sin que el caller lo pase', () => {
     configurarDocs({
       configuracion: okConfig(configuracionDe()),
-      plantillas: okPlantillas([plantilla({ id: 'p1', contexto: 'inactivo', texto: 'Hola {cliente}, de {negocio}' })]),
+      plantillas: okPlantillas([plantilla({ id: 'te-extranamos', contexto: 'inactivo', texto: 'Hola {cliente}, de {negocio}' })]),
     });
     const spy = vi.spyOn(window, 'open').mockImplementation(() => null);
 
@@ -157,7 +164,7 @@ describe('BotonWhatsApp - link resuelto (UNA plantilla, click directo)', () => {
   it('sin nombreNegocio en configuracion: {negocio} queda literal', () => {
     configurarDocs({
       configuracion: okConfig(null),
-      plantillas: okPlantillas([plantilla({ id: 'p1', contexto: 'inactivo', texto: 'Hola {cliente}, de {negocio}' })]),
+      plantillas: okPlantillas([plantilla({ id: 'te-extranamos', contexto: 'inactivo', texto: 'Hola {cliente}, de {negocio}' })]),
     });
     const spy = vi.spyOn(window, 'open').mockImplementation(() => null);
 
@@ -176,7 +183,7 @@ describe('BotonWhatsApp - selector (VARIAS plantillas del contexto)', () => {
     configurarDocs({
       configuracion: okConfig(null),
       plantillas: okPlantillas([
-        plantilla({ id: 'p1', contexto: 'venta', nombre: 'Pedido listo', texto: 'Hola {cliente}, pedido listo' }),
+        plantilla({ id: 'pedido-listo', contexto: 'venta', nombre: 'Pedido listo', texto: 'Hola {cliente}, pedido listo' }),
         plantilla({ id: 'p2', contexto: 'venta', nombre: 'Otra opción', texto: 'Hola {cliente}, otra' }),
         plantilla({ id: 'p3', contexto: 'cliente', nombre: 'No debería aparecer', texto: 'irrelevante' }),
       ]),
@@ -226,19 +233,71 @@ describe('BotonWhatsApp - fallback a PLANTILLAS_SEED', () => {
     expect(url).toContain(encodeURIComponent('Tu pedido está listo'));
   });
 
-  it('ninguna plantilla del contexto (ni en el doc ni en el seed): no renderiza', () => {
-    // El doc trae plantillas (no está vacío), pero ninguna del contexto pedido
-    // -> NO cae al seed (el seed solo es fallback de doc AUSENTE/VACÍO), y no
-    // hay nada que ofrecer: el botón no debe aparecer.
+  it('doc con plantillas de OTROS contextos: se completa con el seed y ofrece la del contexto pedido', () => {
+    // Antes el seed era solo fallback de doc ausente/vacío; ahora se completa
+    // siempre (`completarConSeed`), así que un doc sin plantilla de `cliente`
+    // igual ofrece la del seed.
     configurarDocs({
       configuracion: okConfig(null),
       plantillas: okPlantillas([plantilla({ id: 'p1', contexto: 'venta' })]),
     });
+    const spy = vi.spyOn(window, 'open').mockImplementation(() => null);
 
-    const { container } = render(
-      <BotonWhatsApp telefonoE164="59899123456" contexto="cliente" valores={{ cliente: 'Ana' }} db={{} as never} />,
+    render(<BotonWhatsApp telefonoE164="59899123456" contexto="cliente" valores={{ cliente: 'Ana' }} db={{} as never} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar WhatsApp a Ana' }));
+
+    const [url] = spy.mock.calls[0] as [string];
+    expect(url).toContain(encodeURIComponent('Llegó mercadería nueva'));
+  });
+});
+
+describe('BotonWhatsApp - contexto cobro con doc guardado de 3 plantillas', () => {
+  const docViejo: PlantillaWhatsApp[] = PLANTILLAS_SEED.filter((p) => p.contexto !== 'cobro').map((p) => ({ ...p }));
+
+  it('ofrece la plantilla de cobro del seed y el link lleva la deuda reemplazada', () => {
+    expect(docViejo).toHaveLength(3);
+    configurarDocs({ configuracion: okConfig(configuracionDe()), plantillas: okPlantillas(docViejo) });
+    const spy = vi.spyOn(window, 'open').mockImplementation(() => null);
+
+    render(
+      <BotonWhatsApp
+        telefonoE164="59899123456"
+        contexto="cobro"
+        valores={{ cliente: 'Marta', deuda: '$ 1.250', diasDeuda: '12' }}
+        db={{} as never}
+      />,
     );
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar WhatsApp a Marta' }));
 
-    expect(container.firstChild).toBeNull();
+    expect(spy).toHaveBeenCalledTimes(1);
+    const [url] = spy.mock.calls[0] as [string];
+    const mensaje = decodeURIComponent(url.split('?text=')[1]!);
+    expect(mensaje).toContain('$ 1.250');
+    expect(mensaje).toContain('Marta');
+    expect(mensaje).toContain('Quesarte');
+    expect(mensaje).not.toContain('{deuda}');
+  });
+
+  it('las plantillas editadas del doc tienen prioridad sobre el seed (mismo id)', () => {
+    configurarDocs({
+      configuracion: okConfig(null),
+      plantillas: okPlantillas([
+        plantilla({ id: 'recordatorio-cobro', contexto: 'cobro', texto: 'Editada: debés {deuda}' }),
+      ]),
+    });
+    const spy = vi.spyOn(window, 'open').mockImplementation(() => null);
+
+    render(
+      <BotonWhatsApp
+        telefonoE164="59899123456"
+        contexto="cobro"
+        valores={{ cliente: 'Marta', deuda: '$ 500' }}
+        db={{} as never}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar WhatsApp a Marta' }));
+
+    const [url] = spy.mock.calls[0] as [string];
+    expect(decodeURIComponent(url.split('?text=')[1]!)).toBe('Editada: debés $ 500');
   });
 });

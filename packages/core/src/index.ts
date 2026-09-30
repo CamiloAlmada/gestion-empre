@@ -65,6 +65,7 @@ export {
 } from './costeo.js';
 export {
   type EstadoCobro,
+  type DeudaCliente,
   cobroInicial,
   aplicarPago,
   deshacerUltimoPago,
@@ -73,6 +74,7 @@ export {
   pagosDe,
   cobradoCents,
   deudaTotalCents,
+  agruparDeudaPorCliente,
 } from './cobro.js';
 export { type PiezaElegida, elegirPieza } from './fifo.js';
 export {
@@ -109,6 +111,7 @@ export {
   resolverPlantilla,
   construirLinkWhatsApp,
   PLANTILLAS_SEED,
+  completarConSeed,
 } from './whatsapp.js';
 export {
   type ConfigInactividad,

@@ -21,6 +21,7 @@ const ETIQUETA_CONTEXTO: Record<ContextoPlantilla, string> = {
   venta: 'Venta',
   cliente: 'Cliente',
   inactivo: 'Cliente inactivo',
+  cobro: 'Cobro',
 };
 
 /** Placeholders resueltos por `resolverPlantilla` (`@gestion/core`), doc 08. */
@@ -30,6 +31,8 @@ const PLACEHOLDERS: { clave: string; descripcion: string }[] = [
   { clave: '{items}', descripcion: 'resumen de ítems de la venta' },
   { clave: '{diasSinVenir}', descripcion: 'días desde la última compra' },
   { clave: '{negocio}', descripcion: 'nombre del negocio (sección "Negocio" de Ajustes)' },
+  { clave: '{deuda}', descripcion: 'deuda pendiente del cliente formateada ($ x.xxx)' },
+  { clave: '{diasDeuda}', descripcion: 'días desde la venta pendiente más vieja' },
 ];
 
 const MAX_TEXTO = 1000;
@@ -37,7 +40,7 @@ const MAX_TEXTO = 1000;
 /**
  * Edición de UNA plantilla de WhatsApp (nombre + texto). `contexto` e `id`
  * NO se editan acá (alcance cerrado de la tarea WA-C1: no se agregan ni
- * borran plantillas, solo se editan/restauran las 3 del seed) — se muestran
+ * borran plantillas, solo se editan/restauran las del seed) — se muestran
  * de solo lectura como contexto para el admin.
  *
  * "Restaurar texto original" reemplaza nombre/texto en el BORRADOR del

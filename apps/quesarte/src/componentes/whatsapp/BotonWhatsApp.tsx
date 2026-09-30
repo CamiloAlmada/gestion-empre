@@ -4,6 +4,7 @@ import {
   construirLinkWhatsApp,
   normalizarTelefono,
   resolverPlantilla,
+  completarConSeed,
   PLANTILLAS_SEED,
   type ContextoPlantilla,
   type PlantillaWhatsApp,
@@ -27,7 +28,7 @@ export interface BotonWhatsAppProps {
   contexto: ContextoPlantilla;
   /**
    * Valores YA FORMATEADOS de los placeholders que el caller conoce
-   * (`{cliente}`, `{total}`, `{items}`, `{diasSinVenir}` según el contexto).
+   * (`{cliente}`, `{total}`, `{items}`, `{diasSinVenir}`, `{deuda}`, `{diasDeuda}` según el contexto).
    * `{negocio}` NO se pasa acá a propósito: este componente ya lee
    * `configuracion/general` para el código de país, así que de paso resuelve
    * `{negocio}` centralizadamente con `nombreNegocio` — evita que los 3
@@ -60,7 +61,7 @@ const CLASE_ITEM_SELECTOR =
  * Botón "WhatsApp" compartido por los 3 puntos de contacto del doc 08 (venta,
  * ficha de cliente, lista de inactivos). Encapsula TODO el flujo: resuelve el
  * teléfono (con fallback de normalización), trae las plantillas del contexto
- * (con fallback a `PLANTILLAS_SEED`), resuelve los placeholders y abre
+ * (completadas con `PLANTILLAS_SEED`), resuelve los placeholders y abre
  * `wa.me`. Vive en la app —no en `packages/ui`, regla de oro 2— porque usa
  * `useDoc`/Firestore para configuración y plantillas.
  *
@@ -105,11 +106,15 @@ export function BotonWhatsApp({
     telefonoE164 ??
     (telefono !== undefined ? normalizarTelefono(telefono, configuracion.datos?.codigoPaisDefault) : null);
 
-  // Plantillas efectivas: las de Firestore si el doc trae AL MENOS una; si
-  // está vacío o ausente, se cae al seed (doc 08 — "la demo no puede
-  // depender de que Ajustes haya sembrado").
-  const todasLasPlantillas: readonly PlantillaWhatsApp[] =
-    plantillasDoc.datos !== null && plantillasDoc.datos.length > 0 ? plantillasDoc.datos : PLANTILLAS_SEED;
+  // Plantillas efectivas: las de Firestore más, al final, las del seed cuyo
+  // `id` falte (`completarConSeed`): un doc guardado antes de que existiera
+  // una plantilla nueva (p. ej. `recordatorio-cobro`) igual la ofrece, sin
+  // migrar datos. Si el doc está vacío o ausente, queda el seed completo (doc
+  // 08 — "la demo no puede depender de que Ajustes haya sembrado").
+  const todasLasPlantillas: readonly PlantillaWhatsApp[] = completarConSeed(
+    plantillasDoc.datos ?? [],
+    PLANTILLAS_SEED,
+  );
   const plantillasContexto = todasLasPlantillas.filter((p) => p.contexto === contexto);
 
   if (telefonoResuelto === null || telefonoResuelto === undefined || plantillasContexto.length === 0) {

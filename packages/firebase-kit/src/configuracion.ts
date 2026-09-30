@@ -3,6 +3,7 @@ import {
   DIAS_AVISO_VENCIMIENTO_MAX,
   DIAS_AVISO_VENCIMIENTO_MIN,
   diasAvisoValido,
+  type ContextoPlantilla,
   type PlantillaWhatsApp,
 } from '@gestion/core';
 import { plantillasWhatsAppConverter } from './converters/plantillasWhatsApp';
@@ -35,7 +36,23 @@ const MAX_PLANTILLAS = 20;
 const MAX_ID_PLANTILLA = 40;
 const MAX_NOMBRE_PLANTILLA = 60;
 const MAX_TEXTO_PLANTILLA = 1000;
-const CONTEXTOS_VALIDOS = ['venta', 'cliente', 'inactivo'] as const;
+/**
+ * Contextos aceptados, derivados de la unión `ContextoPlantilla` de core: el
+ * `Record` obliga a listar TODOS los miembros (si core suma uno, esto no compila
+ * hasta agregarlo acá). Las reglas (`plantillaWhatsAppValida`) repiten la lista a
+ * mano porque el lenguaje de reglas no puede importarla.
+ */
+const CONTEXTOS: Readonly<Record<ContextoPlantilla, true>> = {
+  venta: true,
+  cliente: true,
+  inactivo: true,
+  cobro: true,
+};
+const CONTEXTOS_VALIDOS = Object.keys(CONTEXTOS) as readonly ContextoPlantilla[];
+
+function esContextoValido(valor: unknown): valor is ContextoPlantilla {
+  return typeof valor === 'string' && Object.hasOwn(CONTEXTOS, valor);
+}
 
 /** Datos editables de `configuracion/general` que administra WA-B (doc 08). */
 export interface DatosConfiguracionGeneral {
@@ -136,7 +153,7 @@ function exigirPlantillaValida(p: unknown, indice: number): PlantillaWhatsApp {
   const nombre = exigirCadenaAcotada(cruda.nombre, `${donde}: nombre`, MAX_NOMBRE_PLANTILLA);
   const texto = exigirCadenaAcotada(cruda.texto, `${donde}: texto`, MAX_TEXTO_PLANTILLA);
   const contexto = cruda.contexto;
-  if (contexto !== 'venta' && contexto !== 'cliente' && contexto !== 'inactivo') {
+  if (!esContextoValido(contexto)) {
     throw new ConfiguracionInvalidaError(
       `${donde}: contexto inválido (debe ser uno de ${CONTEXTOS_VALIDOS.join(', ')}).`,
     );

@@ -1,39 +1,49 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { collection, doc, orderBy, query } from 'firebase/firestore';
+import { collection, doc, orderBy, query, where } from 'firebase/firestore';
+import { agruparDeudaPorCliente } from '@gestion/core';
 import { Button, CampoBusqueda, ChipsFiltro, useToasts } from '@gestion/ui';
 import {
   clienteConverter,
   configuracionConverter,
   crearCliente,
+  useAuth,
   useCollection,
   useDoc,
   useOnlineStatus,
+  ventaConverter,
 } from '@gestion/firebase-kit';
 import type { DatosCliente } from '@gestion/firebase-kit';
 import { db } from '../firebase';
 import { useHeader } from '../componentes/header/ContextoHeader';
 import { IconoHistorial } from '../componentes/iconos';
 import { ListaClientes } from '../componentes/clientes/ListaClientes';
+import { ListaClientesConDeuda, type FilaDeuda } from '../componentes/clientes/ListaClientesConDeuda';
 import { ListaClientesInactivos } from '../componentes/clientes/ListaClientesInactivos';
 import { calcularClientesInactivos } from '../componentes/clientes/inactividad';
 import { filtrarClientes, type FiltroClientes } from '../componentes/clientes/filtro';
 import { ModalCliente } from './ModalCliente';
 
 const coleccionClientes = collection(db, 'clientes').withConverter(clienteConverter);
+const coleccionVentas = collection(db, 'ventas').withConverter(ventaConverter);
 
 // Mismas clases que la acción "Agregar producto" de `Productos.tsx`: ícono
 // solo en mobile (flota sobre la tab bar, ≥48px) con label visible desde `md:`.
 const CLASE_ACCION_PRIMARIA =
   'inline-flex min-h-[48px] min-w-[48px] items-center justify-center gap-1.5 rounded-control bg-primary-600 px-3 font-medium text-white hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2 focus-visible:ring-offset-superficie';
 
-/** Etiquetas de los chips de la terna (`ChipsFiltro` de `@gestion/ui`, que ya
- * antepone "Todas"/`null` sola): acá se pisa a "Todos" con `etiquetaTodas`. */
-const OPCIONES_CHIP = ['Activos', 'Inactivos'] as const;
-type OpcionChip = (typeof OPCIONES_CHIP)[number];
+/** Etiquetas de los chips (`ChipsFiltro` de `@gestion/ui`, que ya antepone
+ * "Todas"/`null` sola): acá se pisa a "Todos" con `etiquetaTodas`. La terna
+ * `Todos | Activos | Inactivos` es para todos los roles; "Deben" (doc 11,
+ * cobros diferidos) es un 4.º chip SOLO para admin. */
+const OPCIONES_TERNA = ['Activos', 'Inactivos'] as const;
+const OPCION_DEBEN = 'Deben';
+type OpcionChip = (typeof OPCIONES_TERNA)[number] | typeof OPCION_DEBEN;
 
 /** Adapta el valor de `ChipsFiltro` (`OpcionChip | null`) al tipo de dominio
- * `FiltroClientes` que consume `filtrarClientes`/`calcularClientesInactivos`. */
+ * `FiltroClientes` que consume `filtrarClientes`/`calcularClientesInactivos`.
+ * "Deben" no es un filtro de clientes (su lista sale de las ventas a cobrar):
+ * para `filtrarClientes` equivale a `todos`, y la búsqueda se aplica igual. */
 function filtroDesdeChip(valor: string | null): FiltroClientes {
   if (valor === 'Activos') return 'activos';
   if (valor === 'Inactivos') return 'inactivos';
@@ -75,6 +85,12 @@ function mensajeVacioSinBusqueda(filtro: FiltroClientes): string {
  *   (docs/06-ui-ux.md §3 no lo pide, y el botón de WhatsApp ya es visible
  *   para `vendedor` en el resto de la app sin exponer el número).
  *
+ * **Deben** (4.º chip, SOLO admin, doc 11): clientes con ventas a cobrar,
+ * los que deben hace más tiempo primero (`agruparDeudaPorCliente` de core),
+ * con `ListaClientesConDeuda` (fila → ficha, botón WhatsApp de cobro). Es el
+ * único chip con su propia query (`ventas` a cobrar), suscripta recién al
+ * elegirlo.
+ *
  * El alta la puede disparar tanto `vendedor` como `admin` (doc 07: alta
  * rápida de mostrador con las reglas ya lo permiten); la edición y la
  * desactivación son exclusivas del admin y viven en la ficha
@@ -82,12 +98,17 @@ function mensajeVacioSinBusqueda(filtro: FiltroClientes): string {
  */
 export function Clientes() {
   const navigate = useNavigate();
+  const { perfil } = useAuth();
+  const esAdmin = perfil?.rol === 'admin';
   const enLinea = useOnlineStatus();
   const { mostrarToast } = useToasts();
 
   const [busqueda, setBusqueda] = useState('');
   const [chip, setChip] = useState<OpcionChip | null>(null);
   const filtro = filtroDesdeChip(chip);
+  // "Deben" solo existe para admin: aunque `chip` quedara en 'Deben' (cambio
+  // de perfil en caliente), un no-admin nunca suscribe la query de ventas.
+  const mostrandoDeben = esAdmin && chip === OPCION_DEBEN;
   const [altaAbierta, setAltaAbierta] = useState(false);
   const [guardando, setGuardando] = useState(false);
   // Se incrementa en "Reintentar": cambia la identidad de la query y fuerza a
@@ -147,6 +168,23 @@ export function Clientes() {
   const consultaClientes = useMemo(() => query(coleccionClientes, orderBy('nombre')), [intentoId]);
   const { datos: clientes, cargando, error } = useCollection(consultaClientes);
 
+  // Ventas a cobrar (doc 11): SOLO se suscribe al elegir el chip "Deben" (antes
+  // la query es `null` y `useCollection` no abre listener). Índice compuesto
+  // `ventas (estado, cobro.estado, fecha DESC)` en `firestore.indexes.json`.
+  const consultaDeudas = useMemo(
+    () =>
+      mostrandoDeben
+        ? query(
+            coleccionVentas,
+            where('estado', '==', 'completada'),
+            where('cobro.estado', '==', 'pendiente'),
+            orderBy('fecha', 'desc'),
+          )
+        : null,
+    [mostrandoDeben, intentoId],
+  );
+  const deudas = useCollection(consultaDeudas, { seguirFrescura: true });
+
   const clientesFiltrados = useMemo(
     () => filtrarClientes(clientes, busqueda, filtro, ahora),
     [clientes, busqueda, filtro, ahora],
@@ -158,6 +196,20 @@ export function Clientes() {
     () => (filtro === 'inactivos' ? calcularClientesInactivos(clientesFiltrados, ahora) : []),
     [filtro, clientesFiltrados, ahora],
   );
+
+  // Lista "Deben": core agrupa y ordena (deuda más vieja primero); acá solo se
+  // cruza con los clientes cargados (teléfono) y se aplica la búsqueda. Sin
+  // búsqueda entran todas las deudas, aunque el cliente no esté en la lista
+  // cargada (el botón de WhatsApp simplemente no aparece sin teléfono).
+  const filasDeuda = useMemo<FilaDeuda[]>(() => {
+    if (!mostrandoDeben) return [];
+    const porId = new Map(clientes.map((c) => [c.id, c]));
+    const idsVisibles =
+      busqueda.trim() === '' ? null : new Set(clientesFiltrados.map((c) => c.id));
+    return agruparDeudaPorCliente(deudas.datos, new Date())
+      .filter((d) => idsVisibles === null || idsVisibles.has(d.clienteId))
+      .map((deuda) => ({ deuda, cliente: porId.get(deuda.clienteId) }));
+  }, [mostrandoDeben, deudas.datos, clientes, clientesFiltrados, busqueda]);
 
   function reintentar() {
     setIntentoId((n) => n + 1);
@@ -200,6 +252,46 @@ export function Clientes() {
 
   const vacio = filtro === 'inactivos' ? inactivosEnriquecidos.length === 0 : clientesFiltrados.length === 0;
 
+  /** Contenido del chip "Deben": cargando / error / vacío / lista, más la nota
+   * de datos posiblemente incompletos si el snapshot viene de la caché. */
+  function renderDeben() {
+    if (deudas.cargando) {
+      return <p className="py-8 text-center text-texto-secundario">Cargando deudas…</p>;
+    }
+    if (deudas.error !== null) {
+      return (
+        <div className="flex flex-col items-center gap-3 rounded-card border border-borde bg-superficie p-8 text-center">
+          <p role="alert" className="text-peligro">
+            No se pudieron cargar las deudas. Revisá tu conexión e intentá de nuevo.
+          </p>
+          <Button onClick={reintentar}>Reintentar</Button>
+        </div>
+      );
+    }
+    return (
+      <>
+        {deudas.desdeCache && (
+          <p role="status" className="text-sm text-texto-secundario">
+            Sin conexión: puede faltar información
+          </p>
+        )}
+        {filasDeuda.length === 0 ? (
+          <div className="rounded-card border border-borde bg-superficie p-8 text-center text-texto-secundario">
+            {busqueda.trim() === ''
+              ? 'Nadie debe por ahora.'
+              : `No se encontraron clientes para "${busqueda.trim()}".`}
+          </div>
+        ) : (
+          <ListaClientesConDeuda
+            filas={filasDeuda}
+            db={db}
+            onSeleccionar={(clienteId) => navigate(`/clientes/cliente/${clienteId}`)}
+          />
+        )}
+      </>
+    );
+  }
+
   let contenido;
   if (cargando) {
     contenido = <p className="py-8 text-center text-texto-secundario">Cargando clientes…</p>;
@@ -212,6 +304,8 @@ export function Clientes() {
         <Button onClick={reintentar}>Reintentar</Button>
       </div>
     );
+  } else if (mostrandoDeben) {
+    contenido = renderDeben();
   } else if (clientes.length === 0) {
     contenido = (
       <div className="flex flex-col items-center gap-3 rounded-card border border-borde bg-superficie p-8 text-center">
@@ -247,7 +341,7 @@ export function Clientes() {
         placeholder="Nombre, alias o teléfono"
       />
       <ChipsFiltro
-        opciones={[...OPCIONES_CHIP]}
+        opciones={esAdmin ? [...OPCIONES_TERNA, OPCION_DEBEN] : [...OPCIONES_TERNA]}
         valor={chip}
         onCambiar={(valor) => setChip(valor as OpcionChip | null)}
         ariaLabel="Filtrar clientes"

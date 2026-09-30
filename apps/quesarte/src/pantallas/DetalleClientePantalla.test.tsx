@@ -97,6 +97,9 @@ function configurarAuth(rol: 'admin' | 'vendedor') {
 function configurarCliente(estado: EstadoDocFalso<Cliente>) {
   mocks.useDoc.mockImplementation((ref: RefFalsa | null) => {
     if (ref === null) return { datos: null, cargando: false, error: null };
+    // `BotonWhatsApp` suscribe también `configuracion/plantillasWhatsApp`: su
+    // `datos` es una LISTA (o null si el doc no existe), nunca el cliente.
+    if (ref.__path === 'configuracion/plantillasWhatsApp') return { datos: null, cargando: false, error: null };
     return estado;
   });
 }
@@ -559,6 +562,9 @@ describe('DetalleClientePantalla - codigoPais al editar (WA-F1, hallazgo de inte
       if (ref === null) return { datos: null, cargando: false, error: null };
       if (ref.__path === 'configuracion/general') {
         return { datos: configuracion, cargando: false, error: null };
+      }
+      if (ref.__path === 'configuracion/plantillasWhatsApp') {
+        return { datos: null, cargando: false, error: null };
       }
       return { datos: cliente, cargando: false, error: null };
     });

@@ -255,8 +255,10 @@ service cloud.firestore {
     }
 
     // Shape de UNA plantilla de WhatsApp (doc 08): exactamente
-    // { id, nombre, texto, contexto in ['venta','cliente','inactivo'] }, strings
-    // acotados. Se aplica al primer elemento de la lista (ver `plantillasWhatsAppValidas`).
+    // { id, nombre, texto, contexto in ['venta','cliente','inactivo','cobro'] },
+    // strings acotados. La lista de contextos espeja `ContextoPlantilla` de core
+    // (`cobro`: recordatorio de deuda, doc 11). Se aplica al primer elemento de la
+    // lista (ver `plantillasWhatsAppValidas`).
     function plantillaWhatsAppValida(p) {
       return p is map
         && p.keys().hasOnly(['id', 'nombre', 'texto', 'contexto'])
@@ -264,7 +266,7 @@ service cloud.firestore {
         && p.id is string && p.id.size() >= 1 && p.id.size() <= 40
         && p.nombre is string && p.nombre.size() >= 1 && p.nombre.size() <= 60
         && p.texto is string && p.texto.size() >= 1 && p.texto.size() <= 1000
-        && p.contexto in ['venta', 'cliente', 'inactivo'];
+        && p.contexto in ['venta', 'cliente', 'inactivo', 'cobro'];
     }
 
     // Shape estricto de `configuracion/plantillasWhatsApp` (doc 08): un único doc

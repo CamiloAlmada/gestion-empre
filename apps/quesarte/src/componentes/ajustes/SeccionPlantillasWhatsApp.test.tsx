@@ -98,6 +98,45 @@ describe('SeccionPlantillasWhatsApp', () => {
     });
   });
 
+  describe('doc guardado con las 3 plantillas viejas (sin recordatorio de cobro)', () => {
+    const editadas: PlantillaWhatsApp[] = PLANTILLAS_SEED.filter((p) => p.contexto !== 'cobro').map((p) => ({
+      ...p,
+      nombre: `${p.nombre} (editada)`,
+      texto: `Texto editado de ${p.id}`,
+    }));
+
+    it('lista las 4 y conserva las ediciones de las 3 guardadas', () => {
+      configurarPlantillas({ datos: editadas, cargando: false, error: null });
+      renderizar();
+
+      expect(screen.getAllByRole('button', { name: 'Editar' })).toHaveLength(4);
+      expect(screen.getByText('Pedido listo (editada)')).toBeTruthy();
+      expect(screen.getByText('Texto editado de pedido-listo')).toBeTruthy();
+      expect(screen.getByText('Recordatorio de cobro')).toBeTruthy();
+      expect(screen.getByText('Cobro')).toBeTruthy();
+    });
+
+    it('al guardar una edición persiste las 4, sin pisar las editadas y con la de cobro del seed', async () => {
+      mocks.guardarPlantillasWhatsApp.mockResolvedValue(undefined);
+      configurarPlantillas({ datos: editadas, cargando: false, error: null });
+      renderizar();
+
+      fireEvent.click(screen.getAllByRole('button', { name: 'Editar' })[0]!);
+      fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Nuevo nombre' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+      await waitFor(() => expect(mocks.guardarPlantillasWhatsApp).toHaveBeenCalledTimes(1));
+      const [, guardada] = mocks.guardarPlantillasWhatsApp.mock.calls[0] as [unknown, PlantillaWhatsApp[]];
+      expect(guardada).toHaveLength(4);
+      // Orden: las existentes primero (sin reordenar), la faltante al final.
+      expect(guardada.map((p) => p.id)).toEqual(['pedido-listo', 'te-extranamos', 'aviso-llegada', 'recordatorio-cobro']);
+      expect(guardada[0]!.nombre).toBe('Nuevo nombre');
+      expect(guardada[1]).toEqual(editadas[1]);
+      expect(guardada[2]).toEqual(editadas[2]);
+      expect(guardada[3]).toEqual(PLANTILLAS_SEED.find((p) => p.id === 'recordatorio-cobro'));
+    });
+  });
+
   describe('con plantillas', () => {
     function configurarConSeed() {
       configurarPlantillas({ datos: PLANTILLAS_SEED as PlantillaWhatsApp[], cargando: false, error: null });
@@ -114,6 +153,8 @@ describe('SeccionPlantillasWhatsApp', () => {
       expect(screen.getByText('Aviso de llegada')).toBeTruthy();
       // Match exacto: "Cliente" (aviso-llegada) no colisiona con "Cliente inactivo" (te-extranamos).
       expect(screen.getAllByText('Cliente')).toHaveLength(1);
+      expect(screen.getByText('Recordatorio de cobro')).toBeTruthy();
+      expect(screen.getByText('Cobro')).toBeTruthy();
     });
 
     it('editar: precarga nombre y texto, guarda la lista completa con el cambio', async () => {
@@ -131,7 +172,7 @@ describe('SeccionPlantillasWhatsApp', () => {
 
       await waitFor(() => expect(mocks.guardarPlantillasWhatsApp).toHaveBeenCalledTimes(1));
       const [, listaGuardada] = mocks.guardarPlantillasWhatsApp.mock.calls[0] as [unknown, PlantillaWhatsApp[]];
-      expect(listaGuardada).toHaveLength(3);
+      expect(listaGuardada).toHaveLength(4);
       expect(listaGuardada.find((p) => p.id === 'pedido-listo')?.nombre).toBe('Pedido para retirar');
       // El resto de la lista queda intacta (edición atómica de UN elemento).
       expect(listaGuardada.find((p) => p.id === 'te-extranamos')).toEqual(PLANTILLAS_SEED[1]);

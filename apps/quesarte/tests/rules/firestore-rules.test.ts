@@ -1426,6 +1426,24 @@ describe('configuracion/plantillasWhatsApp (doc 08, solo admin, shape estricto)'
     );
   });
 
+  it('admin escribe una plantilla con contexto cobro (recordatorio de deuda, doc 11)', async () => {
+    await assertSucceeds(
+      setDoc(
+        doc(db(ADMIN), 'configuracion', 'plantillasWhatsApp'),
+        plantillasWaDoc([plantillaWa({ id: 'recordatorio-cobro', contexto: 'cobro' })]),
+      ),
+    );
+  });
+
+  it('admin NO escribe una plantilla con contexto otro', async () => {
+    await assertFails(
+      setDoc(
+        doc(db(ADMIN), 'configuracion', 'plantillasWhatsApp'),
+        plantillasWaDoc([plantillaWa({ contexto: 'otro' })]),
+      ),
+    );
+  });
+
   it('admin NO escribe una plantilla con contexto inválido', async () => {
     await assertFails(
       setDoc(

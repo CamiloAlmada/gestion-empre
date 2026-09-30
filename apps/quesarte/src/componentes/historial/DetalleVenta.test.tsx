@@ -247,11 +247,9 @@ describe('DetalleVenta - nombre del vendedor', () => {
   });
 
   it('admin: resuelve el nombre vía lookup a usuarios', () => {
-    mocks.useDoc.mockReturnValue({
-      datos: usuario({ nombre: 'Ana Vendedora' }),
-      cargando: false,
-      error: null,
-    });
+    // Enrutado por `__path`: `BotonWhatsApp` también suscribe
+    // `configuracion/plantillasWhatsApp`, cuyo `datos` debe ser una lista o null.
+    configurarUseDoc({ usuario: ok(usuario({ nombre: 'Ana Vendedora' })) });
 
     render(
       <DetalleVenta
@@ -367,7 +365,7 @@ describe('DetalleVenta - botón WhatsApp (WA-C2, doc 08)', () => {
   it('venta con cliente con teléfono: muestra el botón con {items}/{total} resueltos', () => {
     configurarUseDoc({
       cliente: ok(cliente({ id: 'c1', nombre: 'Ana Pérez', telefonoE164: '59899123456' })),
-      plantillas: ok([{ id: 'p1', nombre: 'Pedido listo', contexto: 'venta', texto: 'Hola {cliente}: {items}. Total {total}' }]),
+      plantillas: ok([{ id: 'pedido-listo', nombre: 'Pedido listo', contexto: 'venta', texto: 'Hola {cliente}: {items}. Total {total}' }]),
     });
     const spy = vi.spyOn(window, 'open').mockImplementation(() => null);
 
@@ -412,7 +410,7 @@ describe('DetalleVenta - botón WhatsApp (WA-C2, doc 08)', () => {
   it('venta anulada, aunque tenga cliente con teléfono: no muestra el botón WhatsApp (no hay "pedido listo" que avisar)', () => {
     configurarUseDoc({
       cliente: ok(cliente({ id: 'c1', nombre: 'Ana Pérez', telefonoE164: '59899123456' })),
-      plantillas: ok([{ id: 'p1', nombre: 'Pedido listo', contexto: 'venta', texto: 'Hola {cliente}' }]),
+      plantillas: ok([{ id: 'pedido-listo', nombre: 'Pedido listo', contexto: 'venta', texto: 'Hola {cliente}' }]),
     });
 
     render(
@@ -431,7 +429,7 @@ describe('DetalleVenta - botón WhatsApp (WA-C2, doc 08)', () => {
   it('cliente asociado sin teléfono normalizable: no muestra el botón WhatsApp', () => {
     configurarUseDoc({
       cliente: ok(cliente({ id: 'c1', nombre: 'Ana Pérez' })),
-      plantillas: ok([{ id: 'p1', nombre: 'Pedido listo', contexto: 'venta', texto: 'Hola {cliente}' }]),
+      plantillas: ok([{ id: 'pedido-listo', nombre: 'Pedido listo', contexto: 'venta', texto: 'Hola {cliente}' }]),
     });
 
     render(

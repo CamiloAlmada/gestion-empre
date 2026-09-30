@@ -7,7 +7,7 @@ import {
   useDoc,
   useOnlineStatus,
 } from '@gestion/firebase-kit';
-import { PLANTILLAS_SEED, type ContextoPlantilla, type PlantillaWhatsApp } from '@gestion/core';
+import { PLANTILLAS_SEED, completarConSeed, type ContextoPlantilla, type PlantillaWhatsApp } from '@gestion/core';
 import { db } from '../../firebase';
 import { ModalConfirmarRestaurarPlantillas } from './ModalConfirmarRestaurarPlantillas';
 import { ModalPlantillaWhatsApp, type DatosEdicionPlantilla } from './ModalPlantillaWhatsApp';
@@ -16,17 +16,25 @@ const ETIQUETA_CONTEXTO: Record<ContextoPlantilla, string> = {
   venta: 'Venta',
   cliente: 'Cliente',
   inactivo: 'Cliente inactivo',
+  cobro: 'Cobro',
 };
 
 /**
  * Sección "Plantillas de WhatsApp" de Ajustes (solo admin, doc 08).
  *
  * ALCANCE CERRADO (WA-C1): solo se editan y restauran las plantillas del
- * seed (`PLANTILLAS_SEED`, 3 plantillas). Esta sección NO ofrece agregar ni
+ * seed (`PLANTILLAS_SEED`, 4 plantillas). Esta sección NO ofrece agregar ni
  * borrar plantillas — si `configuracion/plantillasWhatsApp` llegara a tener
  * una plantilla con un `id` fuera del seed (no hay forma de crear una desde
  * acá hoy), se lista igual pero sin botón "Restaurar texto original" (no hay
  * seed con qué compararla).
+ *
+ * La lista mostrada es SIEMPRE `completarConSeed(guardadas, PLANTILLAS_SEED)`:
+ * si el doc guardado es anterior a una plantilla nueva del seed (p. ej. el doc
+ * de producción con las 3 originales y el `recordatorio-cobro` agregado
+ * después), la faltante aparece igual y la primera edición persiste las 4, sin
+ * migrar datos ni pisar lo que el dueño editó. Con el doc ausente o vacío se
+ * mantiene el estado vacío ("Cargar plantillas iniciales").
  *
  * Documento único (edición atómica, ver `guardarPlantillasWhatsApp`): tanto
  * sembrar desde vacío como editar una plantilla puntual como restaurar
@@ -51,7 +59,8 @@ export function SeccionPlantillasWhatsApp() {
     [intentoId],
   );
   const { datos: plantillas, cargando, error } = useDoc(configuracionPlantillasRef);
-  const lista = plantillas ?? [];
+  const guardadas = plantillas ?? [];
+  const lista = guardadas.length === 0 ? [] : completarConSeed(guardadas, PLANTILLAS_SEED);
 
   function reintentar() {
     setIntentoId((n) => n + 1);

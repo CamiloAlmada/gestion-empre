@@ -176,6 +176,31 @@ describe('guardarPlantillasWhatsApp', () => {
     ).rejects.toThrow(ConfiguracionInvalidaError);
   });
 
+  it('acepta el contexto cobro (recordatorio de deuda, doc 11)', async () => {
+    await guardarPlantillasWhatsApp(db, [
+      plantilla({ id: 'rc', contexto: 'cobro', texto: 'Hola {cliente}, quedan {deuda}' }),
+    ]);
+    const [, datos] = mocks.setDoc.mock.calls[0] as [RefFalsa, PlantillaWhatsApp[]];
+    expect(datos[0]?.contexto).toBe('cobro');
+  });
+
+  it('acepta los cuatro contextos en una misma lista', async () => {
+    const contextos = ['venta', 'cliente', 'inactivo', 'cobro'] as const;
+    await guardarPlantillasWhatsApp(
+      db,
+      contextos.map((contexto) => plantilla({ id: `p-${contexto}`, contexto })),
+    );
+    const [, datos] = mocks.setDoc.mock.calls[0] as [RefFalsa, PlantillaWhatsApp[]];
+    expect(datos.map((p) => p.contexto)).toEqual([...contextos]);
+  });
+
+  it('rechaza un contexto que coincide con una clave heredada de Object', async () => {
+    await expect(
+      guardarPlantillasWhatsApp(db, [plantilla({ contexto: 'toString' as never })]),
+    ).rejects.toThrow(ConfiguracionInvalidaError);
+    expect(mocks.setDoc).not.toHaveBeenCalled();
+  });
+
   it('rechaza texto vacío', async () => {
     await expect(
       guardarPlantillasWhatsApp(db, [plantilla({ texto: '   ' })]),

@@ -131,3 +131,96 @@ export function deudaTotalCents(
 ): Money {
   return ventas.reduce((acumulado, v) => sumarMoney(acumulado, saldoPendienteCents(v)), money(0));
 }
+
+/** Deuda de un cliente, agregada sobre sus ventas con saldo pendiente. */
+export interface DeudaCliente {
+  clienteId: string;
+  /** Nombre denormalizado de la venta más reciente del cliente que lo tenga. */
+  clienteNombre: string;
+  /** Suma de `saldoPendienteCents` de sus ventas. */
+  deudaCents: Money;
+  /** Cantidad de ventas con saldo > 0. */
+  cantidadVentas: number;
+  /** Fecha de la venta pendiente más vieja. */
+  fechaMasAntigua: Date;
+  /** Días calendario (hora local) entre `fechaMasAntigua` y `ahora`. */
+  diasDeuda: number;
+}
+
+/**
+ * Días calendario enteros entre dos instantes, contados en hora LOCAL: una venta
+ * de ayer a las 23:00 mirada hoy a las 08:00 lleva 1 día (no 0, como daría
+ * `floor(ms / 24h)`). Se compara por fecha (año-mes-día local) llevada a UTC para
+ * que el cambio de horario de verano no corra el resultado. Nunca negativo: una
+ * fecha futura (desfasaje de reloj) da 0. Es un criterio distinto del de
+ * `clasificarInactividad` (que usa 24 h transcurridas), a propósito: acá el dueño
+ * piensa "me debe desde el martes", no "hace 47 horas".
+ */
+function diasCalendarioLocal(desde: Date, hasta: Date): number {
+  const a = Date.UTC(desde.getFullYear(), desde.getMonth(), desde.getDate());
+  const b = Date.UTC(hasta.getFullYear(), hasta.getMonth(), hasta.getDate());
+  return Math.max(0, Math.round((b - a) / 86_400_000));
+}
+
+/**
+ * Agrupa por cliente la deuda de un conjunto de ventas. Cuentan solo las ventas
+ * con `saldoPendienteCents > 0` (quedan fuera anuladas, cobradas y las del
+ * mostrador) y con `clienteId`; las que no lo tienen se ignoran.
+ *
+ * Orden: `diasDeuda` descendente (el que debe hace más, primero), desempate por
+ * `deudaCents` descendente y, al final, por `clienteNombre`.
+ */
+export function agruparDeudaPorCliente(ventas: readonly Venta[], ahora: Date): DeudaCliente[] {
+  interface Acumulado {
+    deudaCents: Money;
+    cantidadVentas: number;
+    fechaMasAntigua: Date;
+    nombre: { fecha: Date; valor: string } | null;
+  }
+  const porCliente = new Map<string, Acumulado>();
+
+  // Primero el nombre (de cualquier venta del cliente) y después la deuda.
+  for (const v of ventas) {
+    if (v.clienteId === undefined) continue;
+    const saldo = saldoPendienteCents(v);
+    const previo = porCliente.get(v.clienteId);
+    const acc: Acumulado = previo ?? {
+      deudaCents: money(0),
+      cantidadVentas: 0,
+      fechaMasAntigua: v.fecha,
+      nombre: null,
+    };
+    if (v.clienteNombre !== undefined && v.clienteNombre !== '') {
+      if (acc.nombre === null || v.fecha.getTime() > acc.nombre.fecha.getTime()) {
+        acc.nombre = { fecha: v.fecha, valor: v.clienteNombre };
+      }
+    }
+    if (saldo > 0) {
+      acc.deudaCents = sumarMoney(acc.deudaCents, saldo);
+      acc.cantidadVentas += 1;
+      if (acc.cantidadVentas === 1 || v.fecha.getTime() < acc.fechaMasAntigua.getTime()) {
+        acc.fechaMasAntigua = v.fecha;
+      }
+    }
+    porCliente.set(v.clienteId, acc);
+  }
+
+  const resultado: DeudaCliente[] = [];
+  for (const [clienteId, acc] of porCliente) {
+    if (acc.cantidadVentas === 0) continue;
+    resultado.push({
+      clienteId,
+      clienteNombre: acc.nombre?.valor ?? '',
+      deudaCents: acc.deudaCents,
+      cantidadVentas: acc.cantidadVentas,
+      fechaMasAntigua: acc.fechaMasAntigua,
+      diasDeuda: diasCalendarioLocal(acc.fechaMasAntigua, ahora),
+    });
+  }
+  return resultado.sort(
+    (x, y) =>
+      y.diasDeuda - x.diasDeuda ||
+      y.deudaCents - x.deudaCents ||
+      x.clienteNombre.localeCompare(y.clienteNombre, 'es'),
+  );
+}

@@ -2,12 +2,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useParams } from 'react-router';
 import type { FirestoreError } from 'firebase/firestore';
-import { money, type Cliente, type Configuracion, type PlantillaWhatsApp } from '@gestion/core';
+import {
+  money,
+  type Cliente,
+  type Configuracion,
+  type PlantillaWhatsApp,
+  type Venta,
+} from '@gestion/core';
 import { ProveedorToasts } from '@gestion/ui';
 import { Clientes } from './Clientes';
 import { ProveedorHeader, useHeaderActual } from '../componentes/header/ContextoHeader';
 
 const mocks = vi.hoisted(() => ({
+  useAuth: vi.fn(),
+  botonWhatsApp: vi.fn(),
   useOnlineStatus: vi.fn(() => true),
   useCollection: vi.fn(),
   useDoc: vi.fn(),
@@ -17,14 +25,14 @@ const mocks = vi.hoisted(() => ({
 // Mismo criterio que `Productos.test.tsx`: `clienteConverter`/`configuracionConverter`/
 // `plantillasWhatsAppConverter` se dejan pasar tal cual (no se ejercitan,
 // `withConverter` es identidad); `crearCliente` es la única operación con
-// I/O real y se mockea entera. `Clientes.tsx` ya NO usa `useAuth` (WA-G: el
-// chip "Inactivos" y su botón de WhatsApp dejaron de ser admin-only), así
-// que este archivo tampoco lo mockea — si el componente volviera a
-// necesitarlo, este test explotaría y lo dejaría en evidencia.
+// I/O real y se mockea entera. `useAuth` decide SOLO el 4.º chip "Deben"
+// (doc 11, solo admin): por defecto el usuario es vendedor, o sea la pantalla
+// idéntica a la de antes de los cobros diferidos.
 vi.mock('@gestion/firebase-kit', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@gestion/firebase-kit')>();
   return {
     ...actual,
+    useAuth: mocks.useAuth,
     useOnlineStatus: mocks.useOnlineStatus,
     useCollection: mocks.useCollection,
     useDoc: mocks.useDoc,
@@ -33,6 +41,18 @@ vi.mock('@gestion/firebase-kit', async (importOriginal) => {
 });
 
 vi.mock('../firebase', () => ({ db: {} }));
+
+// Espía las props que recibe el botón de WhatsApp y delega en el real (los
+// tests de "Inactivos" siguen buscando su botón por aria-label).
+vi.mock('../componentes/whatsapp/BotonWhatsApp', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../componentes/whatsapp/BotonWhatsApp')>();
+  return {
+    BotonWhatsApp: (props: Parameters<typeof actual.BotonWhatsApp>[0]) => {
+      mocks.botonWhatsApp(props);
+      return actual.BotonWhatsApp(props);
+    },
+  };
+});
 
 interface RefFalsa {
   __path: string;
@@ -49,6 +69,7 @@ vi.mock('firebase/firestore', () => ({
   doc: (_db: unknown, coleccion: string, id: string) => crearRef(`${coleccion}/${id}`),
   query: (ref: RefFalsa, ...clausulas: unknown[]) => ({ ...ref, __clausulas: clausulas }),
   orderBy: (...args: unknown[]) => ({ __tipo: 'orderBy', args }),
+  where: (...args: unknown[]) => ({ __tipo: 'where', args }),
 }));
 
 interface EstadoFalso<T> {
@@ -138,8 +159,17 @@ function renderizar() {
   );
 }
 
+function configurarRol(rol: 'admin' | 'vendedor') {
+  mocks.useAuth.mockReturnValue({
+    usuario: { uid: 'u1' },
+    perfil: { uid: 'u1', nombre: 'Ana', email: 'ana@quesarte.com', rol, activo: true },
+    cargando: false,
+  });
+}
+
 beforeEach(() => {
   configurarUseDoc();
+  configurarRol('vendedor');
 });
 
 afterEach(() => {
@@ -369,6 +399,234 @@ describe('Clientes - terna Todos/Activos/Inactivos (WA-G, docs/06-ui-ux.md §3)'
 
     expect(screen.getByRole('button', { name: 'Todos' }).getAttribute('aria-pressed')).toBe('true');
     expect(screen.getByText('Dado De Baja')).toBeTruthy();
+  });
+});
+
+describe('Clientes - chip "Deben" (doc 11, cobros diferidos, solo admin)', () => {
+  const AHORA = new Date(2026, 8, 30, 15, 0, 0);
+
+  function ventaACobrar(
+    id: string,
+    clienteId: string,
+    clienteNombre: string,
+    fecha: Date,
+    totalCents: number,
+  ): Venta {
+    return {
+      id,
+      numero: 1,
+      fecha,
+      usuarioId: 'u1',
+      items: [],
+      totalCents: money(totalCents),
+      medioPago: 'a_cobrar',
+      estado: 'completada',
+      clienteId,
+      clienteNombre,
+      cobro: { v: 1, estado: 'pendiente', cobradoCents: money(0), pagos: [] },
+    };
+  }
+
+  const ana = cliente({ id: 'c1', nombre: 'Ana Pérez', telefonoE164: '59899000001' });
+  const beto = cliente({ id: 'c2', nombre: 'Beto Gómez', telefonoE164: '59899000002' });
+  const carla = cliente({ id: 'c3', nombre: 'Carla Sosa', telefonoE164: '59899000003' });
+  const clientesBase = [ana, beto, carla];
+
+  // Beto debe desde hace 12 días (2 ventas), Ana desde hoy (1 venta), Carla hace 1 día.
+  const ventasBase: Venta[] = [
+    ventaACobrar('v1', 'c1', 'Ana Pérez', new Date(2026, 8, 30, 9, 0, 0), 250000),
+    ventaACobrar('v2', 'c2', 'Beto Gómez', new Date(2026, 8, 18, 10, 0, 0), 100000),
+    ventaACobrar('v3', 'c2', 'Beto Gómez', new Date(2026, 8, 25, 10, 0, 0), 50000),
+    ventaACobrar('v4', 'c3', 'Carla Sosa', new Date(2026, 8, 29, 10, 0, 0), 30000),
+  ];
+
+  function configurarConDeudas(opciones: {
+    ventas?: EstadoFalso<Venta> & { desdeCache?: boolean };
+    clientes?: Cliente[];
+  } = {}) {
+    const ventas = opciones.ventas ?? { ...estadoOk(ventasBase), desdeCache: false };
+    mocks.useCollection.mockImplementation((q: RefFalsa | null) => {
+      if (q === null) return { datos: [], cargando: false, error: null, desdeCache: true };
+      if (q.__path === 'clientes') return estadoOk(opciones.clientes ?? clientesBase);
+      if (q.__path === 'ventas') return { desdeCache: false, ...ventas };
+      return { datos: [], cargando: false, error: null };
+    });
+  }
+
+  function consultasDeVentas() {
+    return mocks.useCollection.mock.calls.filter(([q]) => q !== null && (q as RefFalsa).__path === 'ventas');
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(AHORA);
+    configurarRol('admin');
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('vendedor: no ve el chip "Deben" y nunca se suscribe a las ventas', () => {
+    configurarRol('vendedor');
+    configurarConDeudas();
+    renderizar();
+
+    expect(screen.queryByRole('button', { name: 'Deben' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Inactivos' })).toBeTruthy();
+    expect(consultasDeVentas()).toHaveLength(0);
+  });
+
+  it('admin: ve "Deben" como 4.º chip, tras Todos, Activos e Inactivos', () => {
+    configurarConDeudas();
+    renderizar();
+
+    const nombres = within(screen.getByRole('group', { name: 'Filtrar clientes' }))
+      .getAllByRole('button')
+      .map((b) => b.textContent);
+    expect(nombres).toEqual(['Todos', 'Activos', 'Inactivos', 'Deben']);
+  });
+
+  it('admin: la query de ventas es null hasta elegir el chip; al elegirlo se suscribe (completada + cobro pendiente + fecha desc)', () => {
+    configurarConDeudas();
+    renderizar();
+
+    expect(consultasDeVentas()).toHaveLength(0);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Deben' }));
+
+    const consultas = consultasDeVentas();
+    expect(consultas.length).toBeGreaterThan(0);
+    const [q, opciones] = consultas[0] as [RefFalsa & { __clausulas: { __tipo: string; args: unknown[] }[] }, unknown];
+    expect(q.__clausulas.map((c) => [c.__tipo, ...c.args])).toEqual([
+      ['where', 'estado', '==', 'completada'],
+      ['where', 'cobro.estado', '==', 'pendiente'],
+      ['orderBy', 'fecha', 'desc'],
+    ]);
+    expect(opciones).toEqual({ seguirFrescura: true });
+  });
+
+  it('volver a otro chip deja de suscribir (query null)', () => {
+    configurarConDeudas();
+    renderizar();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Deben' }));
+    mocks.useCollection.mockClear();
+    fireEvent.click(screen.getByRole('button', { name: 'Todos' }));
+
+    expect(consultasDeVentas()).toHaveLength(0);
+  });
+
+  it('la fila muestra deuda, cantidad de ventas y días, respetando el orden que entrega core (más viejo primero)', () => {
+    configurarConDeudas();
+    renderizar();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Deben' }));
+
+    const filas = screen.getAllByRole('listitem').map((li) => li.textContent ?? '');
+    expect(filas).toHaveLength(3);
+    expect(filas[0]).toContain('Beto Gómez');
+    expect(filas[0]).toContain('Debe $ 1.500,00 · 2 ventas · hace 12 días');
+    expect(filas[1]).toContain('Carla Sosa');
+    expect(filas[1]).toContain('Debe $ 300,00 · 1 venta · hace 1 día');
+    expect(filas[2]).toContain('Ana Pérez');
+    expect(filas[2]).toContain('Debe $ 2.500,00 · 1 venta · desde hoy');
+  });
+
+  it('el botón de WhatsApp recibe contexto "cobro", la deuda formateada y los días', () => {
+    configurarConDeudas();
+    renderizar();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Deben' }));
+
+    const props = mocks.botonWhatsApp.mock.calls
+      .map(([p]) => p as { contexto: string; telefonoE164?: string; valores: Record<string, string> })
+      .filter((p) => p.contexto === 'cobro');
+    const deBeto = props.find((p) => p.valores.cliente === 'Beto Gómez');
+    expect(deBeto).toBeTruthy();
+    expect(deBeto!.telefonoE164).toBe('59899000002');
+    expect(deBeto!.valores).toEqual({ cliente: 'Beto Gómez', deuda: '$ 1.500,00', diasDeuda: '12' });
+  });
+
+  it('tocar la fila navega a la ficha del cliente', () => {
+    configurarConDeudas();
+    renderizar();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Deben' }));
+    fireEvent.click(screen.getByRole('button', { name: /Beto Gómez.*Debe/ }));
+
+    expect(screen.getByText('Ficha de c2')).toBeTruthy();
+  });
+
+  it('la búsqueda también filtra la lista de deudores', () => {
+    configurarConDeudas();
+    renderizar();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Deben' }));
+    fireEvent.change(screen.getByLabelText('Buscar cliente'), { target: { value: 'carla' } });
+
+    expect(screen.getByText('Carla Sosa')).toBeTruthy();
+    expect(screen.queryByText('Beto Gómez')).toBeNull();
+    expect(screen.queryByText('Ana Pérez')).toBeNull();
+  });
+
+  it('búsqueda sin resultados: mensaje genérico con el término', () => {
+    configurarConDeudas();
+    renderizar();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Deben' }));
+    fireEvent.change(screen.getByLabelText('Buscar cliente'), { target: { value: 'zzz' } });
+
+    expect(screen.getByText('No se encontraron clientes para "zzz".')).toBeTruthy();
+  });
+
+  it('vacío: "Nadie debe por ahora."', () => {
+    configurarConDeudas({ ventas: { ...estadoOk<Venta>([]), desdeCache: false } });
+    renderizar();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Deben' }));
+
+    expect(screen.getByText('Nadie debe por ahora.')).toBeTruthy();
+  });
+
+  it('cargando: mensaje propio de deudas', () => {
+    configurarConDeudas({ ventas: { datos: [], cargando: true, error: null } });
+    renderizar();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Deben' }));
+
+    expect(screen.getByText('Cargando deudas…')).toBeTruthy();
+  });
+
+  it('error: mensaje y botón Reintentar', () => {
+    configurarConDeudas({
+      ventas: { datos: [], cargando: false, error: { code: 'failed-precondition' } as FirestoreError },
+    });
+    renderizar();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Deben' }));
+
+    expect(screen.getByRole('alert').textContent).toContain('No se pudieron cargar las deudas.');
+    expect(screen.getByRole('button', { name: 'Reintentar' })).toBeTruthy();
+  });
+
+  it('datos de caché: avisa "Sin conexión: puede faltar información" y sigue mostrando la lista', () => {
+    configurarConDeudas({ ventas: { ...estadoOk(ventasBase), desdeCache: true } });
+    renderizar();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Deben' }));
+
+    expect(screen.getByText('Sin conexión: puede faltar información')).toBeTruthy();
+    expect(screen.getByText('Beto Gómez')).toBeTruthy();
+  });
+
+  it('datos confirmados por el servidor: sin nota de conexión', () => {
+    configurarConDeudas();
+    renderizar();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Deben' }));
+
+    expect(screen.queryByText('Sin conexión: puede faltar información')).toBeNull();
   });
 });
 
