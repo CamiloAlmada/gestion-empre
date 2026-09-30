@@ -112,6 +112,9 @@ export {
   construirLinkWhatsApp,
   PLANTILLAS_SEED,
   completarConSeed,
+  esPlantillaDeFabrica,
+  plantillasActivas,
+  restaurarPlantillasDeFabrica,
 } from './whatsapp.js';
 export {
   type ConfigInactividad,

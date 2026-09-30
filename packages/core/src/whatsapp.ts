@@ -26,6 +26,13 @@ export interface PlantillaWhatsApp {
    * desde la venta pendiente más vieja).
    */
   readonly texto: string;
+  /**
+   * Ausente = activa. Solo las plantillas **propias** (las que no son de fábrica,
+   * ver `esPlantillaDeFabrica`) pueden tener `false`. Se persiste únicamente
+   * `activa: false`: una plantilla activa no lleva la clave, para que el documento
+   * de producción y el seed sigan siendo válidos sin migrar datos.
+   */
+  readonly activa?: boolean;
 }
 
 /** Placeholder bien formado: `{` + una clave sin llaves + `}`. */
@@ -130,4 +137,40 @@ export function completarConSeed(
 ): PlantillaWhatsApp[] {
   const ids = new Set(plantillas.map((p) => p.id));
   return [...plantillas, ...seed.filter((p) => !ids.has(p.id))];
+}
+
+/**
+ * `true` si `id` es el de una plantilla de fábrica (la lista `seed`). Las de fábrica
+ * se editan pero nunca se desactivan.
+ */
+export function esPlantillaDeFabrica(id: string, seed: readonly PlantillaWhatsApp[] = PLANTILLAS_SEED): boolean {
+  return seed.some((p) => p.id === id);
+}
+
+/**
+ * Las plantillas con `activa !== false` (ausente o `true`). Es lo que usa el botón
+ * de WhatsApp. Como cada contexto tiene exactamente una plantilla de fábrica y esas
+ * no se pueden desactivar, siempre queda al menos una activa por contexto.
+ */
+export function plantillasActivas(lista: readonly PlantillaWhatsApp[]): PlantillaWhatsApp[] {
+  return lista.filter((p) => p.activa !== false);
+}
+
+/**
+ * Devuelve `lista` completada con `seed` (`completarConSeed`) y con cada plantilla
+ * de fábrica vuelta al valor del seed (nombre, texto, contexto; sin `activa`). Las
+ * propias quedan intactas, incluidos su `activa` y su posición. No muta la entrada.
+ *
+ * Reemplaza a la vieja "Restaurar iniciales", que escribía el seed entero y habría
+ * borrado las plantillas propias.
+ */
+export function restaurarPlantillasDeFabrica(
+  lista: readonly PlantillaWhatsApp[],
+  seed: readonly PlantillaWhatsApp[] = PLANTILLAS_SEED,
+): PlantillaWhatsApp[] {
+  const porId = new Map(seed.map((p) => [p.id, p]));
+  return completarConSeed(lista, seed).map((p) => {
+    const fabrica = porId.get(p.id);
+    return fabrica ? { ...fabrica } : p;
+  });
 }

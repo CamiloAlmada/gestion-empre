@@ -4,6 +4,9 @@ import {
   construirLinkWhatsApp,
   PLANTILLAS_SEED,
   completarConSeed,
+  esPlantillaDeFabrica,
+  plantillasActivas,
+  restaurarPlantillasDeFabrica,
   type PlantillaWhatsApp,
 } from './whatsapp.js';
 
@@ -185,5 +188,85 @@ describe('completarConSeed', () => {
     const existentes = [pedido];
     completarConSeed(existentes, PLANTILLAS_SEED);
     expect(existentes).toEqual([pedido]);
+  });
+});
+
+describe('PLANTILLAS_SEED y activa', () => {
+  it('ninguna plantilla del seed lleva la clave activa', () => {
+    for (const p of PLANTILLAS_SEED) {
+      expect(Object.prototype.hasOwnProperty.call(p, 'activa')).toBe(false);
+    }
+  });
+});
+
+describe('esPlantillaDeFabrica', () => {
+  it('es true para los 4 ids de fábrica', () => {
+    for (const id of ['pedido-listo', 'te-extranamos', 'aviso-llegada', 'recordatorio-cobro']) {
+      expect(esPlantillaDeFabrica(id)).toBe(true);
+    }
+  });
+
+  it('es false para un id inventado', () => {
+    expect(esPlantillaDeFabrica('mia-123')).toBe(false);
+  });
+});
+
+describe('plantillasActivas', () => {
+  const base = { nombre: 'N', contexto: 'cliente', texto: 't' } as const;
+  it('excluye activa:false e incluye ausente y true', () => {
+    const lista: PlantillaWhatsApp[] = [
+      { ...base, id: 'a' },
+      { ...base, id: 'b', activa: true },
+      { ...base, id: 'c', activa: false },
+    ];
+    expect(plantillasActivas(lista).map((p) => p.id)).toEqual(['a', 'b']);
+  });
+});
+
+describe('restaurarPlantillasDeFabrica', () => {
+  const propia = (over: Partial<PlantillaWhatsApp> = {}): PlantillaWhatsApp => ({
+    id: 'mia-1',
+    nombre: 'Mi plantilla',
+    contexto: 'cliente',
+    texto: 'Hola {cliente}',
+    ...over,
+  });
+
+  it('una de fábrica editada vuelve al seed (sin activa)', () => {
+    const pedido = PLANTILLAS_SEED.find((p) => p.id === 'pedido-listo')!;
+    const editada: PlantillaWhatsApp = { ...pedido, nombre: 'X', texto: 'otro', contexto: 'cobro' };
+    const res = restaurarPlantillasDeFabrica([editada]);
+    expect(res[0]).toEqual(pedido);
+    expect(Object.prototype.hasOwnProperty.call(res[0], 'activa')).toBe(false);
+  });
+
+  it('una propia editada no cambia', () => {
+    const mia = propia({ texto: 'editada' });
+    expect(restaurarPlantillasDeFabrica([mia])[0]).toEqual(mia);
+  });
+
+  it('una propia inactiva sigue inactiva y en su posición', () => {
+    const pedido = PLANTILLAS_SEED.find((p) => p.id === 'pedido-listo')!;
+    const inactiva = propia({ activa: false });
+    const res = restaurarPlantillasDeFabrica([inactiva, { ...pedido, texto: 'x' }]);
+    expect(res[0]).toEqual(inactiva);
+    expect(res[0]!.activa).toBe(false);
+    expect(res[1]).toEqual(pedido);
+  });
+
+  it('si falta una de fábrica, la agrega al final', () => {
+    const mia = propia();
+    const res = restaurarPlantillasDeFabrica([mia]);
+    expect(res).toHaveLength(1 + PLANTILLAS_SEED.length);
+    expect(res[0]).toEqual(mia);
+    expect(res.slice(1)).toEqual([...PLANTILLAS_SEED]);
+  });
+
+  it('no muta la entrada', () => {
+    const pedido = PLANTILLAS_SEED.find((p) => p.id === 'pedido-listo')!;
+    const entrada: PlantillaWhatsApp[] = [{ ...pedido, texto: 'x' }, propia()];
+    const copia = structuredClone(entrada);
+    restaurarPlantillasDeFabrica(entrada);
+    expect(entrada).toEqual(copia);
   });
 });

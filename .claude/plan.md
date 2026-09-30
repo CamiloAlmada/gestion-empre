@@ -654,3 +654,17 @@ advisor. Del cierre del advisor: `activa` opcional (ausente = activa); no tocar
 `completarConSeed`; "Restaurar iniciales" hoy escribe el seed entero y con
 plantillas propias las borraría → redefinir. **Decisión del dueño (2026-09-30): solo las plantillas propias se
 pueden dar de baja; las de fábrica no** (se editan, nunca se desactivan).
+
+### ABM de plantillas de WhatsApp (2026-09-30)
+
+Diseño en `.claude/advisor-log.md` ("ABM de plantillas", llamada 1). `activa?`
+opcional (solo se persiste `false`), fábrica derivada del seed, sin borrado
+físico, contexto editable solo en propias, "Restaurar iniciales" no toca las
+propias. Vocabulario: "Desactivar" / "Reactivar" / badge "Inactiva".
+
+| # | Tarea | Agente | Estado |
+| --- | --- | --- | --- |
+| P1 | core: `activa?`, `esPlantillaDeFabrica`, `plantillasActivas`, `restaurarPlantillasDeFabrica` | `semisenior` | ✅ 500 tests en core |
+| P2 | Kit + converter + reglas | `senior` | 🔄 en curso |
+| P3 | UI: crear, desactivar/reactivar, contexto en propias, restaurar; `BotonWhatsApp` filtra activas | `semisenior` | 🔄 en curso |
+| P4 | Doc 08 | `semisenior` | ⏳ P3 |

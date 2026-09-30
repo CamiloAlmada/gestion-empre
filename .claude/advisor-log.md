@@ -659,3 +659,39 @@ seed entero y con plantillas propias las borraría.
 `agruparDeudaPorCliente` (parcial, anulada, sin cliente, nombre más reciente);
 (3) estado del índice en prod tras el deploy; (4) para el ABM, decidir con el
 dueño si Adrián puede dar de baja plantillas de fábrica o solo las propias.
+
+---
+
+## 2026-09-30 — ABM de plantillas de WhatsApp en Ajustes
+
+**Decisión previa del dueño:** Adrián crea plantillas propias, edita cualquiera y
+da de baja / alta solo las propias; las de fábrica no se dan de baja.
+
+### Llamada 1 (temprana)
+
+**Recomendación textual:** "`activa?: boolean` en `PlantillaWhatsApp` (ausente =
+activa; se persiste SOLO `activa: false`). 'De fábrica' se deriva de
+`PLANTILLAS_SEED` con un helper puro `esPlantillaDeFabrica(id, seed)`; nada de
+`origen` persistido. Baja lógica únicamente, sin borrado físico. Contexto
+editable solo en propias; en fábrica, nombre/texto como hoy. Quien impide bajar
+o recontextualizar una de fábrica: el kit y la UI; las reglas solo suman
+`activa` opcional bool al `hasOnly`. 'Restaurar iniciales' pasa a ser
+`restaurarPlantillasDeFabrica(lista, seed)` (core): repone nombre/texto de cada
+id del seed y deja intactas las propias, orden y `activa`. `BotonWhatsApp`
+filtra con `plantillasActivas(...)` (core). Ids de propias:
+`doc(collection(db, 'configuracion')).id`. No tocar `completarConSeed`."
+
+**Contradicción declarada:** en la llamada 2 del chip sugirió
+`crypto.randomUUID()`; la cambia por el id de Firestore siguiendo el precedente
+de `cobros.ts:182`.
+
+**Garantía:** cada contexto tiene exactamente una plantilla de fábrica, que no
+se puede desactivar ni recontextualizar → siempre ≥ 1 activa por contexto.
+
+**Bloqueantes y resolución (orquestador):** (1) firma de `Select`: `opciones:
+{valor, etiqueta}[]` + `error`, verificada. (2) CI: reglas antes que hosting en
+el mismo job, verificado. (3) Confirmación al desactivar: sí, como clientes y
+proveedores. (4) Monorepo entero como criterio en T3: en el brief. (5)
+Vocabulario: el repo usa "Desactivar" / "Reactivar" / "Inactivo"; se adopta
+"Desactivar" / "Reactivar" / badge "Inactiva" (no "Dar de baja", que no existe
+en el repo). Docs (T4): `semisenior`, no `trainee` (lección de R3).
