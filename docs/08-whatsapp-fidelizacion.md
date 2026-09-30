@@ -67,8 +67,13 @@ placeholders que la app resuelve al generar el link:
 - `{items}` — resumen de ítems ("Queso Colonia 0,5 kg, Salame entero…")
 - `{diasSinVenir}` — días desde la última compra
 - `{negocio}` — nombre del negocio
+- `{deuda}` — deuda pendiente del cliente, ya formateada ($ x.xxx) (solo
+  contexto cobro; 2026-09-30)
+- `{diasDeuda}` — días calendario desde la venta pendiente más vieja del
+  cliente (solo contexto cobro; 2026-09-30)
 
-Plantillas iniciales (seed, Adrián las edita a su tono):
+Plantillas iniciales (seed, `PLANTILLAS_SEED` en `packages/core/src/whatsapp.ts`;
+Adrián las edita a su tono):
 
 - **Pedido listo** (contexto: venta): "Hola {cliente}! Tu pedido está listo:
   {items}. Total: {total}. ¿A qué hora te queda bien pasar a buscarlo?"
@@ -77,9 +82,41 @@ Plantillas iniciales (seed, Adrián las edita a su tono):
   novedades que te pueden gustar 😊"
 - **Aviso de llegada** (contexto: cliente): "Hola {cliente}! Llegó mercadería
   nueva que suele gustarte. ¡Te esperamos!"
+- **Recordatorio de cobro** (contexto: cobro; id `recordatorio-cobro`, agregada
+  2026-09-30): "Hola {cliente}! Te recuerdo que tenés pendiente {deuda} en
+  {negocio}. Cuando puedas, avisame por acá cómo te queda mejor abonarlo.
+  ¡Gracias!"
 
 El resolver de placeholders es función pura en `core` con tests (incluyendo
 URL-encoding correcto de emojis, saltos de línea `%0A` y caracteres especiales).
+
+### Plantillas nuevas sin migrar datos (`completarConSeed`, 2026-09-30)
+
+El documento `configuracion/plantillasWhatsApp` de producción se guardó con las
+3 plantillas originales, así que la de cobro no estaba. En vez de migrarlo,
+`completarConSeed(plantillas, seed)` (`packages/core/src/whatsapp.ts`) devuelve
+las plantillas guardadas más, al final, las del seed cuyo `id` no esté entre
+ellas. **Nunca pisa ni reordena** lo guardado: lo que Adrián editó queda como
+está. La usan dos lugares:
+
+- `BotonWhatsApp`: ofrece las plantillas del contexto sobre
+  `completarConSeed(plantillasDoc.datos ?? [], PLANTILLAS_SEED)`; con el doc
+  ausente o vacío queda el seed completo.
+- `SeccionPlantillasWhatsApp` (Ajustes): lista
+  `completarConSeed(guardadas, PLANTILLAS_SEED)` cuando hay plantillas
+  guardadas, así la nueva aparece y la primera edición persiste las 4. Con el
+  doc ausente o vacío conserva el estado vacío ("Cargar plantillas iniciales").
+
+Nota de diseño: como toda plantilla del seed cuyo `id` falte se vuelve a sumar,
+**borrar una plantilla de fábrica del documento la haría reaparecer**. Hoy
+Ajustes no ofrece borrar (solo editar y restaurar el texto original), pero una
+futura baja de plantillas tiene que ser **lógica** (un campo que la marque como
+dada de baja), no quitarla de la lista.
+
+Contextos aceptados: `'venta' | 'cliente' | 'inactivo' | 'cobro'`
+(`ContextoPlantilla`). `CONTEXTOS` en `packages/firebase-kit/src/configuracion.ts`
+y `plantillaWhatsAppValida` en `apps/quesarte/firestore.rules` los espejan (las
+reglas no pueden importar la lista de core).
 
 ## Puntos de contacto (dónde aparecen botones)
 
@@ -90,7 +127,27 @@ URL-encoding correcto de emojis, saltos de línea `%0A` y caracteres especiales)
    dueño — antes era una pantalla dedicada): chip "Inactivos" en el listado de
    Clientes; con él activo, cada fila muestra días sin venir + botón con
    "Te extrañamos" precargada, ordenada por valor histórico.
-4. Los botones cumplen doc 06: target ≥44px, `aria-label`, y NO entran en el
+4. **Chip "Deben"** (2026-09-30; cuarto punto de contacto, contexto `cobro`;
+   lo pidió el dueño para ver quién le debe y mandar recordatorios): 4.º chip
+   del listado de Clientes, **solo admin** (`esAdmin` en
+   `apps/quesarte/src/pantallas/Clientes.tsx`). Lista a los clientes con deuda
+   con `agruparDeudaPorCliente` (`packages/core/src/cobro.ts`), del que debe
+   hace más al que debe hace menos (`diasDeuda` descendente; desempate por
+   `deudaCents` descendente y nombre). Cada fila
+   (`ListaClientesConDeuda.tsx`) muestra "Debe $X · N ventas · hace D días",
+   lleva a la ficha del cliente y trae el botón `BotonWhatsApp` con
+   `contexto="cobro"` y los valores `cliente`, `deuda` (`formatearMoney`) y
+   `diasDeuda`. Detalle del modelo de deuda en el doc 11.
+   - La query de ventas pendientes (`estado == 'completada'` y
+     `cobro.estado == 'pendiente'`, por `fecha` desc) se suscribe **recién al
+     elegir el chip**; el agrupado se calcula en memoria, sin campos
+     denormalizados en `clientes`. Índice `ventas (estado, cobro.estado,
+     fecha DESC)` en `apps/quesarte/firestore.indexes.json`.
+   - Estados: cargando ("Cargando deudas…"), error con "Reintentar", vacío
+     ("Nadie debe por ahora.") y aviso "Sin conexión: puede faltar información"
+     si el snapshot viene de la caché.
+   - Sigue siendo un botón por cliente y por toque: no hay "recordar a todos".
+5. Los botones cumplen doc 06: target ≥44px, `aria-label`, y NO entran en el
    flujo de cobro del POS (el presupuesto de ≤3 toques no se toca).
 
 ## Fidelización e inteligencia (extiende doc 07 / Fase 3)
@@ -129,5 +186,10 @@ URL-encoding correcto de emojis, saltos de línea `%0A` y caracteres especiales)
       y usa el global con menos.
 - [ ] Las plantillas son editables en Ajustes (solo admin) y los cambios se
       reflejan sin redeploy.
+- [ ] Chip "Deben" (solo admin): lista la deuda por cliente, la más vieja
+      primero, y su botón abre wa.me con la plantilla `recordatorio-cobro`
+      resuelta ({deuda}, {diasDeuda}, {negocio}).
+- [ ] Un doc de plantillas guardado con las 3 originales igual ofrece la de
+      cobro, sin migrar y sin alterar las plantillas guardadas.
 - [ ] No existe ningún código de envío automático/masivo (revisión de
       senior sobre este punto).

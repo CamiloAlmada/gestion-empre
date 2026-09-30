@@ -1,7 +1,10 @@
 # 11 — Cobros diferidos y cuentas del negocio
 
 Estado: **Fase A implementada** (2026-09-30), pendiente de la prueba manual en
-`quesarte-uy-dev` antes de publicar en producción. Diseño consultado con el `advisor` en
+`quesarte-uy-dev` antes de publicar en producción. **Chip "Deben" en Clientes
+con recordatorio de cobro por WhatsApp implementado** (2026-09-30, commit
+`877b5b6`): reemplaza la pantalla "Por cobrar" (B2) y adelanta el recordatorio
+de la Fase C (ver "Fase B" y "Fase C"). Diseño consultado con el `advisor` en
 dos llamadas (ver `.claude/advisor-log.md`, 2026-09-30). La segunda corrigió la
 primera después de las respuestas de Adrián: el cobro pasó de un mapa único a
 una lista de pagos.
@@ -163,7 +166,8 @@ que respetar.
   reglas.
 - **Historial está paginado:** una venta a cobrar vieja puede no aparecer sin
   "Cargar más". En la Fase A el camino para encontrar deudas es la ficha del
-  cliente ("Debe $X"); la lista "Por cobrar" de la Fase B lo resuelve.
+  cliente ("Debe $X") y, desde el 2026-09-30, el chip "Deben" de Clientes (solo
+  admin), que no está paginado por Historial: trae todas las ventas pendientes.
 - **Anular una venta con pagos** está permitido, con aviso, pero no registra una
   devolución: la plata recibida queda en la venta anulada y no suma en ningún
   reporte.
@@ -199,12 +203,38 @@ A5 y A6. No hace falta índice nuevo en la Fase A.
 | # | Tarea | Agente | Depende de | Criterio de aceptación |
 |---|---|---|---|---|
 | B1 | `configuracion/cuentas` (≤ 10 cuentas), reemplazo total al guardar, reglas, sección en Ajustes | `semisenior` | A | Reglas: vendedor lee ✓ / escribe ✗; shape inválido ✗. Alta y baja de "PREX" y "Santander" |
-| B2 | Lista "Por cobrar": pendientes agrupados por cliente, multi-selección → `registrarPagos`; selector de cuenta si el medio es transferencia | `semisenior` | A5, B1 | Índice `ventas (estado, cobro.estado, fecha DESC)` en el mismo commit; test: 3 ventas seleccionadas → un batch de 3 updates con la misma referencia |
-| B3 | Card "Pendiente de cobro" en Reportes | `semisenior` | B2 | Reutiliza la query de B2; las anuladas no suman |
-| B4 | Verificación sin conexión del registro de pago con el harness de captive portal | orquestador | B2 | El modal cierra en menos de 6 s con Firestore colgado |
+| ~~B2~~ | ~~Lista "Por cobrar": pendientes agrupados por cliente, multi-selección → `registrarPagos`; selector de cuenta si el medio es transferencia~~ | — | — | **Reemplazada (2026-09-30)** por el chip "Deben" en Clientes (ver abajo). La multi-selección, si hace falta, irá en la ficha del cliente y depende de la pregunta abierta 1 |
+| B3 | Card "Pendiente de cobro" en Reportes | `semisenior` | A5 | Reutiliza la query de ventas pendientes del chip "Deben" (`Clientes.tsx`); las anuladas no suman |
+| B4 | Verificación sin conexión del registro de pago con el harness de captive portal | orquestador | A5 | El modal cierra en menos de 6 s con Firestore colgado |
 
-Decisión de UX abierta para B2: dónde cuelga la lista (junto a Historial en el tab
-Venta, o en Clientes). Se decide con Adrián usándolo.
+#### Chip "Deben" en Clientes (implementado 2026-09-30, commit `877b5b6`)
+
+Decisión del `advisor` (llamada 1 de la entrada "Chip 'Deben' en Clientes +
+recordatorio de cobro por WhatsApp" de `.claude/advisor-log.md`): en vez de una
+pantalla "Por cobrar" con multi-selección, un **4.º chip "Deben" en la pantalla
+Clientes, solo admin** (`apps/quesarte/src/pantallas/Clientes.tsx`). Resuelve
+también la duda de UX que tenía B2 (dónde colgar la lista).
+
+- Lista a los clientes con deuda, del que debe hace más al que debe hace menos.
+  Cada fila (`ListaClientesConDeuda.tsx`) muestra "Debe $X · N ventas · hace D
+  días", lleva a la ficha del cliente (donde está el detalle de las ventas a
+  cobrar) y trae el botón de WhatsApp con la plantilla `recordatorio-cobro`
+  (doc 08).
+- Datos: al elegir el chip se suscribe la query `ventas` con `estado ==
+  'completada'`, `cobro.estado == 'pendiente'`, `orderBy fecha desc` (antes no
+  hay listener). El agrupado lo hace la función pura `agruparDeudaPorCliente` de
+  `packages/core/src/cobro.ts` (devuelve `DeudaCliente[]`: `deudaCents`,
+  `cantidadVentas`, `fechaMasAntigua`, `diasDeuda`), sobre `saldoPendienteCents`
+  de cada venta. No hay campos denormalizados en `clientes`.
+- Índice `ventas (estado, cobro.estado, fecha DESC)` agregado en
+  `apps/quesarte/firestore.indexes.json` en el mismo commit.
+- Descartado: pantalla "Por cobrar" con multi-selección ahora (dependía de B1 y
+  de la pregunta abierta 1); stats de deuda denormalizados en `clientes`;
+  suscripción permanente; chip visible al vendedor; migrar el doc de plantillas
+  con un script; un placeholder `{monto}` (ambiguo con `{total}`, se usó
+  `{deuda}`).
+- Pendiente: la multi-selección → `registrarPagos`, si Adrián la necesita, irá
+  en la ficha del cliente y depende de la pregunta abierta 1.
 
 ### Fase C — más adelante
 
@@ -214,8 +244,9 @@ Venta, o en Clientes). Se decide con Adrián usándolo.
   imagen comprimida en el celular (≤ 300 KB), tamaño acotado en reglas y carga
   solo desde el detalle. Sin Blaze y funciona sin conexión. Storage + Blaze (con
   presupuesto 50/90/100 %) solo si eso no alcanza.
-- **Recordatorio por WhatsApp:** plantilla nueva de contexto "cobro" con `{monto}`
-  sobre los links wa.me de doc 08.
+- ~~**Recordatorio por WhatsApp**~~ — **Hecho (2026-09-30)** junto con el chip
+  "Deben": contexto `cobro` con `{deuda}` y `{diasDeuda}` (no `{monto}`) sobre
+  los links wa.me de doc 08, plantilla de fábrica `recordatorio-cobro`.
 - **Vista de caja** ("cobrado en el período").
 - **Pedidos a domicilio** (doc 10): módulo aparte; "a cobrar" es su estado
   "entregado sin cobrar".

@@ -639,7 +639,7 @@ propuesto por el advisor, editable en Ajustes.
 | T2 | Reglas (`'cobro'` en `plantillaWhatsAppValida`) + kit `configuracion.ts` + índice `ventas (estado, cobro.estado, fecha DESC)`, mismo commit | `senior` | ✅ 242 tests de reglas, 420 en el kit |
 | T3 | Chip "Deben" en `Clientes.tsx` + `ListaClientesConDeuda` | `semisenior` | ✅ |
 | T4 | Ajustes y `BotonWhatsApp` con `completarConSeed`; etiquetas y placeholders | `semisenior` | ✅ (rompió 30 tests de otros archivos con mocks viejos; arreglados. Lección: el criterio de un brief que cambia un componente compartido es el monorepo entero, no su carpeta) |
-| T5 | Docs 08 y 11 | `semisenior` | 🔄 en curso |
+| T5 | Docs 08 y 11 | `semisenior` | ✅ |
 | T6 | Prueba manual | dueño | ⏳ |
 
 **Siguiente (pedido del dueño, 2026-09-30): ABM de plantillas de WhatsApp en
