@@ -26,6 +26,7 @@ import { movimientoConverter } from './converters/movimiento';
 import {
   AnulacionInvalidaError,
   ClienteRequeridoError,
+  CobroInvalidoError,
   ItemInvalidoError,
   StockInsuficienteError,
   TotalIncoherenteError,
@@ -152,12 +153,13 @@ interface EfectoVenta {
  * de pendientes consulta. Con un medio real la venta NO lleva `cobro` (omitido,
  * nunca `null`): su ausencia significa "cobrada en el acto".
  *
- * Valida antes de tocar el batch: ítems no vacíos, cliente si es `a_cobrar`,
- * `totalCents` == suma de subtotales, y stock/peso suficiente según los datos
+ * Valida antes de tocar el batch: ítems no vacíos, cliente y total > 0 si es
+ * `a_cobrar`, `totalCents` == suma de subtotales, y stock/peso suficiente según los datos
  * recibidos.
  *
  * @throws {VentaVaciaError} si no hay ítems.
  * @throws {ClienteRequeridoError} si `medioPago === 'a_cobrar'` y no hay cliente.
+ * @throws {CobroInvalidoError} si `medioPago === 'a_cobrar'` y `totalCents <= 0`.
  * @throws {TotalIncoherenteError} si `totalCents` no es la suma de subtotales.
  * @throws {ItemInvalidoError} si un ítem no trae los datos que su `modoStock` exige.
  * @throws {StockInsuficienteError} si el stock/peso local no alcanza para un ítem.
@@ -174,6 +176,11 @@ export async function registrarVenta(
 
   if (medioPago === 'a_cobrar' && cliente === undefined) {
     throw new ClienteRequeridoError('Una venta a cobrar necesita un cliente.');
+  }
+
+  // Un pago exige monto > 0: una venta de $0 a cobrar no podría saldarse nunca.
+  if (medioPago === 'a_cobrar' && totalCents <= 0) {
+    throw new CobroInvalidoError('No se puede dejar a cobrar una venta de $0: no hay nada que cobrar.');
   }
 
   // El total debe ser la suma EXACTA de los subtotales (sin perder ni inventar

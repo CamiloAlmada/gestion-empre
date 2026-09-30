@@ -355,13 +355,14 @@ service cloud.firestore {
     }
 
     // Create de venta: medio de pago en la unión `MedioPago`. `a_cobrar` exige
-    // cliente (a quién se le cobra) y el valor inicial de `cobro`; cualquier
+    // cliente (a quién se le cobra), un total > 0 (un pago exige monto > 0, así que
+    // una venta de $0 no se podría saldar nunca) y el valor inicial de `cobro`; cualquier
     // otro medio NO lleva `cobro` (su ausencia significa "cobrada en el acto").
     function ventaCobroCreateValido() {
       let d = request.resource.data;
       return d.medioPago in ['efectivo', 'debito', 'credito', 'transferencia', 'a_cobrar']
         && (d.medioPago == 'a_cobrar'
-          ? ('clienteId' in d && d.clienteId is string && 'cobro' in d && cobroInicialValido(d.cobro))
+          ? ('clienteId' in d && d.clienteId is string && d.totalCents > 0 && 'cobro' in d && cobroInicialValido(d.cobro))
           : !('cobro' in d));
     }
 

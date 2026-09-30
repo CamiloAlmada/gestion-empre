@@ -1,6 +1,7 @@
 # 11 — Cobros diferidos y cuentas del negocio
 
-Estado: **Fase A en curso** (2026-09-30). Diseño consultado con el `advisor` en
+Estado: **Fase A implementada** (2026-09-30), pendiente de la prueba manual en
+`quesarte-uy-dev` antes de publicar en producción. Diseño consultado con el `advisor` en
 dos llamadas (ver `.claude/advisor-log.md`, 2026-09-30). La segunda corrigió la
 primera después de las respuestas de Adrián: el cobro pasó de un mapa único a
 una lista de pagos.
@@ -138,6 +139,35 @@ La verificación de "pagos anteriores intactos" usa rangos de lista en las regla
 (`pagos[0:n] == anterior`). Hay que comprobar en el emulador que funciona antes de
 escribir la regla definitiva; es el primer paso de la tarea A2.
 
+## Restricciones operativas
+
+Contratos que el código no puede hacer cumplir solo; quien toque esto los tiene
+que respetar.
+
+- **Los pagos los escribe solo el kit, desde el cliente.** La regla compara los
+  pagos anteriores por igualdad; un timestamp con microsegundos (Admin SDK o un
+  script) deja de ser igual cuando el celular lo relee como `Date`, y la regla
+  rechazaría el pago siguiente.
+- **La regla lleva la guarda `n == 0 ||`** delante del rango `pagos[0:n]`: en el
+  emulador `lista[0:0]` lanza "Index out of bound" en vez de devolver `[]`. Lo
+  fija `apps/quesarte/tests/rules/emulador-rango-lista-rules.test.ts`.
+- **Topes:** hasta 20 pagos por venta; id ≤ 40, referencia ≤ 60, `cuentaId` ≤ 40,
+  `cuentaEtiqueta` ≤ 60 caracteres. Kit (`cobros.ts`) y reglas los espejan.
+- **Subir la versión de `cobro` (`v`)** exige desplegar primero un bundle que lea
+  la versión nueva, después el que la escriba, y ajustar `nuevo.v == 1` en las
+  reglas. El converter lanza con una versión desconocida (para no mostrar una
+  deuda como cobrada), y ese error hoy deja colgado en "Cargando…" todo el
+  listado que contenga la venta.
+- **Una venta de $0 no puede quedar a cobrar**: no habría forma de saldarla,
+  porque un pago exige monto > 0. Se bloquea en el modal, en el kit y en las
+  reglas.
+- **Historial está paginado:** una venta a cobrar vieja puede no aparecer sin
+  "Cargar más". En la Fase A el camino para encontrar deudas es la ficha del
+  cliente ("Debe $X"); la lista "Por cobrar" de la Fase B lo resuelve.
+- **Anular una venta con pagos** está permitido, con aviso, pero no registra una
+  devolución: la plata recibida queda en la venta anulada y no suma en ningún
+  reporte.
+
 ## Reportes
 
 La ganancia y las ventas del período siguen contándose por fecha de venta, sin
@@ -197,3 +227,5 @@ Venta, o en Clientes). Se decide con Adrián usándolo.
    pedido pagó o te alcanza con marcarlos todos?
 2. ¿Cuántos días suelen tardar en pagarte, y qué hacés hoy cuando no pagan?
 3. PREX y Santander, ¿en pesos las dos, o alguna en dólares?
+4. Si anulás una venta que ya te pagaron, ¿devolvés la plata o la tomás a cuenta
+   del próximo pedido?

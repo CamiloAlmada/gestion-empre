@@ -616,6 +616,8 @@ pago es el saldo completo (campo visible pero bloqueado).
 | A4 | `ModalCobro` con "A cobrar" | `semisenior` | ✅ commit local, 263 tests de venta |
 | A5 | Detalle de venta: registrar pago / deshacer; badges | `semisenior` | ✅ 1975 tests en la app; helpers de lectura y suma movidos a core (`pagosDe`, `cobradoCents`, `deudaTotalCents`) |
 | A6 | Docs 02 y 07 | `semisenior` | ✅ `be1ae13` |
+| A7 | Venta de $0 no puede quedar a cobrar + test deshacer sobre anulada (cierre del advisor) | `semisenior` | ✅ 240 tests de reglas, 1978 en la app |
+| A8 | Publicar vía PR → prueba manual en el preview de `quesarte-uy-dev` → merge | dueño | ⏳ tras A7 |
 | B, C | ver doc 11 | — | ⏸️ |
 
 **Push de la Fase A: pendiente de la consulta de cierre al advisor y de la prueba manual.** (Antes: no pushear hasta cerrar A5 (antes decía A2+A3; con A2+A3 ya no hay riesgo de datos, pero sin A5 el vendedor podría dejar ventas a cobrar y Adrián no tendría cómo registrar el pago.) Desde A4 el POS

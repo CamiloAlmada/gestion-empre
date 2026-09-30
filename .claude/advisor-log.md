@@ -579,3 +579,27 @@ viejo` y su espejo; cumplió los 22 casos. Hallazgo adicional: un pago escrito
 con precisión de µs (Admin SDK/script) deja de ser igual si el cliente lo relee
 como `Date` y lo reescribe → restricción documentada: los pagos solo los escribe
 el kit desde el cliente.
+
+### Llamada 3 (cierre de la Fase A, todo commiteado local)
+
+**Recomendación textual:** "Publicá vía PR. En el preview de `quesarte-uy-dev`
+corré a mano el criterio de A5 que ningún test automatizado cubre (venta a cobrar
+→ badge → registrar pago sin red → toast → al reconectar queda cobrada; deshacer;
+anular con pago) y recién después mergeá a `main`. No hay nada que impida
+publicar."
+
+**Por qué:** el deploy de reglas a producción es el paso irreversible; el skew
+"bundle viejo + reglas nuevas" es seguro (el create acepta la venta de siempre).
+Lo único sin cobertura es el camino offline en dispositivo real.
+
+**Hallazgos:** (1) el converter que lanza con `v !== 1` cuelga el listado
+entero (latente; se documenta el procedimiento de bump); (2) venta `a_cobrar` de
+$0 queda imposible de saldar; (3) falta el test de reglas "deshacer sobre
+anulada"; (4) Historial paginado; (5) anular con pagos no registra devolución;
+(6) `clienteId is string` admite `''` (no se toca ahora).
+
+**Bloqueantes y resolución (orquestador):** (1) ¿$0 posible? Sí: no hay
+validación de precio > 0 → fix antes del merge (tarea A7, `semisenior`: modal,
+kit y reglas). (2) ¿El preview sube reglas a dev? Sí: el job de PR corre `deploy
+--only firestore --project quesarte-uy-dev` antes del hosting. (3) Prueba
+manual offline: pendiente, la hace el dueño en el preview.

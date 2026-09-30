@@ -91,4 +91,35 @@ describe('ModalCobro', () => {
     rerender(<ModalCobro abierto onCerrar={vi.fn()} total={money(1000)} procesando={false} hayCliente onConfirmar={onConfirmar} />);
     expect((screen.getByRole('button', { name: 'Confirmar' }) as HTMLButtonElement).disabled).toBe(true);
   });
+
+  it('con cliente pero total 0, "A cobrar" está deshabilitado con "No hay nada que cobrar"', () => {
+    render(<ModalCobro abierto onCerrar={vi.fn()} total={money(0)} procesando={false} hayCliente onConfirmar={vi.fn()} />);
+
+    const boton = screen.getByRole('button', { name: 'A cobrar' }) as HTMLButtonElement;
+    expect(boton.disabled).toBe(true);
+    expect(screen.getByText('No hay nada que cobrar')).toBeTruthy();
+    expect(boton.getAttribute('aria-describedby')).toBe(screen.getByText('No hay nada que cobrar').id);
+  });
+
+  it('sin cliente y total 0 se muestra un solo hint: el del total 0', () => {
+    render(<ModalCobro abierto onCerrar={vi.fn()} total={money(0)} procesando={false} hayCliente={false} onConfirmar={vi.fn()} />);
+
+    expect(screen.getByText('No hay nada que cobrar')).toBeTruthy();
+    expect(screen.queryByText('Elegí un cliente')).toBeNull();
+  });
+
+  it('con "A cobrar" elegido, si el total pasa a 0 no se puede confirmar a_cobrar', () => {
+    const onConfirmar = vi.fn();
+    const { rerender } = render(
+      <ModalCobro abierto onCerrar={vi.fn()} total={money(1000)} procesando={false} hayCliente onConfirmar={onConfirmar} />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'A cobrar' }));
+
+    rerender(<ModalCobro abierto onCerrar={vi.fn()} total={money(0)} procesando={false} hayCliente onConfirmar={onConfirmar} />);
+
+    const confirmar = screen.getByRole('button', { name: 'Confirmar' }) as HTMLButtonElement;
+    expect(confirmar.disabled).toBe(true);
+    fireEvent.click(confirmar);
+    expect(onConfirmar).not.toHaveBeenCalled();
+  });
 });

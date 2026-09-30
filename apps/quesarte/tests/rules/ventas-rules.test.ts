@@ -622,6 +622,15 @@ describe('cobros diferidos — create de la venta', () => {
     await assertFails(setDoc(doc(db(VENDEDOR), 'ventas', 'v-cobro-no-inicial'), venta));
   });
 
+  it('✗ a_cobrar con totalCents 0 (no habría forma de saldarla)', async () => {
+    const venta = {
+      ...ventaACobrarCruda(VENDEDOR),
+      items: [{ productoId: 'prod-granel', gramos: 100, precioUnitCents: 0, subtotalCents: 0 }],
+      totalCents: 0,
+    };
+    await assertFails(setDoc(doc(db(VENDEDOR), 'ventas', 'v-total-cero'), venta));
+  });
+
   it('✗ medioPago fuera de la unión', async () => {
     const base = sin(ventaACobrarCruda(VENDEDOR), 'cobro');
     await assertFails(setDoc(doc(db(VENDEDOR), 'ventas', 'v-cheque'), { ...base, medioPago: 'cheque' }));
@@ -772,6 +781,16 @@ describe('cobros diferidos — registrar pago y deshacer', () => {
 
   it('✗ registrar pago sobre una venta anulada', async () => {
     await assertFails(actualizarCobro(ADMIN, 'ac-anulada', cobroCrudo([pagoCrudo('p', 1000, 10)], 1000)));
+  });
+
+  it('✗ deshacer el último pago sobre una venta anulada', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'ventas', 'ac-anulada-con-pago'), {
+        ...ventaACobrarCruda(VENDEDOR, cobroCrudo([PA, PB], 4500)),
+        estado: 'anulada',
+      });
+    });
+    await assertFails(actualizarCobro(ADMIN, 'ac-anulada-con-pago', cobroCrudo([PA], 2000)));
   });
 
   it('✗ deshacer el pago del medio (aritmética válida: solo el espejo lo frena)', async () => {

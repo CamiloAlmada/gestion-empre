@@ -8,7 +8,7 @@ export interface ModalCobroProps {
   total: Money;
   /** `true` mientras se espera el ack del servidor (solo con conexión, ver Venta.tsx). */
   procesando: boolean;
-  /** `true` si la venta en curso tiene cliente asociado: habilita "A cobrar" (docs/11-cobros-diferidos.md). */
+  /** `true` si la venta en curso tiene cliente asociado: habilita "A cobrar" (docs/11-cobros-diferidos.md). Además exige `total > 0`. */
   hayCliente: boolean;
   onConfirmar: (medioPago: MedioPago) => void;
 }
@@ -36,14 +36,19 @@ export function ModalCobro({ abierto, onCerrar, total, procesando, hayCliente, o
     if (abierto) setMedioPago(null);
   }, [abierto]);
 
-  // Si se quita el cliente con "A cobrar" elegido, la selección se limpia.
-  useEffect(() => {
-    if (!hayCliente) setMedioPago((actual) => (actual === 'a_cobrar' ? null : actual));
-  }, [hayCliente]);
+  // "A cobrar" necesita cliente y algo que cobrar: un pago exige monto > 0, así
+  // que una venta de $0 a cobrar no se podría saldar nunca.
+  const totalCero = total <= 0;
+  const puedeACobrar = hayCliente && !totalCero;
 
-  // Defensa en profundidad: aunque el efecto aún no haya corrido, sin cliente
-  // "A cobrar" nunca cuenta como elegido.
-  const medioEfectivo = medioPago === 'a_cobrar' && !hayCliente ? null : medioPago;
+  // Si se quita el cliente (o el total pasa a 0) con "A cobrar" elegido, la selección se limpia.
+  useEffect(() => {
+    if (!puedeACobrar) setMedioPago((actual) => (actual === 'a_cobrar' ? null : actual));
+  }, [puedeACobrar]);
+
+  // Defensa en profundidad: aunque el efecto aún no haya corrido, si "A cobrar"
+  // no está habilitado nunca cuenta como elegido.
+  const medioEfectivo = medioPago === 'a_cobrar' && !puedeACobrar ? null : medioPago;
 
   function confirmar() {
     if (medioEfectivo === null || procesando) return;
@@ -73,14 +78,16 @@ export function ModalCobro({ abierto, onCerrar, total, procesando, hayCliente, o
           {[...OPCIONES_MEDIO_PAGO, OPCION_A_COBRAR].map((opcion) => {
             const esACobrar = opcion.valor === 'a_cobrar';
             const activo = medioEfectivo === opcion.valor;
-            const sinCliente = esACobrar && !hayCliente;
+            const bloqueada = esACobrar && !puedeACobrar;
+            // Un solo hint: el del total 0 gana sobre el del cliente.
+            const hint = bloqueada ? (totalCero ? 'No hay nada que cobrar' : 'Elegí un cliente') : null;
             return (
               <div key={opcion.valor} className={esACobrar ? 'col-span-2 flex flex-col gap-1' : 'contents'}>
                 <button
                   type="button"
                   aria-pressed={activo}
-                  aria-describedby={sinCliente ? 'a-cobrar-hint' : undefined}
-                  disabled={procesando || sinCliente}
+                  aria-describedby={hint !== null ? 'a-cobrar-hint' : undefined}
+                  disabled={procesando || bloqueada}
                   onClick={() => setMedioPago(opcion.valor)}
                   className={`flex min-h-[64px] items-center justify-center rounded-elemento border px-4 text-base font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 disabled:cursor-not-allowed disabled:opacity-50 ${
                     activo ? 'border-primary-600 bg-primary-600 text-white' : 'border-borde bg-superficie text-texto hover:bg-fondo'
@@ -88,9 +95,9 @@ export function ModalCobro({ abierto, onCerrar, total, procesando, hayCliente, o
                 >
                   {opcion.etiqueta}
                 </button>
-                {sinCliente && (
+                {hint !== null && (
                   <p id="a-cobrar-hint" className="text-center text-sm text-texto-secundario">
-                    Elegí un cliente
+                    {hint}
                   </p>
                 )}
               </div>

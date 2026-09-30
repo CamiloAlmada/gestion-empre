@@ -17,6 +17,7 @@ import {
 import {
   AnulacionInvalidaError,
   ClienteRequeridoError,
+  CobroInvalidoError,
   ItemInvalidoError,
   StockInsuficienteError,
   TotalIncoherenteError,
@@ -588,6 +589,19 @@ describe('registrarVenta y el cobro diferido (doc 11)', () => {
     const entrada: EntradaVenta = { ...entradaDe([itemGranel(100, 4500)], 4500), medioPago: 'a_cobrar' };
 
     await expect(registrarVenta(db, entrada)).rejects.toThrow(ClienteRequeridoError);
+    expect(mocks.batch.set).not.toHaveBeenCalled();
+    expect(mocks.batch.update).not.toHaveBeenCalled();
+    expect(mocks.batch.commit).not.toHaveBeenCalled();
+  });
+
+  it('a_cobrar con total 0: lanza CobroInvalidoError sin escribir nada', async () => {
+    const entrada: EntradaVenta = {
+      ...entradaDe([itemGranel(100, 0)], 0),
+      medioPago: 'a_cobrar',
+      cliente: { id: 'cli-1', nombre: 'Marta', esPrimeraCompra: false },
+    };
+
+    await expect(registrarVenta(db, entrada)).rejects.toThrow(CobroInvalidoError);
     expect(mocks.batch.set).not.toHaveBeenCalled();
     expect(mocks.batch.update).not.toHaveBeenCalled();
     expect(mocks.batch.commit).not.toHaveBeenCalled();
