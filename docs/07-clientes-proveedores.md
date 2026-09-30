@@ -17,7 +17,8 @@ estadísticas e inteligencia de compras.
 3. **Cliente OPCIONAL en la venta.** El POS nunca exige cliente: venta anónima
    por defecto, asociar cliente es una acción de un toque (buscar por nombre/
    alias/teléfono, o alta rápida con solo nombre). Si asociar cliente enlentece
-   el mostrador, la feature fracasa.
+   el mostrador, la feature fracasa. **Única excepción (2026-09-30):** una venta
+   "A cobrar" exige cliente (ver "Ventas a cobrar" más abajo); las demás no.
 4. **Datos mínimos.** Son datos personales de gente real: se guarda lo que
    sirve al negocio, nada más. Ningún campo es obligatorio salvo `nombre`.
 5. Los contadores/estadísticas por cliente son **cache denormalizado** que se
@@ -101,6 +102,32 @@ productos/{id} → + proveedorPrincipalId?          // default al armar compras;
 
 Índices nuevos: `ventas (clienteId, fecha desc)`, `compras (proveedorId, fecha desc)`.
 
+### Ventas a cobrar (Cobros diferidos, Fase A, 2026-09-30)
+
+El cliente se lleva la mercadería y paga después. Diseño y roadmap en
+`docs/11-cobros-diferidos.md`; modelo de la venta (`medioPago: 'a_cobrar'`,
+`cobro`, `estadoCobro`) y sus reglas en doc 02, sección "Cobro diferido".
+
+- **Cliente obligatorio, solo en esta forma de cobrar.** Una deuda sin deudor no
+  se puede cobrar. Se exige en tres capas: el modal de cobro deshabilita la
+  opción "A cobrar" y muestra "Elegí un cliente" mientras no haya cliente
+  (`apps/quesarte/src/componentes/venta/ModalCobro.tsx`, prop `hayCliente`);
+  `registrarVenta` lanza `ClienteRequeridoError`
+  (`packages/firebase-kit/src/ventas.ts`, `errores.ts`); y la regla del create
+  (`ventaCobroCreateValido`, `apps/quesarte/firestore.rules`) exige `clienteId`
+  string cuando `medioPago == 'a_cobrar'`. Registrar un pago **no** exige
+  cliente: la venta ya lo tiene.
+- La venta a cobrar suma a `stats` del cliente como cualquier otra
+  (`registrarVenta` incrementa `cantidadVentas` y `totalHistoricoCents` por el
+  total al vender, cobrada o no); anularla revierte igual.
+- **Quién registra los pagos:** solo `admin` (reglas `ventaRegistraPago` y
+  `ventaDeshaceUltimoPago`). El vendedor puede dejar una venta a cobrar, pero no
+  registrarle pagos.
+- **Ficha del cliente: "Debe $X" — Fase A, en implementación.** Todavía no está
+  en `DetalleClientePantalla.tsx`. Lo que va a mostrar sale de la venta con
+  `estadoCobro` y `saldoPendienteCents` (`packages/core/src/cobro.ts`), según
+  doc 11, tarea A5; la Fase A no necesita índice nuevo.
+
 ## Reglas de seguridad
 
 - `clientes`: lectura y creación para `vendedor` (alta rápida en POS) y `admin`;
@@ -125,7 +152,8 @@ productos/{id} → + proveedorPrincipalId?          // default al armar compras;
    no declara acciones de header (doc 06 §2) y su zona inferior es del
    carrito. Buscar o alta rápida en el lugar. La venta anónima conserva el
    presupuesto de ≤3 toques (doc 06 §6); asociar cliente es siempre un paso
-   extra opcional que nunca bloquea el cobro.
+   extra opcional que nunca bloquea el cobro, salvo "A cobrar", que sin cliente
+   queda deshabilitada (ver "Ventas a cobrar").
 3. **Proveedores**: sección interna del tab **Stock**, junto a Compras
    (solo `admin`; se oculta para `vendedor`, como manda doc 06 §2). Listado,
    ficha con datos de pago e historial de compras con totales.

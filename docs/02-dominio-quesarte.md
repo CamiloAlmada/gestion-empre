@@ -134,9 +134,9 @@ gramos o unidades, documento origen (venta/compra/ajuste) y usuario.
 
 Ticket de mostrador. Ítems: producto, pieza (si aplica), peso o cantidad, precio
 unitario congelado al momento de la venta, subtotal. Cabecera: fecha, usuario,
-total, medio de pago (`efectivo` | `debito` | `credito` | `transferencia`),
-estado (`completada` | `anulada`). La anulación NO borra: genera movimientos
-inversos y marca estado.
+total, medio de pago (`efectivo` | `debito` | `credito` | `transferencia` |
+`a_cobrar`, ver "Cobro diferido" abajo), estado (`completada` | `anulada`). La
+anulación NO borra: genera movimientos inversos y marca estado.
 
 **Costo congelado por ítem (`costeo`, Fase 3 / tarea A1).** El costo de un
 producto cambia con cada compra: leerlo después de vender da un número
@@ -168,6 +168,114 @@ Reglas duras (implementadas en `packages/core/src/costeo.ts`):
 **Escritura atómica**: registrar la venta + descontar piezas/stock + crear
 movimientos debe hacerse en una transacción o batch de Firestore.
 
+**Cobro diferido (`a_cobrar`, Cobros diferidos Fase A, 2026-09-30).** La venta y
+el pago no siempre ocurren juntos: el cliente se lleva la mercadería y paga días
+después. Diseño, respuestas de Adrián y roadmap en `docs/11-cobros-diferidos.md`;
+acá, lo que ya está en el código.
+
+- `medioPago: 'a_cobrar'` (`MedioPago` = `MedioPagoReal | 'a_cobrar'`, en
+  `packages/core/src/tipos.ts`). Dice cómo se cerró en el mostrador y **no
+  cambia nunca**: el medio con el que realmente se cobra vive en cada pago
+  (`MedioPagoReal`: `efectivo` | `debito` | `credito` | `transferencia`).
+- `cobro?: CobroVenta` (`tipos.ts`), solo en ventas `a_cobrar`:
+
+```
+cobro?: {
+  v: 1,                                   // versión del esquema
+  estado: 'pendiente' | 'cobrada',        // derivado; se persiste para filtrar sin leer la lista
+  cobradoCents,                           // suma de pagos[].montoCents (derivado, persistido)
+  pagos: [ {                              // PagoVenta; máximo 20 por venta
+    id, fecha, registradoEn,              // fecha: la del comprobante; registradoEn: cuándo se cargó
+    montoCents (> 0), medioPago: MedioPagoReal,
+    usuarioId,                            // quién lo registró
+    referencia?,                          // número de operación (≤ 60 caracteres)
+    cuentaId?, cuentaEtiqueta?            // cuenta del negocio; hoy sin UI ni colección (Fase B)
+  } ]
+}
+```
+
+- **Cuándo existe `cobro`.** `registrarVenta` (`packages/firebase-kit/src/ventas.ts`)
+  lo escribe solo si `medioPago === 'a_cobrar'`, con el valor de `cobroInicial()`
+  (`packages/core/src/cobro.ts`): `{ v: 1, estado: 'pendiente', cobradoCents: 0,
+  pagos: [] }`. Con cualquier otro medio se **omite** (nunca `null`). Su
+  **ausencia** significa "cobrada en el acto" (o venta anterior a esta
+  capacidad).
+- **Cómo se interpreta.** `estadoCobro(venta)` (`core/src/cobro.ts`) es la
+  **única** función autorizada a leer `venta.cobro` y `medioPago === 'a_cobrar'`,
+  con la misma disciplina que `clasificarCosteo`: ninguna pantalla pregunta por
+  `cobro === undefined` a mano. Devuelve `'anulada'` (gana sobre todo, aunque haya
+  pagos), `'cobrada'` (sin `cobro`, o `cobro.estado === 'cobrada'`), `'parcial'`
+  (pendiente con algo cobrado) o `'pendiente'`. `'parcial'` y `'anulada'` se
+  derivan, no se persisten: `cobro.estado` solo vale `pendiente` o `cobrada`.
+  `saldoPendienteCents(venta)` da `totalCents - cobro.cobradoCents`, y `0` si no
+  hay `cobro` o la venta está anulada.
+- **Cómo se escribe.** Los pagos se calculan con funciones puras de core:
+  `aplicarPago(cobro, pago, totalCents)` (lanza `RangeError` si el monto es ≤ 0 o
+  si lo cobrado superaría el total) y `deshacerUltimoPago(cobro, totalCents)`
+  (lanza `RangeError` si no hay pagos); las dos recalculan `cobradoCents` y
+  `estado`. En `packages/firebase-kit/src/cobros.ts`: `registrarPago`,
+  `registrarPagos` (un pago que salda varias ventas: un `writeBatch`, cada venta
+  recibe su saldo con la misma fecha, medio y referencia) y `deshacerUltimoPago`.
+  El update lleva exactamente `{ cobro }`, sin lecturas previas (recibe la venta
+  que el caller ya tiene en memoria; compatible offline, doc 06 §8). Validan de
+  forma síncrona y devuelven la promesa del commit sin esperarla:
+  `CobroInvalidoError` si la venta no está `completada`, no tiene `cobro`, ya
+  tiene 20 pagos o un texto excede su tope; `RangeError` de core para monto ≤ 0 o
+  sobrepago.
+- **Deshacer** solo quita el **último** pago (caso "lo cargué mal"). No hay
+  edición ni borrado de un pago del medio de la lista: las reglas no podrían
+  verificar el resto.
+- **Anulación.** Una venta `a_cobrar` se anula igual que cualquier otra
+  (`anularVenta`); sus pagos quedan como estaban, por auditoría, y `estadoCobro`
+  la devuelve `'anulada'`.
+- **Cliente obligatorio.** Una venta `a_cobrar` exige cliente: `registrarVenta`
+  lanza `ClienteRequeridoError` (`firebase-kit/src/errores.ts`) y la regla del
+  create también (ver doc 07). Las estadísticas del cliente (`stats`) se
+  actualizan igual que en cualquier venta, por el total.
+- **Lectura.** `ventaConverter` (`firebase-kit/src/converters/venta.ts`) lee
+  `cobro` ausente como `undefined`; una versión `v` distinta de 1 **lanza**
+  `RangeError` en vez de degradarse a `undefined`, porque para `estadoCobro`
+  ausente significa "cobrada" y mostrar saldada una deuda es peor que no poder
+  leerla.
+- **Restricción de precisión.** Las reglas comparan los pagos anteriores **por
+  valor**, y el cliente los reenvía tal como los leyó el converter (`Date`, con
+  precisión de milisegundos). Por eso los pagos los escribe solo el kit, desde el
+  cliente: un pago escrito con microsegundos por otro medio (Admin SDK,
+  `Timestamp` de servidor) haría que las reglas rechacen el pago **siguiente**
+  de esa venta (`cobroADoc`, `converters/venta.ts`).
+
+Reglas de Firestore (`apps/quesarte/firestore.rules`, sección "Cobros diferidos"
+y `match /ventas`):
+
+- **create** (usuario activo, como siempre): `ventaCobroCreateValido` restringe
+  `medioPago` a los cinco valores. Si es `a_cobrar`: `clienteId` string
+  obligatorio y `cobro` exactamente igual a `cobroInicial()`
+  (`cobroInicialValido`). Si es otro medio: la venta **no** puede traer `cobro`.
+- **Registrar un pago: solo admin** (`esAdmin() && ventaRegistraPago()`). La venta
+  está `completada` y ya tiene `cobro`; el write solo cambia `cobro`
+  (`soloCambian(['cobro'])`) y con exactamente las claves `v`, `estado`,
+  `cobradoCents`, `pagos` (`ventaCobroUpdateComun`); la lista crece en uno, con
+  tope 20; los pagos anteriores llegan intactos (prefijo de la lista);
+  `pagoVentaValido` valida el pago nuevo (claves exactas, `montoCents` entero
+  > 0, medio real, `fecha` y `registradoEn` timestamp, `usuarioId ==
+  request.auth.uid`, topes de largo); `cobradoCents` es lo anterior más el monto
+  y no supera `totalCents`; `cobroEstadoCoherente` exige `estado == 'cobrada'`
+  si y solo si se cobró el total.
+- **Deshacer el último pago: solo admin** (`ventaDeshaceUltimoPago`): el espejo.
+  La lista se achica en uno, lo que queda es el prefijo de la lista vieja y
+  `cobradoCents` baja exactamente el monto del pago quitado. Sacar un pago del
+  medio, o más de uno, se rechaza.
+- **Guarda de `[0:0]`.** El operador de rango de listas se evalúa distinto en el
+  borde vacío: en el emulador, `l[0:0]` **no** devuelve `[]` sino que lanza
+  "Index out of bound" y la regla deniega (fijado por
+  `apps/quesarte/tests/rules/emulador-rango-lista-rules.test.ts`, con las reglas
+  mínimas de `emulador-rango-lista.rules`). Sin guarda, el primer pago de toda
+  venta (lista vacía) y el deshacer del único pago serían rechazados; por eso
+  las dos funciones escriben `n == 0 || lista[0:n] == ...`. Si una versión
+  futura del emulador cambia, ese test falla y avisa.
+- **Anulación:** sin cambios (admin, `completada` → `anulada`, solo cambia
+  `estado`). El vendedor no gana ninguna regla de update.
+
 ## Unidades y dinero (regla dura)
 
 - **Peso: gramos, entero.** La UI muestra y acepta kg con decimales, pero convierte
@@ -193,8 +301,10 @@ piezas/{id}                → { productoId, pesoInicialGramos, pesoRestanteGram
                                fechaVencimiento?, estado }
 ventas/{id}                → { numero, fecha, usuarioId, items: [ {productoId, piezaId?,
                                gramos?, unidades?, precioUnitCents, subtotalCents,
-                               nombreProducto, costeo?} ], totalCents, medioPago, estado,
-                               clienteId?, clienteNombre? }
+                               nombreProducto, costeo?} ], totalCents,
+                               medioPago ('efectivo'|'debito'|'credito'|'transferencia'|'a_cobrar'),
+                               estado, clienteId?, clienteNombre?,
+                               cobro? }   // solo ventas 'a_cobrar'; ver "Cobro diferido"
 compras/{id}               → ver docs/03
 movimientos/{id}           → { tipo, productoId, piezaId?, deltaGramos?, deltaUnidades?,
                                origenTipo, origenId, usuarioId, fecha, nota? }
@@ -222,8 +332,11 @@ Notas:
   es la garantía estructural de unicidad de nombres (ver "Categoría"). El delete
   está abierto porque el renombrado que cambia de clave muda el documento de path.
 - `rol == 'admin'`: todo.
-- `movimientos` y `ventas`: prohibido update/delete (solo create; anulación vía
-  campo estado con regla que valida transición).
+- `movimientos`: prohibido update/delete (solo create).
+- `ventas`: prohibido delete. Update solo admin y solo de tres formas: anulación
+  (campo `estado`, con regla que valida la transición) y, en ventas `a_cobrar`,
+  registrar o deshacer el último pago (campo `cobro`). Detalle en "Cobro
+  diferido" (venta) y en `docs/11-cobros-diferidos.md`.
 
 ## Pantallas de la app (MVP, ver fases en doc 04)
 
