@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { FirestoreError } from 'firebase/firestore';
 import { PLANTILLAS_SEED, type PlantillaWhatsApp } from '@gestion/core';
 import { ProveedorToasts } from '@gestion/ui';
@@ -33,8 +33,13 @@ function crearRef(path: string): RefFalsa {
   return ref;
 }
 
+const ID_GENERADO = 'id-generado-1';
+
 vi.mock('firebase/firestore', () => ({
-  doc: (_db: unknown, coleccion: string, id: string) => crearRef(`${coleccion}/${id}`),
+  collection: (_db: unknown, nombre: string) => ({ __coleccion: nombre }),
+  // `doc(collection(...))` genera un id local (sin ruta); `doc(db, col, id)` es una ref.
+  doc: (...args: unknown[]) =>
+    args.length === 1 ? { id: ID_GENERADO } : crearRef(`${args[1] as string}/${args[2] as string}`),
 }));
 
 interface EstadoDocFalso {
@@ -197,7 +202,9 @@ describe('SeccionPlantillasWhatsApp', () => {
       renderizar();
 
       fireEvent.click(screen.getByRole('button', { name: 'Restaurar iniciales' }));
-      expect(screen.getByText(/Se pierden los cambios/)).toBeTruthy();
+      expect(
+        screen.getByText('Repone nombre y texto de las plantillas iniciales. Tus plantillas propias no cambian.'),
+      ).toBeTruthy();
 
       fireEvent.click(screen.getByRole('button', { name: 'Restaurar' }));
 
@@ -227,6 +234,234 @@ describe('SeccionPlantillasWhatsApp', () => {
 
       expect(mocks.guardarPlantillasWhatsApp).toHaveBeenCalledTimes(1);
       expect(screen.getByText('Guardado sin conexión. Se sincronizará al reconectar.')).toBeTruthy();
+    });
+  });
+
+  describe('plantillas propias (crear, desactivar, reactivar)', () => {
+    const propia: PlantillaWhatsApp = {
+      id: 'propia-1',
+      nombre: 'Promo de miel',
+      contexto: 'cliente',
+      texto: 'Hola {cliente}! Llegó miel nueva.',
+    };
+    const inactiva: PlantillaWhatsApp = {
+      id: 'propia-2',
+      nombre: 'Vieja promo',
+      contexto: 'venta',
+      texto: 'Texto viejo',
+      activa: false,
+    };
+
+    function configurarLista(lista: PlantillaWhatsApp[]) {
+      configurarPlantillas({ datos: lista, cargando: false, error: null });
+    }
+
+    function botonesDeFila(nombre: string) {
+      const fila = screen.getByText(nombre).closest('li') as HTMLElement;
+      return within(fila);
+    }
+
+    it('crear persiste [...lista, nueva] con el id generado y sin la clave activa', async () => {
+      mocks.guardarPlantillasWhatsApp.mockResolvedValue(undefined);
+      configurarLista([...PLANTILLAS_SEED, propia]);
+      renderizar();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Nueva plantilla' }));
+      fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Retiro demorado' } });
+      fireEvent.change(screen.getByLabelText('Contexto'), { target: { value: 'venta' } });
+      fireEvent.change(screen.getByLabelText('Texto'), { target: { value: 'Hola {cliente}, demoramos un poco.' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+      await waitFor(() => expect(mocks.guardarPlantillasWhatsApp).toHaveBeenCalledTimes(1));
+      const [, guardada] = mocks.guardarPlantillasWhatsApp.mock.calls[0] as [unknown, PlantillaWhatsApp[]];
+      expect(guardada).toEqual([
+        ...PLANTILLAS_SEED,
+        propia,
+        {
+          id: ID_GENERADO,
+          nombre: 'Retiro demorado',
+          contexto: 'venta',
+          texto: 'Hola {cliente}, demoramos un poco.',
+        },
+      ]);
+      expect('activa' in guardada[guardada.length - 1]!).toBe(false);
+      expect(await screen.findByText('Plantilla creada.')).toBeTruthy();
+    });
+
+    it('crear valida nombre y texto vacíos y no persiste', () => {
+      configurarLista([...PLANTILLAS_SEED]);
+      renderizar();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Nueva plantilla' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+      expect(screen.getByText('Ingresá el nombre de la plantilla.')).toBeTruthy();
+      expect(screen.getByText('Ingresá el texto de la plantilla.')).toBeTruthy();
+      expect(mocks.guardarPlantillasWhatsApp).not.toHaveBeenCalled();
+    });
+
+    it('con la lista vacía (estado vacío) no hay "Nueva plantilla"', () => {
+      configurarPlantillas({ datos: [], cargando: false, error: null });
+      renderizar();
+
+      expect(screen.queryByRole('button', { name: 'Nueva plantilla' })).toBeNull();
+    });
+
+    it('con 20 plantillas "Nueva plantilla" queda deshabilitado y se avisa el máximo', () => {
+      const propias: PlantillaWhatsApp[] = Array.from({ length: 16 }, (_, i) => ({
+        id: `propia-${i}`,
+        nombre: `Propia ${i}`,
+        contexto: 'venta',
+        texto: 'Texto',
+      }));
+      configurarLista([...PLANTILLAS_SEED, ...propias]);
+      renderizar();
+
+      expect((screen.getByRole('button', { name: 'Nueva plantilla' }) as HTMLButtonElement).disabled).toBe(true);
+      expect(screen.getByText('Llegaste al máximo de 20 plantillas')).toBeTruthy();
+    });
+
+    it('con 19 plantillas todavía se puede crear', () => {
+      const propias: PlantillaWhatsApp[] = Array.from({ length: 15 }, (_, i) => ({
+        id: `propia-${i}`,
+        nombre: `Propia ${i}`,
+        contexto: 'venta',
+        texto: 'Texto',
+      }));
+      configurarLista([...PLANTILLAS_SEED, ...propias]);
+      renderizar();
+
+      expect((screen.getByRole('button', { name: 'Nueva plantilla' }) as HTMLButtonElement).disabled).toBe(false);
+      expect(screen.queryByText(/Llegaste al máximo/)).toBeNull();
+    });
+
+    it('editar una propia permite cambiar el contexto y persiste nombre, contexto y texto', async () => {
+      mocks.guardarPlantillasWhatsApp.mockResolvedValue(undefined);
+      configurarLista([...PLANTILLAS_SEED, propia]);
+      renderizar();
+
+      fireEvent.click(botonesDeFila('Promo de miel').getByRole('button', { name: 'Editar' }));
+      expect((screen.getByLabelText('Contexto') as HTMLSelectElement).value).toBe('cliente');
+      fireEvent.change(screen.getByLabelText('Contexto'), { target: { value: 'inactivo' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+      await waitFor(() => expect(mocks.guardarPlantillasWhatsApp).toHaveBeenCalledTimes(1));
+      const [, guardada] = mocks.guardarPlantillasWhatsApp.mock.calls[0] as [unknown, PlantillaWhatsApp[]];
+      expect(guardada.find((p) => p.id === 'propia-1')).toEqual({ ...propia, contexto: 'inactivo' });
+    });
+
+    it('una de fábrica no permite cambiar el contexto ni muestra Desactivar/Reactivar', () => {
+      configurarLista([...PLANTILLAS_SEED, propia]);
+      renderizar();
+
+      const fila = botonesDeFila('Pedido listo');
+      expect(fila.queryByRole('button', { name: 'Desactivar' })).toBeNull();
+      expect(fila.queryByRole('button', { name: 'Reactivar' })).toBeNull();
+      // Solo la propia ofrece Desactivar.
+      expect(screen.getAllByRole('button', { name: 'Desactivar' })).toHaveLength(1);
+
+      fireEvent.click(fila.getByRole('button', { name: 'Editar' }));
+      expect(screen.queryByLabelText('Contexto')).toBeNull();
+      expect(screen.getByRole('button', { name: 'Restaurar texto original' })).toBeTruthy();
+    });
+
+    it('editar una de fábrica conserva su contexto', async () => {
+      mocks.guardarPlantillasWhatsApp.mockResolvedValue(undefined);
+      configurarLista([...PLANTILLAS_SEED]);
+      renderizar();
+
+      fireEvent.click(botonesDeFila('Pedido listo').getByRole('button', { name: 'Editar' }));
+      fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Pedido listo!' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+      await waitFor(() => expect(mocks.guardarPlantillasWhatsApp).toHaveBeenCalledTimes(1));
+      const [, guardada] = mocks.guardarPlantillasWhatsApp.mock.calls[0] as [unknown, PlantillaWhatsApp[]];
+      expect(guardada.find((p) => p.id === 'pedido-listo')).toEqual({
+        ...PLANTILLAS_SEED[0]!,
+        nombre: 'Pedido listo!',
+      });
+    });
+
+    it('desactivar pide confirmación y persiste activa:false solo en esa plantilla', async () => {
+      mocks.guardarPlantillasWhatsApp.mockResolvedValue(undefined);
+      configurarLista([...PLANTILLAS_SEED, propia]);
+      renderizar();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Desactivar' }));
+      expect(
+        screen.getByText('La plantilla deja de aparecer en el botón de WhatsApp. Podés reactivarla cuando quieras.'),
+      ).toBeTruthy();
+      expect(mocks.guardarPlantillasWhatsApp).not.toHaveBeenCalled();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Confirmar desactivación' }));
+
+      await waitFor(() => expect(mocks.guardarPlantillasWhatsApp).toHaveBeenCalledTimes(1));
+      const [, guardada] = mocks.guardarPlantillasWhatsApp.mock.calls[0] as [unknown, PlantillaWhatsApp[]];
+      expect(guardada).toEqual([...PLANTILLAS_SEED, { ...propia, activa: false }]);
+      expect(await screen.findByText('Plantilla desactivada.')).toBeTruthy();
+    });
+
+    it('cancelar la confirmación de desactivar no persiste nada', () => {
+      configurarLista([...PLANTILLAS_SEED, propia]);
+      renderizar();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Desactivar' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+
+      expect(mocks.guardarPlantillasWhatsApp).not.toHaveBeenCalled();
+    });
+
+    it('una inactiva muestra el badge "Inactiva" y Reactivar (sin Desactivar)', () => {
+      configurarLista([...PLANTILLAS_SEED, inactiva]);
+      renderizar();
+
+      const fila = botonesDeFila('Vieja promo');
+      expect(fila.getByText('Inactiva')).toBeTruthy();
+      expect(fila.getByRole('button', { name: 'Reactivar' })).toBeTruthy();
+      expect(fila.queryByRole('button', { name: 'Desactivar' })).toBeNull();
+      expect(screen.getAllByText('Inactiva')).toHaveLength(1);
+    });
+
+    it('reactivar no pide confirmación y persiste la plantilla sin la clave activa', async () => {
+      mocks.guardarPlantillasWhatsApp.mockResolvedValue(undefined);
+      configurarLista([...PLANTILLAS_SEED, inactiva]);
+      renderizar();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Reactivar' }));
+
+      await waitFor(() => expect(mocks.guardarPlantillasWhatsApp).toHaveBeenCalledTimes(1));
+      const [, guardada] = mocks.guardarPlantillasWhatsApp.mock.calls[0] as [unknown, PlantillaWhatsApp[]];
+      const reactivada = guardada.find((p) => p.id === 'propia-2')!;
+      expect('activa' in reactivada).toBe(false);
+      expect(reactivada).toEqual({ id: 'propia-2', nombre: 'Vieja promo', contexto: 'venta', texto: 'Texto viejo' });
+      expect(await screen.findByText('Plantilla reactivada.')).toBeTruthy();
+    });
+
+    it('restaurar iniciales conserva las propias (incluida una inactiva) y repone las de fábrica', async () => {
+      mocks.guardarPlantillasWhatsApp.mockResolvedValue(undefined);
+      const editadaDeFabrica: PlantillaWhatsApp = { ...PLANTILLAS_SEED[0]!, nombre: 'Editada', texto: 'Cambiado' };
+      configurarLista([editadaDeFabrica, propia, inactiva, ...PLANTILLAS_SEED.slice(1)]);
+      renderizar();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Restaurar iniciales' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Restaurar' }));
+
+      await waitFor(() => expect(mocks.guardarPlantillasWhatsApp).toHaveBeenCalledTimes(1));
+      const [, guardada] = mocks.guardarPlantillasWhatsApp.mock.calls[0] as [unknown, PlantillaWhatsApp[]];
+      expect(guardada).toEqual([PLANTILLAS_SEED[0], propia, inactiva, ...PLANTILLAS_SEED.slice(1)]);
+      expect(guardada.find((p) => p.id === 'propia-2')?.activa).toBe(false);
+    });
+
+    it('error al desactivar: avisa y no cierra la confirmación', async () => {
+      mocks.guardarPlantillasWhatsApp.mockRejectedValue(new Error('fallo'));
+      configurarLista([...PLANTILLAS_SEED, propia]);
+      renderizar();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Desactivar' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Confirmar desactivación' }));
+
+      expect(await screen.findByText('No se pudo desactivar la plantilla. Intentá de nuevo.')).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Confirmar desactivación' })).toBeTruthy();
     });
   });
 });

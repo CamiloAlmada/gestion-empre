@@ -207,6 +207,48 @@ describe('BotonWhatsApp - selector (VARIAS plantillas del contexto)', () => {
   });
 });
 
+describe('BotonWhatsApp - plantillas inactivas', () => {
+  it('no ofrece las plantillas desactivadas: con una sola activa en el contexto abre directo', () => {
+    configurarDocs({
+      configuracion: okConfig(null),
+      plantillas: okPlantillas([
+        plantilla({ id: 'pedido-listo', contexto: 'venta', nombre: 'Pedido listo', texto: 'Hola {cliente}, pedido listo' }),
+        plantilla({ id: 'propia-1', contexto: 'venta', nombre: 'Vieja', texto: 'Texto viejo', activa: false }),
+      ]),
+    });
+    const spy = vi.spyOn(window, 'open').mockImplementation(() => null);
+
+    render(<BotonWhatsApp telefonoE164="59899123456" contexto="venta" valores={{ cliente: 'Ana' }} db={{} as never} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar WhatsApp a Ana' }));
+
+    // Sin selector: abre wa.me directo con la única activa.
+    expect(spy).toHaveBeenCalledTimes(1);
+    const [url] = spy.mock.calls[0] as [string];
+    expect(url).toBe(`https://wa.me/59899123456?text=${encodeURIComponent('Hola Ana, pedido listo')}`);
+    expect(screen.queryByText('Vieja')).toBeNull();
+  });
+
+  it('con varias activas y una inactiva, el selector lista solo las activas', () => {
+    configurarDocs({
+      configuracion: okConfig(null),
+      plantillas: okPlantillas([
+        plantilla({ id: 'pedido-listo', contexto: 'venta', nombre: 'Pedido listo' }),
+        plantilla({ id: 'propia-1', contexto: 'venta', nombre: 'Otra activa' }),
+        plantilla({ id: 'propia-2', contexto: 'venta', nombre: 'Apagada', activa: false }),
+      ]),
+    });
+    const spy = vi.spyOn(window, 'open').mockImplementation(() => null);
+
+    render(<BotonWhatsApp telefonoE164="59899123456" contexto="venta" valores={{ cliente: 'Ana' }} db={{} as never} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar WhatsApp a Ana' }));
+
+    expect(spy).not.toHaveBeenCalled();
+    expect(screen.getByText('Pedido listo')).toBeTruthy();
+    expect(screen.getByText('Otra activa')).toBeTruthy();
+    expect(screen.queryByText('Apagada')).toBeNull();
+  });
+});
+
 describe('BotonWhatsApp - fallback a PLANTILLAS_SEED', () => {
   it('sin doc de plantillas (ausente): usa el seed para el contexto', () => {
     configurarDocs({ configuracion: okConfig(null), plantillas: okPlantillas(null) });

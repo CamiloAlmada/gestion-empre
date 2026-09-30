@@ -5,6 +5,7 @@ import {
   normalizarTelefono,
   resolverPlantilla,
   completarConSeed,
+  plantillasActivas,
   PLANTILLAS_SEED,
   type ContextoPlantilla,
   type PlantillaWhatsApp,
@@ -111,9 +112,10 @@ export function BotonWhatsApp({
   // una plantilla nueva (p. ej. `recordatorio-cobro`) igual la ofrece, sin
   // migrar datos. Si el doc está vacío o ausente, queda el seed completo (doc
   // 08 — "la demo no puede depender de que Ajustes haya sembrado").
-  const todasLasPlantillas: readonly PlantillaWhatsApp[] = completarConSeed(
-    plantillasDoc.datos ?? [],
-    PLANTILLAS_SEED,
+  // Solo las activas: las plantillas propias desactivadas en Ajustes no se ofrecen
+  // (las de fábrica no se pueden desactivar, así que siempre queda una por contexto).
+  const todasLasPlantillas: readonly PlantillaWhatsApp[] = plantillasActivas(
+    completarConSeed(plantillasDoc.datos ?? [], PLANTILLAS_SEED),
   );
   const plantillasContexto = todasLasPlantillas.filter((p) => p.contexto === contexto);
 

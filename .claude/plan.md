@@ -665,6 +665,12 @@ propias. Vocabulario: "Desactivar" / "Reactivar" / badge "Inactiva".
 | # | Tarea | Agente | Estado |
 | --- | --- | --- | --- |
 | P1 | core: `activa?`, `esPlantillaDeFabrica`, `plantillasActivas`, `restaurarPlantillasDeFabrica` | `semisenior` | ✅ 500 tests en core |
-| P2 | Kit + converter + reglas | `senior` | 🔄 en curso |
-| P3 | UI: crear, desactivar/reactivar, contexto en propias, restaurar; `BotonWhatsApp` filtra activas | `semisenior` | 🔄 en curso |
-| P4 | Doc 08 | `semisenior` | ⏳ P3 |
+| P2 | Kit + converter + reglas | `senior` | ✅ 245 tests de reglas, 431 en el kit |
+| P3 | UI: crear, desactivar/reactivar, contexto en propias, restaurar; `BotonWhatsApp` filtra activas | `semisenior` | ✅ 2021 tests en la app |
+| P4 | Doc 08 | `semisenior` | 🔄 en curso |
+
+**Deuda anotada:** (1) `MAX_PLANTILLAS = 20` está duplicada en
+`SeccionPlantillasWhatsApp.tsx` porque el kit no la exporta: exportarla de un
+solo lugar. (2) `DetalleProveedorPantalla.test.tsx` > "edición > sin conexión:
+cierra el modal sin esperar el ack" falla de forma intermitente bajo carga
+(visto dos veces el 2026-09-30; pasa aislado): revisar el timing del `dialog`.

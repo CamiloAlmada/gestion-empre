@@ -47,3 +47,58 @@ describe('plantillasWhatsAppConverter.toFirestore', () => {
     expect(reconstruido).toEqual([...PLANTILLAS_SEED]);
   });
 });
+
+describe('plantillasWhatsAppConverter — activa (baja lógica de propias, doc 08)', () => {
+  const propiaInactiva: PlantillaWhatsApp = {
+    id: 'propia-1',
+    nombre: 'Promo quesos',
+    contexto: 'cliente',
+    texto: 'Hola {cliente}!',
+    activa: false,
+  };
+
+  it('toFirestore escribe activa: false de una propia inactiva', () => {
+    const doc = plantillasWhatsAppConverter.toFirestore([propiaInactiva]);
+    expect(doc).toEqual({ plantillas: [{ ...propiaInactiva }] });
+  });
+
+  it('toFirestore NO escribe la clave activa de una activa (ni ausente ni true)', () => {
+    const sinActiva: PlantillaWhatsApp = {
+      id: 'propia-1',
+      nombre: 'Promo quesos',
+      contexto: 'cliente',
+      texto: 'Hola {cliente}!',
+    };
+    const doc = plantillasWhatsAppConverter.toFirestore([
+      sinActiva,
+      { ...sinActiva, id: 'propia-2', activa: true },
+    ]) as { plantillas: Record<string, unknown>[] };
+    expect(doc.plantillas).toHaveLength(2);
+    for (const p of doc.plantillas) {
+      expect(p).not.toHaveProperty('activa');
+    }
+  });
+
+  it('round-trip: una propia inactiva conserva activa: false', () => {
+    const doc = plantillasWhatsAppConverter.toFirestore([propiaInactiva]);
+    const reconstruido = plantillasWhatsAppConverter.fromFirestore(snapshotDe(doc), {});
+    expect(reconstruido).toEqual([propiaInactiva]);
+  });
+
+  it('fromFirestore: activa true o ausente → sin la clave; false → activa: false', () => {
+    const base = { nombre: 'X', contexto: 'venta', texto: 'Hola' };
+    const [conTrue, sinClave, conFalse] = plantillasWhatsAppConverter.fromFirestore(
+      snapshotDe({
+        plantillas: [
+          { ...base, id: 'a', activa: true },
+          { ...base, id: 'b' },
+          { ...base, id: 'c', activa: false },
+        ],
+      }),
+      {},
+    );
+    expect(conTrue).not.toHaveProperty('activa');
+    expect(sinClave).not.toHaveProperty('activa');
+    expect(conFalse).toEqual({ ...base, id: 'c', activa: false });
+  });
+});

@@ -254,19 +254,24 @@ service cloud.firestore {
         && d.tinte in ['neutro', 'calido', 'frio'];
     }
 
-    // Shape de UNA plantilla de WhatsApp (doc 08): exactamente
-    // { id, nombre, texto, contexto in ['venta','cliente','inactivo','cobro'] },
-    // strings acotados. La lista de contextos espeja `ContextoPlantilla` de core
-    // (`cobro`: recordatorio de deuda, doc 11). Se aplica al primer elemento de la
-    // lista (ver `plantillasWhatsAppValidas`).
+    // Shape de UNA plantilla de WhatsApp (doc 08): { id, nombre, texto,
+    // contexto in ['venta','cliente','inactivo','cobro'] } obligatorios, strings
+    // acotados, y `activa` OPCIONAL booleana (baja lógica de las plantillas
+    // propias; el kit solo persiste `activa: false`, ausente = activa). La lista de
+    // contextos espeja `ContextoPlantilla` de core (`cobro`: recordatorio de deuda,
+    // doc 11). Se aplica al primer elemento de la lista (ver
+    // `plantillasWhatsAppValidas`). Las reglas NO saben qué ids son de fábrica: que
+    // las de fábrica no se desactiven ni cambien de contexto lo imponen el kit
+    // (`guardarPlantillasWhatsApp`) y la UI.
     function plantillaWhatsAppValida(p) {
       return p is map
-        && p.keys().hasOnly(['id', 'nombre', 'texto', 'contexto'])
+        && p.keys().hasOnly(['id', 'nombre', 'texto', 'contexto', 'activa'])
         && p.keys().hasAll(['id', 'nombre', 'texto', 'contexto'])
         && p.id is string && p.id.size() >= 1 && p.id.size() <= 40
         && p.nombre is string && p.nombre.size() >= 1 && p.nombre.size() <= 60
         && p.texto is string && p.texto.size() >= 1 && p.texto.size() <= 1000
-        && p.contexto in ['venta', 'cliente', 'inactivo', 'cobro'];
+        && p.contexto in ['venta', 'cliente', 'inactivo', 'cobro']
+        && (!('activa' in p) || p.activa is bool);
     }
 
     // Shape estricto de `configuracion/plantillasWhatsApp` (doc 08): un único doc

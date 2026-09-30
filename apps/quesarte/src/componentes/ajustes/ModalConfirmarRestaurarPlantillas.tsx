@@ -8,7 +8,7 @@ export interface ModalConfirmarRestaurarPlantillasProps {
 }
 
 /**
- * Confirma "Restaurar iniciales" (todas las plantillas, no solo una):
+ * Confirma "Restaurar iniciales" (todas las plantillas de fábrica, no solo una):
  * a diferencia de "Restaurar texto original" dentro de `ModalPlantillaWhatsApp`
  * (que solo cambia un borrador que todavía requiere "Guardar"), este botón
  * pisa todas las plantillas de una sola vez sin paso intermedio de revisión —
@@ -37,7 +37,7 @@ export function ModalConfirmarRestaurarPlantillas({
       }
     >
       <p className="text-texto">
-        Se pierden los cambios que hayas hecho en las plantillas y vuelven a su texto original.
+        Repone nombre y texto de las plantillas iniciales. Tus plantillas propias no cambian.
       </p>
     </Modal>
   );

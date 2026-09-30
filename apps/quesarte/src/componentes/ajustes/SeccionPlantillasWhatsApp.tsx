@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { doc } from 'firebase/firestore';
+import { collection, doc } from 'firebase/firestore';
 import { Button, useToasts } from '@gestion/ui';
 import {
   guardarPlantillasWhatsApp,
@@ -7,38 +7,56 @@ import {
   useDoc,
   useOnlineStatus,
 } from '@gestion/firebase-kit';
-import { PLANTILLAS_SEED, completarConSeed, type ContextoPlantilla, type PlantillaWhatsApp } from '@gestion/core';
+import {
+  PLANTILLAS_SEED,
+  completarConSeed,
+  esPlantillaDeFabrica,
+  restaurarPlantillasDeFabrica,
+  type PlantillaWhatsApp,
+} from '@gestion/core';
 import { db } from '../../firebase';
 import { ModalConfirmarRestaurarPlantillas } from './ModalConfirmarRestaurarPlantillas';
-import { ModalPlantillaWhatsApp, type DatosEdicionPlantilla } from './ModalPlantillaWhatsApp';
+import { ModalConfirmarDesactivarPlantilla } from './ModalConfirmarDesactivarPlantilla';
+import {
+  ETIQUETA_CONTEXTO,
+  ModalPlantillaWhatsApp,
+  type DatosEdicionPlantilla,
+} from './ModalPlantillaWhatsApp';
 
-const ETIQUETA_CONTEXTO: Record<ContextoPlantilla, string> = {
-  venta: 'Venta',
-  cliente: 'Cliente',
-  inactivo: 'Cliente inactivo',
-  cobro: 'Cobro',
-};
+/** Tope de plantillas del documento (mismo valor que valida `guardarPlantillasWhatsApp`). */
+const MAX_PLANTILLAS = 20;
+
+/** La misma plantilla sin la clave `activa` (activa = ausente, nunca `activa: true`). */
+function sinActiva(p: PlantillaWhatsApp): PlantillaWhatsApp {
+  return { id: p.id, nombre: p.nombre, contexto: p.contexto, texto: p.texto };
+}
+
+interface OpcionesPersistencia {
+  exito: string;
+  error: string;
+  errorSync: string;
+  /** Marca/desmarca el estado "ocupado" de la acción (solo con conexión). */
+  setOcupado?: (ocupado: boolean) => void;
+  /** Se llama al terminar (tras el ack con conexión; al toque sin conexión). */
+  alTerminar?: () => void;
+}
 
 /**
  * Sección "Plantillas de WhatsApp" de Ajustes (solo admin, doc 08).
  *
- * ALCANCE CERRADO (WA-C1): solo se editan y restauran las plantillas del
- * seed (`PLANTILLAS_SEED`, 4 plantillas). Esta sección NO ofrece agregar ni
- * borrar plantillas — si `configuracion/plantillasWhatsApp` llegara a tener
- * una plantilla con un `id` fuera del seed (no hay forma de crear una desde
- * acá hoy), se lista igual pero sin botón "Restaurar texto original" (no hay
- * seed con qué compararla).
+ * El admin puede crear plantillas propias (hasta 20 en total), editar cualquiera y
+ * desactivar / reactivar solo las propias. Las de fábrica (`PLANTILLAS_SEED`) se
+ * editan (nombre y texto) pero no se desactivan ni cambian de contexto.
+ * "Restaurar iniciales" repone únicamente las de fábrica (`restaurarPlantillasDeFabrica`).
  *
  * La lista mostrada es SIEMPRE `completarConSeed(guardadas, PLANTILLAS_SEED)`:
- * si el doc guardado es anterior a una plantilla nueva del seed (p. ej. el doc
- * de producción con las 3 originales y el `recordatorio-cobro` agregado
- * después), la faltante aparece igual y la primera edición persiste las 4, sin
- * migrar datos ni pisar lo que el dueño editó. Con el doc ausente o vacío se
- * mantiene el estado vacío ("Cargar plantillas iniciales").
+ * si el doc guardado es anterior a una plantilla nueva del seed, la faltante
+ * aparece igual y la primera escritura persiste todas, sin migrar datos ni pisar lo
+ * que el dueño editó. Con el doc ausente o vacío se mantiene el estado vacío
+ * ("Cargar plantillas iniciales").
  *
- * Documento único (edición atómica, ver `guardarPlantillasWhatsApp`): tanto
- * sembrar desde vacío como editar una plantilla puntual como restaurar
- * reescriben la LISTA COMPLETA.
+ * Documento único (edición atómica, ver `guardarPlantillasWhatsApp`): toda acción
+ * reescribe la LISTA COMPLETA.
  */
 export function SeccionPlantillasWhatsApp() {
   const enLinea = useOnlineStatus();
@@ -50,6 +68,10 @@ export function SeccionPlantillasWhatsApp() {
   const [guardandoEdicion, setGuardandoEdicion] = useState(false);
   const [modalRestaurarAbierto, setModalRestaurarAbierto] = useState(false);
   const [restaurando, setRestaurando] = useState(false);
+  const [creando, setCreando] = useState(false);
+  const [plantillaDesactivando, setPlantillaDesactivando] = useState<PlantillaWhatsApp | null>(null);
+  const [desactivando, setDesactivando] = useState(false);
+  const [reactivando, setReactivando] = useState(false);
 
   // `useDoc` no expone "reintentar": fuerza una resuscripción cambiando la
   // IDENTIDAD del ref (nuevo `doc()` en cada intento), mismo truco que
@@ -70,59 +92,119 @@ export function SeccionPlantillasWhatsApp() {
     return guardarPlantillasWhatsApp(db, lista);
   }
 
-  async function sembrar() {
-    setSembrando(true);
-    const escritura = escribir(PLANTILLAS_SEED);
+  /**
+   * Patrón híbrido de escrituras offline (docs/06-ui-ux.md §8): con conexión espera
+   * el ack y avisa; sin conexión dispara la escritura sin esperar, avisa con un toast
+   * informativo y deja que un error posterior se reporte aparte.
+   */
+  async function persistir(lista: readonly PlantillaWhatsApp[], opciones: OpcionesPersistencia) {
+    const escritura = escribir(lista);
 
     if (!enLinea) {
       mostrarToast('Guardado sin conexión. Se sincronizará al reconectar.', 'info');
-      escritura.catch(() => mostrarToast('No se pudo sincronizar las plantillas.', 'error'));
-      setSembrando(false);
+      escritura.catch(() => mostrarToast(opciones.errorSync, 'error'));
+      opciones.alTerminar?.();
       return;
     }
 
+    opciones.setOcupado?.(true);
     try {
       await escritura;
-      mostrarToast('Plantillas iniciales cargadas.', 'exito');
+      mostrarToast(opciones.exito, 'exito');
+      opciones.alTerminar?.();
     } catch {
-      mostrarToast('No se pudieron cargar las plantillas. Intentá de nuevo.', 'error');
+      mostrarToast(opciones.error, 'error');
     } finally {
-      setSembrando(false);
+      opciones.setOcupado?.(false);
     }
+  }
+
+  function sembrar() {
+    return persistir(PLANTILLAS_SEED, {
+      exito: 'Plantillas iniciales cargadas.',
+      error: 'No se pudieron cargar las plantillas. Intentá de nuevo.',
+      errorSync: 'No se pudo sincronizar las plantillas.',
+      setOcupado: setSembrando,
+    });
+  }
+
+  function abrirCreacion() {
+    setCreando(true);
   }
 
   function abrirEdicion(plantilla: PlantillaWhatsApp) {
     setPlantillaEditando(plantilla);
   }
 
-  function cerrarEdicion() {
+  function cerrarModalPlantilla() {
     setPlantillaEditando(null);
+    setCreando(false);
   }
 
-  async function guardarEdicion(datos: DatosEdicionPlantilla) {
-    if (plantillaEditando === null) return;
+  function guardarModalPlantilla(datos: DatosEdicionPlantilla) {
+    if (plantillaEditando === null) {
+      if (lista.length >= MAX_PLANTILLAS) return;
+      // Id local del SDK (sin red): solo lo genera, no escribe ningún documento.
+      const nueva: PlantillaWhatsApp = {
+        id: doc(collection(db, 'configuracion')).id,
+        nombre: datos.nombre,
+        contexto: datos.contexto,
+        texto: datos.texto,
+      };
+      return persistir([...lista, nueva], {
+        exito: 'Plantilla creada.',
+        error: 'No se pudo crear la plantilla. Intentá de nuevo.',
+        errorSync: 'No se pudo sincronizar la plantilla.',
+        setOcupado: setGuardandoEdicion,
+        alTerminar: cerrarModalPlantilla,
+      });
+    }
+
+    const editando = plantillaEditando;
+    const propia = !esPlantillaDeFabrica(editando.id);
     const listaActualizada = lista.map((p) =>
-      p.id === plantillaEditando.id ? { ...p, nombre: datos.nombre, texto: datos.texto } : p,
+      p.id === editando.id
+        ? { ...p, nombre: datos.nombre, texto: datos.texto, ...(propia ? { contexto: datos.contexto } : {}) }
+        : p,
     );
-    const escritura = escribir(listaActualizada);
+    return persistir(listaActualizada, {
+      exito: 'Plantilla guardada.',
+      error: 'No se pudo guardar la plantilla. Intentá de nuevo.',
+      errorSync: 'No se pudo sincronizar la plantilla.',
+      setOcupado: setGuardandoEdicion,
+      alTerminar: cerrarModalPlantilla,
+    });
+  }
 
-    if (!enLinea) {
-      mostrarToast('Guardado sin conexión. Se sincronizará al reconectar.', 'info');
-      escritura.catch(() => mostrarToast('No se pudo sincronizar la plantilla.', 'error'));
-      cerrarEdicion();
-      return;
-    }
+  function cerrarModalDesactivar() {
+    setPlantillaDesactivando(null);
+  }
 
-    setGuardandoEdicion(true);
-    try {
-      await escritura;
-      mostrarToast('Plantilla guardada.', 'exito');
-      cerrarEdicion();
-    } catch {
-      mostrarToast('No se pudo guardar la plantilla. Intentá de nuevo.', 'error');
-    } finally {
-      setGuardandoEdicion(false);
-    }
+  function desactivarPlantilla() {
+    if (plantillaDesactivando === null) return;
+    const id = plantillaDesactivando.id;
+    return persistir(
+      lista.map((p) => (p.id === id ? { ...p, activa: false } : p)),
+      {
+        exito: 'Plantilla desactivada.',
+        error: 'No se pudo desactivar la plantilla. Intentá de nuevo.',
+        errorSync: 'No se pudo sincronizar la desactivación.',
+        setOcupado: setDesactivando,
+        alTerminar: cerrarModalDesactivar,
+      },
+    );
+  }
+
+  function reactivarPlantilla(plantilla: PlantillaWhatsApp) {
+    return persistir(
+      lista.map((p) => (p.id === plantilla.id ? sinActiva(p) : p)),
+      {
+        exito: 'Plantilla reactivada.',
+        error: 'No se pudo reactivar la plantilla. Intentá de nuevo.',
+        errorSync: 'No se pudo sincronizar la reactivación.',
+        setOcupado: setReactivando,
+      },
+    );
   }
 
   function abrirModalRestaurar() {
@@ -133,26 +215,14 @@ export function SeccionPlantillasWhatsApp() {
     setModalRestaurarAbierto(false);
   }
 
-  async function restaurarTodas() {
-    const escritura = escribir(PLANTILLAS_SEED);
-
-    if (!enLinea) {
-      mostrarToast('Guardado sin conexión. Se sincronizará al reconectar.', 'info');
-      escritura.catch(() => mostrarToast('No se pudo sincronizar la restauración.', 'error'));
-      cerrarModalRestaurar();
-      return;
-    }
-
-    setRestaurando(true);
-    try {
-      await escritura;
-      mostrarToast('Plantillas restauradas.', 'exito');
-      cerrarModalRestaurar();
-    } catch {
-      mostrarToast('No se pudieron restaurar las plantillas. Intentá de nuevo.', 'error');
-    } finally {
-      setRestaurando(false);
-    }
+  function restaurarTodas() {
+    return persistir(restaurarPlantillasDeFabrica(lista), {
+      exito: 'Plantillas restauradas.',
+      error: 'No se pudieron restaurar las plantillas. Intentá de nuevo.',
+      errorSync: 'No se pudo sincronizar la restauración.',
+      setOcupado: setRestaurando,
+      alTerminar: cerrarModalRestaurar,
+    });
   }
 
   if (cargando) {
@@ -189,40 +259,83 @@ export function SeccionPlantillasWhatsApp() {
     );
   }
 
+  const llegoAlMaximo = lista.length >= MAX_PLANTILLAS;
+
   return (
     <div className="flex flex-col gap-3">
       <ul className="flex flex-col gap-2">
-        {lista.map((plantilla) => (
-          <li
-            key={plantilla.id}
-            className="flex items-center justify-between gap-3 rounded-elemento border border-borde bg-superficie p-3"
-          >
-            <div className="flex min-w-0 flex-col gap-0.5">
-              <div className="flex items-center gap-2">
-                <span className="font-medium text-texto">{plantilla.nombre}</span>
-                <span className="inline-flex items-center rounded-full border border-borde bg-fondo px-2 py-0.5 text-xs font-medium text-texto-secundario">
-                  {ETIQUETA_CONTEXTO[plantilla.contexto]}
-                </span>
+        {lista.map((plantilla) => {
+          const inactiva = plantilla.activa === false;
+          const propia = !esPlantillaDeFabrica(plantilla.id);
+          return (
+            <li
+              key={plantilla.id}
+              className="flex items-center justify-between gap-3 rounded-elemento border border-borde bg-superficie p-3"
+            >
+              <div className={`flex min-w-0 flex-col gap-0.5 ${inactiva ? 'opacity-70' : ''}`}>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium text-texto">{plantilla.nombre}</span>
+                  <span className="inline-flex items-center rounded-full border border-borde bg-fondo px-2 py-0.5 text-xs font-medium text-texto-secundario">
+                    {ETIQUETA_CONTEXTO[plantilla.contexto]}
+                  </span>
+                  {inactiva && (
+                    <span className="inline-flex items-center rounded-full border border-borde bg-fondo px-2 py-0.5 text-xs font-medium text-texto-secundario">
+                      Inactiva
+                    </span>
+                  )}
+                </div>
+                <p className="truncate text-sm text-texto-secundario">{plantilla.texto}</p>
               </div>
-              <p className="truncate text-sm text-texto-secundario">{plantilla.texto}</p>
-            </div>
-            <Button variante="secundaria" onClick={() => abrirEdicion(plantilla)} className="shrink-0">
-              Editar
-            </Button>
-          </li>
-        ))}
+              <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                <Button variante="secundaria" onClick={() => abrirEdicion(plantilla)}>
+                  Editar
+                </Button>
+                {propia &&
+                  (inactiva ? (
+                    <Button
+                      variante="secundaria"
+                      onClick={() => void reactivarPlantilla(plantilla)}
+                      disabled={reactivando}
+                    >
+                      Reactivar
+                    </Button>
+                  ) : (
+                    <Button variante="secundaria" onClick={() => setPlantillaDesactivando(plantilla)}>
+                      Desactivar
+                    </Button>
+                  ))}
+              </div>
+            </li>
+          );
+        })}
       </ul>
 
-      <Button variante="secundaria" onClick={abrirModalRestaurar} className="self-start">
-        Restaurar iniciales
-      </Button>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button onClick={abrirCreacion} disabled={llegoAlMaximo}>
+          Nueva plantilla
+        </Button>
+        <Button variante="secundaria" onClick={abrirModalRestaurar}>
+          Restaurar iniciales
+        </Button>
+      </div>
+      {llegoAlMaximo && (
+        <p className="text-sm text-texto-secundario">Llegaste al máximo de {MAX_PLANTILLAS} plantillas</p>
+      )}
 
       <ModalPlantillaWhatsApp
-        abierto={plantillaEditando !== null}
+        abierto={creando || plantillaEditando !== null}
         plantilla={plantillaEditando}
         guardando={guardandoEdicion}
-        onGuardar={(datos) => void guardarEdicion(datos)}
-        onCerrar={cerrarEdicion}
+        onGuardar={(datos) => void guardarModalPlantilla(datos)}
+        onCerrar={cerrarModalPlantilla}
+      />
+
+      <ModalConfirmarDesactivarPlantilla
+        abierto={plantillaDesactivando !== null}
+        nombre={plantillaDesactivando?.nombre ?? null}
+        desactivando={desactivando}
+        onConfirmar={() => void desactivarPlantilla()}
+        onCerrar={cerrarModalDesactivar}
       />
 
       <ModalConfirmarRestaurarPlantillas

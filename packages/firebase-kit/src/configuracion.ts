@@ -3,6 +3,8 @@ import {
   DIAS_AVISO_VENCIMIENTO_MAX,
   DIAS_AVISO_VENCIMIENTO_MIN,
   diasAvisoValido,
+  PLANTILLAS_SEED,
+  esPlantillaDeFabrica,
   type ContextoPlantilla,
   type PlantillaWhatsApp,
 } from '@gestion/core';
@@ -139,9 +141,17 @@ export async function guardarDiasAvisoVencimiento(
 
 /**
  * Valida y normaliza una plantilla: recorta strings, exige campos en rango y
- * `contexto` en la unión. Devuelve la plantilla limpia (solo las 4 claves de dominio).
+ * `contexto` en la unión. Devuelve la plantilla limpia: las 4 claves de dominio y,
+ * solo si es `false`, `activa` (ausente o `true` = activa y la clave se omite, doc 08).
  *
- * @throws {ConfiguracionInvalidaError} si algún campo está fuera de rango.
+ * Las plantillas de fábrica (`esPlantillaDeFabrica`, ids de `PLANTILLAS_SEED`) se
+ * editan (nombre y texto) pero no se desactivan ni cambian de contexto: eso
+ * garantiza al menos una plantilla activa por contexto. Las reglas de Firestore no
+ * pueden hacer este chequeo (solo ven `plantillas[0]` y no conocen el seed), así que
+ * vive acá y en la UI.
+ *
+ * @throws {ConfiguracionInvalidaError} si algún campo está fuera de rango, `activa`
+ *   no es booleano, o se intenta desactivar / recontextualizar una de fábrica.
  */
 function exigirPlantillaValida(p: unknown, indice: number): PlantillaWhatsApp {
   const donde = `La plantilla #${indice + 1}`;
@@ -158,7 +168,22 @@ function exigirPlantillaValida(p: unknown, indice: number): PlantillaWhatsApp {
       `${donde}: contexto inválido (debe ser uno de ${CONTEXTOS_VALIDOS.join(', ')}).`,
     );
   }
-  return { id, nombre, contexto, texto };
+  const activa = cruda.activa;
+  if (activa !== undefined && typeof activa !== 'boolean') {
+    throw new ConfiguracionInvalidaError(`${donde}: "activa" debe ser verdadero o falso.`);
+  }
+  if (esPlantillaDeFabrica(id)) {
+    if (activa === false) {
+      throw new ConfiguracionInvalidaError('Las plantillas iniciales no se pueden desactivar.');
+    }
+    const contextoDeFabrica = PLANTILLAS_SEED.find((s) => s.id === id)?.contexto;
+    if (contexto !== contextoDeFabrica) {
+      throw new ConfiguracionInvalidaError(
+        'A las plantillas iniciales no se les puede cambiar el contexto.',
+      );
+    }
+  }
+  return activa === false ? { id, nombre, contexto, texto, activa: false } : { id, nombre, contexto, texto };
 }
 
 /**
@@ -168,7 +193,8 @@ function exigirPlantillaValida(p: unknown, indice: number): PlantillaWhatsApp {
  * `guardarPlantillasWhatsApp(db, PLANTILLAS_SEED)` (doc 08).
  *
  * @throws {ConfiguracionInvalidaError} si hay más de 20, ids duplicados, o alguna
- *   plantilla con un campo fuera de rango / contexto inválido.
+ *   plantilla con un campo fuera de rango / contexto inválido / `activa` no booleano,
+ *   o una de fábrica desactivada o con otro contexto que el del seed.
  */
 export async function guardarPlantillasWhatsApp(
   db: Firestore,

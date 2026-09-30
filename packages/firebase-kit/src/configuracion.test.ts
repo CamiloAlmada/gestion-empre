@@ -218,4 +218,74 @@ describe('guardarPlantillasWhatsApp', () => {
       guardarPlantillasWhatsApp(db, [plantilla({ id: 'x'.repeat(41) })]),
     ).rejects.toThrow(ConfiguracionInvalidaError);
   });
+
+  describe('activa (baja lógica de propias, doc 08)', () => {
+    const [pedidoListo] = PLANTILLAS_SEED;
+
+    it('una propia con activa: false se persiste con la clave', async () => {
+      await guardarPlantillasWhatsApp(db, [plantilla({ id: 'propia-1', activa: false })]);
+      const [, datos] = mocks.setDoc.mock.calls[0] as [RefFalsa, PlantillaWhatsApp[]];
+      expect(datos[0]).toEqual({
+        id: 'propia-1',
+        nombre: 'Pedido listo',
+        contexto: 'venta',
+        texto: 'Hola',
+        activa: false,
+      });
+    });
+
+    it('activa: true se omite (ausente = activa)', async () => {
+      await guardarPlantillasWhatsApp(db, [
+        plantilla({ id: 'propia-1', activa: true }),
+        { ...pedidoListo!, activa: true },
+      ]);
+      const [, datos] = mocks.setDoc.mock.calls[0] as [RefFalsa, PlantillaWhatsApp[]];
+      expect(datos[0]).not.toHaveProperty('activa');
+      expect(datos[1]).toEqual({ ...pedidoListo! });
+    });
+
+    it('rechaza activa que no es booleano, sin escribir', async () => {
+      const mal = { ...plantilla({ id: 'propia-1' }), activa: 'si' } as unknown as PlantillaWhatsApp;
+      await expect(guardarPlantillasWhatsApp(db, [mal])).rejects.toThrow(
+        /"activa" debe ser verdadero o falso/,
+      );
+      expect(mocks.setDoc).not.toHaveBeenCalled();
+    });
+
+    it('rechaza desactivar una plantilla de fábrica, sin escribir', async () => {
+      await expect(
+        guardarPlantillasWhatsApp(db, [{ ...pedidoListo!, activa: false }]),
+      ).rejects.toThrow(
+        new ConfiguracionInvalidaError('Las plantillas iniciales no se pueden desactivar.'),
+      );
+      expect(mocks.setDoc).not.toHaveBeenCalled();
+    });
+
+    it('rechaza cambiarle el contexto a una plantilla de fábrica, sin escribir', async () => {
+      await expect(
+        guardarPlantillasWhatsApp(db, [{ ...pedidoListo!, contexto: 'cliente' }]),
+      ).rejects.toThrow(
+        new ConfiguracionInvalidaError('A las plantillas iniciales no se les puede cambiar el contexto.'),
+      );
+      expect(mocks.setDoc).not.toHaveBeenCalled();
+    });
+
+    it('una de fábrica con nombre y texto editados (mismo contexto) se guarda', async () => {
+      await guardarPlantillasWhatsApp(db, [
+        { ...pedidoListo!, nombre: 'Listo!', texto: 'Ya está, {cliente}' },
+      ]);
+      const [, datos] = mocks.setDoc.mock.calls[0] as [RefFalsa, PlantillaWhatsApp[]];
+      expect(datos[0]).toEqual({ ...pedidoListo!, nombre: 'Listo!', texto: 'Ya está, {cliente}' });
+    });
+
+    it('una propia puede tener cualquier contexto y quedar inactiva', async () => {
+      await guardarPlantillasWhatsApp(db, [
+        ...PLANTILLAS_SEED,
+        plantilla({ id: 'propia-cobro', contexto: 'cobro', activa: false }),
+      ]);
+      const [, datos] = mocks.setDoc.mock.calls[0] as [RefFalsa, PlantillaWhatsApp[]];
+      expect(datos).toHaveLength(PLANTILLAS_SEED.length + 1);
+      expect(datos.at(-1)).toMatchObject({ contexto: 'cobro', activa: false });
+    });
+  });
 });

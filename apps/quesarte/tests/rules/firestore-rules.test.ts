@@ -1483,6 +1483,33 @@ describe('configuracion/plantillasWhatsApp (doc 08, solo admin, shape estricto)'
       setDoc(doc(db(ADMIN), 'configuracion', 'plantillasWhatsApp'), { plantillas: 'nop' }),
     );
   });
+
+  it('admin escribe una plantilla con activa: true', async () => {
+    await assertSucceeds(
+      setDoc(
+        doc(db(ADMIN), 'configuracion', 'plantillasWhatsApp'),
+        plantillasWaDoc([plantillaWa({ id: 'propia-1', activa: true })]),
+      ),
+    );
+  });
+
+  it('admin escribe una plantilla con activa: false (baja lógica de una propia)', async () => {
+    await assertSucceeds(
+      setDoc(
+        doc(db(ADMIN), 'configuracion', 'plantillasWhatsApp'),
+        plantillasWaDoc([plantillaWa({ id: 'propia-1', activa: false })]),
+      ),
+    );
+  });
+
+  it('admin NO escribe una plantilla con activa no booleana', async () => {
+    await assertFails(
+      setDoc(
+        doc(db(ADMIN), 'configuracion', 'plantillasWhatsApp'),
+        plantillasWaDoc([plantillaWa({ id: 'propia-1', activa: 'si' })]),
+      ),
+    );
+  });
 });
 
 describe('configuracion/tema (doc 06 §4, tanda TM, semilla del tema del negocio)', () => {

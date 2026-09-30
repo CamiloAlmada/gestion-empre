@@ -27,6 +27,11 @@ interface PlantillasWhatsAppDoc {
  * crudo de Firestore) y tolera el doc ausente o sin `plantillas` devolviendo `[]`.
  * La validación de shape/tamaño es de la escritura (`guardarPlantillasWhatsApp`) y
  * de las reglas, no del converter.
+ *
+ * `activa` (doc 08, ABM de plantillas): en ambos sentidos SOLO viaja `activa: false`.
+ * Ausente o `true` = activa, y entonces la clave no se escribe ni se reconstruye; así
+ * el documento de una lista toda activa queda igual al de siempre y una plantilla de
+ * fábrica leída sigue siendo `toEqual` a la del seed.
  */
 export const plantillasWhatsAppConverter: FirestoreDataConverter<PlantillaWhatsApp[]> = {
   toFirestore(plantillas: WithFieldValue<PlantillaWhatsApp[]>): DocumentData {
@@ -37,6 +42,7 @@ export const plantillasWhatsAppConverter: FirestoreDataConverter<PlantillaWhatsA
         nombre: p.nombre,
         contexto: p.contexto,
         texto: p.texto,
+        ...(p.activa === false ? { activa: false } : {}),
       })),
     };
   },
@@ -47,6 +53,7 @@ export const plantillasWhatsAppConverter: FirestoreDataConverter<PlantillaWhatsA
       nombre: p.nombre,
       contexto: p.contexto as ContextoPlantilla,
       texto: p.texto,
+      ...(p.activa === false ? { activa: false } : {}),
     }));
   },
 };
