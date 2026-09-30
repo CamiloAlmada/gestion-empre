@@ -668,6 +668,7 @@ propias. Vocabulario: "Desactivar" / "Reactivar" / badge "Inactiva".
 | P2 | Kit + converter + reglas | `senior` | ✅ 245 tests de reglas, 431 en el kit |
 | P3 | UI: crear, desactivar/reactivar, contexto en propias, restaurar; `BotonWhatsApp` filtra activas | `semisenior` | ✅ 2021 tests en la app |
 | P4 | Doc 08 | `semisenior` | ✅ |
+| P5 | Publicado en producción (`dcc83e0`, run 36756143293) junto con los follow-ups del chip | orquestador | ✅ |
 
 **Deuda anotada:** (1) `MAX_PLANTILLAS = 20` está duplicada en
 `SeccionPlantillasWhatsApp.tsx` porque el kit no la exporta: exportarla de un
