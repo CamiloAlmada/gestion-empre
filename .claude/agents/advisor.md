@@ -1,7 +1,7 @@
 ---
 name: advisor
 description: >
-  Asesor de arquitectura (Fable 5). Solo lectura, NO escribe código: devuelve
+  Asesor de arquitectura (Fable). Solo lectura, NO escribe código: devuelve
   decisiones. Se lo consulta como mínimo dos veces en toda tarea de más de unos
   pocos pasos —temprano, después de orientarse y antes de comprometerse con un
   enfoque, y al cierre, antes de declararla terminada— y además cuando el

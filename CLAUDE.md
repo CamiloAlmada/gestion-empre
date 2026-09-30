@@ -12,7 +12,7 @@ infraestructura.
 
 ## Cómo se trabaja en este repo (orquestación)
 
-La sesión principal de Claude Code (Opus 5) es el **orquestador**, no el
+La sesión principal de Claude Code (Opus) es el **orquestador**, no el
 implementador. Su trabajo es: descomponer, delegar, verificar lo que vuelve,
 reintentar con mejor brief, y mantener el plan en `.claude/plan.md` —en el
 repo, nunca solo en el contexto de la sesión, que se compacta—.
@@ -23,15 +23,25 @@ el trabajo mecánico que parece más rápido hacer a mano.
 
 ### Equipo de agentes (`.claude/agents/`)
 
-| Agente | Modelo | Para qué |
-| --- | --- | --- |
-| `advisor` | Fable 5 | Decisiones de arquitectura. Solo lectura, no escribe código. |
-| `senior` | Opus 5 | Lógica de negocio delicada, seguridad, concurrencia, migraciones de datos. |
-| `semisenior` | Sonnet 5 | El grueso: features estándar, pantallas, hooks, endpoints, tests de integración. |
-| `trainee` | Haiku 4.5 | Mecánico: renames, correr tests, grepear logs, boilerplate, formateo, imports. |
+| Agente | Modelo (alias) | Esfuerzo | Para qué |
+| --- | --- | --- | --- |
+| `advisor` | `fable` | default | Decisiones de arquitectura. Solo lectura, no escribe código. |
+| `senior` | `opus` | `high` | Lógica de negocio delicada, seguridad, concurrencia, migraciones de datos. |
+| `semisenior` | `sonnet` | `medium` | El grueso: features estándar, pantallas, hooks, endpoints, tests de integración. |
+| `trainee` | `haiku` | sin campo | Mecánico: renames, correr tests, grepear logs, boilerplate, formateo, imports. |
 
 El campo `model:` del frontmatter toma `fable` / `opus` / `sonnet` / `haiku`,
 no `fable-5` ni `opus-5`. Verificado: con otro valor el agente no se registra.
+Los alias resuelven al último modelo de cada familia (2026-09-30: Fable 5.1,
+Opus 5.5, Sonnet 5.5, Haiku 4.5); por eso las descripciones no llevan número
+de versión. El modelo que corrió cada subagente queda registrado en
+`python/claude-usage`.
+
+`effort:` va explícito porque Opus 5.5 bajó su default a `medium` (Opus 5 era
+`high`) y los niveles de Sonnet 5.5 se recalibraron. `senior` en `high` por el
+tipo de trabajo; `semisenior` en `medium`, el punto de partida que da la guía
+de Sonnet 5.5 para programar con agentes. `trainee` no lleva el campo: Haiku
+4.5 no soporta esfuerzo y la documentación no dice qué pasa si se lo pone.
 
 ### Protocolo del `advisor`
 
@@ -119,6 +129,12 @@ Todo brief cierra con esta línea:
    mano.
 5. Después de cada tanda, actualizar `.claude/plan.md` (hecho / en curso /
    bloqueado / decisiones tomadas).
+6. **Briefs de UI: nombrar los patrones visuales a evitar**, no pedir "que no
+   se vea genérico". Según la guía de prompting de Opus 5.5, una instrucción
+   general solo cambia un estilo por defecto por otro; una lista concreta
+   (p. ej. "sin fondo crema, sin etiquetas 01/02/03, sin botones pastilla")
+   sí se respeta. Primero apuntar al sistema de diseño existente
+   (`docs/06-ui-ux.md`, `packages/ui`); la lista es para lo que no cubre.
 
 ### Formato de salida de todo subagente
 

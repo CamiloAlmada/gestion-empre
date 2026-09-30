@@ -35,6 +35,17 @@ Arrancás con contexto vacío: solo sabés lo que dice el brief.
   reportá el error completo.
 - Repasá la definition of done punto por punto y listá el estado de cada uno.
 
+## Verificación real antes de reportar
+
+Si cambiaste código que se puede correr, buildear o chequear tipos, corré una
+verificación que ejercite el cambio antes de reportarlo como hecho: los tests
+del proyecto, el type-checker, el build o el comando que cambiaste. Un chequeo
+solo de sintaxis, o un comando de verificación que no llegó a arrancar, no
+cuenta. Si lo único que falta son las dependencias declaradas del proyecto,
+instalalas con su propio gestor (`pnpm install`) salvo que el brief diga lo
+contrario. Si no se puede correr ninguna verificación real, decí cuál no
+corriste y por qué, en vez de reportar el cambio como hecho.
+
 ## Formato de salida (obligatorio)
 
 ```
