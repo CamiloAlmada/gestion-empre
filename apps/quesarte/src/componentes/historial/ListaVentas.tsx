@@ -1,4 +1,4 @@
-import { formatearMoney, type Venta } from '@gestion/core';
+import { estadoCobro, formatearMoney, type Venta } from '@gestion/core';
 import { BadgeEstadoVenta } from './BadgeEstadoVenta';
 import { ETIQUETAS_MEDIO_PAGO, formatearFechaHora, textoCantidadItems } from './formato';
 
@@ -10,7 +10,7 @@ export interface ListaVentasProps {
 /**
  * Lista maestra de ventas: una fila-botón táctil por venta (mismo patrón que
  * `ListaProductos` en Stock), con número, fecha/hora, cantidad de ítems,
- * total, medio de pago y badge de anulada si corresponde. Tocar una fila
+ * total, medio de pago y badge de anulada / a cobrar / parcial si corresponde. Tocar una fila
  * selecciona la venta (el llamador decide qué hacer — ver `Historial.tsx`).
  *
  * `clienteNombre` (doc 07: denormalizado en la venta "para no depender de un
@@ -41,7 +41,7 @@ export function ListaVentas({ ventas, onSeleccionar }: ListaVentasProps) {
               <span>{ETIQUETAS_MEDIO_PAGO[venta.medioPago]}</span>
               {venta.clienteNombre !== undefined && <span>{venta.clienteNombre}</span>}
             </div>
-            <BadgeEstadoVenta estado={venta.estado} />
+            <BadgeEstadoVenta estado={venta.estado} estadoCobro={estadoCobro(venta)} />
           </button>
         </li>
       ))}

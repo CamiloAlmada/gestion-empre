@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { money, type Venta } from '@gestion/core';
+import { cobroInicial, money, type Venta } from '@gestion/core';
 import { ProveedorToasts } from '@gestion/ui';
 import { ModalConfirmarAnulacion } from './ModalConfirmarAnulacion';
 
@@ -57,6 +57,35 @@ describe('ModalConfirmarAnulacion - contenido', () => {
         'Restaura el stock descontado y marca la venta como anulada. No se puede deshacer.',
       ),
     ).toBeTruthy();
+  });
+});
+
+describe('ModalConfirmarAnulacion - aviso de pagos registrados (docs/11, A5)', () => {
+  const AVISO = /cobrados; anularla no registra una devolución/;
+
+  it('venta con pagos registrados: avisa cuánto se cobró y que no hay devolución', () => {
+    renderizar({
+      venta: venta({
+        medioPago: 'a_cobrar',
+        cobro: { v: 1, estado: 'cobrada', cobradoCents: money(50000), pagos: [] },
+      }),
+    });
+
+    expect(
+      screen.getByText('Esta venta tiene $ 500,00 cobrados; anularla no registra una devolución.'),
+    ).toBeTruthy();
+  });
+
+  it('a cobrar sin pagos todavía: sin aviso', () => {
+    renderizar({ venta: venta({ medioPago: 'a_cobrar', cobro: cobroInicial() }) });
+
+    expect(screen.queryByText(AVISO)).toBeNull();
+  });
+
+  it('venta cobrada en el mostrador (sin cobro): sin aviso', () => {
+    renderizar();
+
+    expect(screen.queryByText(AVISO)).toBeNull();
   });
 });
 

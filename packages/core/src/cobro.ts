@@ -102,3 +102,32 @@ export function estadoCobro(venta: Pick<Venta, 'estado' | 'cobro'>): EstadoCobro
   if (cobro === undefined || cobro.estado === 'cobrada') return 'cobrada';
   return cobro.cobradoCents > 0 ? 'parcial' : 'pendiente';
 }
+
+/**
+ * Pagos registrados contra una venta, en el orden en que se cargaron. Lista vacía
+ * si no tiene `cobro` (se cobró en el acto o es anterior a esta capacidad).
+ * Puerta de lectura de `venta.cobro.pagos`: las pantallas no acceden al mapa.
+ */
+export function pagosDe(venta: Pick<Venta, 'cobro'>): readonly PagoVenta[] {
+  return venta.cobro?.pagos ?? [];
+}
+
+/**
+ * Lo ya cobrado mediante pagos registrados. `0` si no tiene `cobro`: una venta
+ * cobrada en el mostrador no tiene "pagos" que registrar, así que da 0 (no su
+ * total). No mira el estado de la venta: una anulada conserva lo que se había
+ * cobrado, que es lo que hay que avisar antes de anularla.
+ */
+export function cobradoCents(venta: Pick<Venta, 'cobro'>): Money {
+  return venta.cobro?.cobradoCents ?? money(0);
+}
+
+/**
+ * Deuda total de un conjunto de ventas: suma de `saldoPendienteCents`. Las
+ * cobradas, las anuladas y las sin `cobro` aportan 0.
+ */
+export function deudaTotalCents(
+  ventas: readonly Pick<Venta, 'estado' | 'totalCents' | 'cobro'>[],
+): Money {
+  return ventas.reduce((acumulado, v) => sumarMoney(acumulado, saldoPendienteCents(v)), money(0));
+}

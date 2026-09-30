@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   aplicarPago,
+  cobradoCents,
   cobroInicial,
   deshacerUltimoPago,
+  deudaTotalCents,
   estadoCobro,
+  pagosDe,
   saldoPendienteCents,
 } from './cobro.js';
 import { money } from './money.js';
@@ -137,5 +140,54 @@ describe('saldoPendienteCents', () => {
 
   it('anulada es 0, aunque tenga saldo', () => {
     expect(saldoPendienteCents(venta({ estado: 'anulada', cobro: cobroInicial() }))).toBe(0);
+  });
+});
+
+describe('pagosDe', () => {
+  it('venta sin cobro (mostrador): lista vacía', () => {
+    expect(pagosDe(venta())).toEqual([]);
+  });
+
+  it('venta a cobrar: devuelve los pagos en orden', () => {
+    const cobro = aplicarPago(aplicarPago(cobroInicial(), pago(3000, 'a'), TOTAL), pago(2000, 'b'), TOTAL);
+    expect(pagosDe(venta({ cobro })).map((p) => p.id)).toEqual(['a', 'b']);
+    expect(pagosDe(venta({ cobro: cobroInicial() }))).toEqual([]);
+  });
+});
+
+describe('cobradoCents', () => {
+  it('venta sin cobro (mostrador): 0, no el total', () => {
+    expect(cobradoCents(venta())).toBe(0);
+  });
+
+  it('venta a cobrar: lo cobrado por los pagos registrados', () => {
+    expect(cobradoCents(venta({ cobro: cobroInicial() }))).toBe(0);
+    const cobro = aplicarPago(cobroInicial(), pago(3000), TOTAL);
+    expect(cobradoCents(venta({ cobro }))).toBe(3000);
+  });
+
+  it('una venta anulada conserva lo cobrado (para avisarlo)', () => {
+    const cobro = aplicarPago(cobroInicial(), pago(3000), TOTAL);
+    expect(cobradoCents(venta({ estado: 'anulada', cobro }))).toBe(3000);
+  });
+});
+
+describe('deudaTotalCents', () => {
+  it('lista vacía: 0', () => {
+    expect(deudaTotalCents([])).toBe(0);
+  });
+
+  it('suma los saldos de pendientes y parciales; cobradas, anuladas y de mostrador aportan 0', () => {
+    const parcial = aplicarPago(cobroInicial(), pago(4000), TOTAL);
+    const saldada = aplicarPago(cobroInicial(), pago(10000), TOTAL);
+    expect(
+      deudaTotalCents([
+        venta({ cobro: cobroInicial() }), // 10000
+        venta({ cobro: parcial }), // 6000
+        venta({ cobro: saldada }), // 0
+        venta({ estado: 'anulada', cobro: cobroInicial() }), // 0
+        venta(), // 0
+      ]),
+    ).toBe(16000);
   });
 });

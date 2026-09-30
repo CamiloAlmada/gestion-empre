@@ -70,6 +70,9 @@ export {
   deshacerUltimoPago,
   saldoPendienteCents,
   estadoCobro,
+  pagosDe,
+  cobradoCents,
+  deudaTotalCents,
 } from './cobro.js';
 export { type PiezaElegida, elegirPieza } from './fifo.js';
 export {

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Firestore } from 'firebase/firestore';
-import { formatearMoney, type Venta } from '@gestion/core';
+import { cobradoCents, formatearMoney, type Venta } from '@gestion/core';
 import { AnulacionInvalidaError, anularVenta } from '@gestion/firebase-kit';
 import { Button, Modal, useToasts } from '@gestion/ui';
 
@@ -75,6 +75,10 @@ export function ModalConfirmarAnulacion({
     onCerrar();
   }
 
+  // Una venta a cobrar con pagos registrados: anular restaura stock pero NO
+  // devuelve la plata cobrada (docs/11-cobros-diferidos.md); se avisa antes.
+  const yaCobradoCents = cobradoCents(venta);
+
   return (
     <Modal
       abierto={abierto}
@@ -98,6 +102,12 @@ export function ModalConfirmarAnulacion({
           Restaura el stock descontado y marca la venta como anulada. No se puede deshacer.
         </p>
         <p className="text-sm text-texto-secundario">Total: {formatearMoney(venta.totalCents)}</p>
+        {yaCobradoCents > 0 && (
+          <p role="note" className="text-sm font-medium text-advertencia">
+            Esta venta tiene {formatearMoney(yaCobradoCents)} cobrados; anularla no registra una
+            devolución.
+          </p>
+        )}
       </div>
     </Modal>
   );

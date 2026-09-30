@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { money, peso, type ItemVenta } from '@gestion/core';
 import {
   ETIQUETAS_MEDIO_PAGO,
+  fechaAValorDatetimeLocal,
   formatearFechaHora,
   textoCantidadItem,
   textoCantidadItems,
   textoPrecioUnitario,
+  valorDatetimeLocalAFecha,
 } from './formato';
 
 function item(over: Partial<ItemVenta>): ItemVenta {
@@ -74,5 +76,28 @@ describe('textoPrecioUnitario', () => {
     expect(textoPrecioUnitario(item({ unidades: 2, precioUnitCents: money(15000) }))).toBe(
       '$ 150,00 /u',
     );
+  });
+});
+
+describe('fechaAValorDatetimeLocal / valorDatetimeLocalAFecha', () => {
+  it('formatea en hora local, con ceros a la izquierda y sin segundos', () => {
+    expect(fechaAValorDatetimeLocal(new Date(2026, 0, 5, 4, 7, 59))).toBe('2026-01-05T04:07');
+  });
+
+  it('round-trip: parsear lo formateado devuelve el mismo minuto', () => {
+    const fecha = new Date(2026, 10, 30, 23, 59);
+    expect(valorDatetimeLocalAFecha(fechaAValorDatetimeLocal(fecha))?.getTime()).toBe(fecha.getTime());
+  });
+
+  it('acepta segundos opcionales', () => {
+    expect(valorDatetimeLocalAFecha('2026-03-10T09:45:30')?.getTime()).toBe(
+      new Date(2026, 2, 10, 9, 45).getTime(),
+    );
+  });
+
+  it('vacío, formato ajeno o fecha imposible → null', () => {
+    expect(valorDatetimeLocalAFecha('')).toBeNull();
+    expect(valorDatetimeLocalAFecha('10/03/2026 09:45')).toBeNull();
+    expect(valorDatetimeLocalAFecha('2026-02-31T10:00')).toBeNull();
   });
 });

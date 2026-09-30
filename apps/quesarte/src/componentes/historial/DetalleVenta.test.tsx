@@ -1,7 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { FirestoreError } from 'firebase/firestore';
-import { money, peso, type Cliente, type Usuario, type Venta } from '@gestion/core';
+import {
+  cobroInicial,
+  money,
+  peso,
+  type Cliente,
+  type PagoVenta,
+  type Usuario,
+  type Venta,
+} from '@gestion/core';
+import { ProveedorToasts } from '@gestion/ui';
 import { DetalleVenta } from './DetalleVenta';
 
 // `DataTable` con `filaCompacta` (docs/06-ui-ux.md §3) renderiza SIEMPRE la
@@ -12,7 +21,13 @@ function tabla() {
   return within(screen.getByRole('table'));
 }
 
-const mocks = vi.hoisted(() => ({ useDoc: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  useDoc: vi.fn(),
+  useAuth: vi.fn(),
+  useOnlineStatus: vi.fn(() => true),
+  registrarPago: vi.fn(),
+  deshacerUltimoPago: vi.fn(),
+}));
 
 // `importOriginal` (no un stub manual): `DetalleVenta` ahora también importa
 // `clienteConverter` (lookup del cliente para el botón de WhatsApp, WA-C2) y
@@ -22,7 +37,16 @@ const mocks = vi.hoisted(() => ({ useDoc: vi.fn() }));
 // mantener un stub manual sincronizado con cada converter nuevo.
 vi.mock('@gestion/firebase-kit', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@gestion/firebase-kit')>();
-  return { ...actual, useDoc: mocks.useDoc };
+  return {
+    ...actual,
+    useDoc: mocks.useDoc,
+    // Solo los usa el bloque de cobro (`SeccionCobroVenta`), que las ventas
+    // cobradas en el mostrador ni siquiera montan.
+    useAuth: mocks.useAuth,
+    useOnlineStatus: mocks.useOnlineStatus,
+    registrarPago: mocks.registrarPago,
+    deshacerUltimoPago: mocks.deshacerUltimoPago,
+  };
 });
 
 interface RefFalsa {
@@ -421,5 +445,174 @@ describe('DetalleVenta - botón WhatsApp (WA-C2, doc 08)', () => {
     );
 
     expect(screen.queryByRole('button', { name: /Enviar WhatsApp/ })).toBeNull();
+  });
+});
+
+// ── Cobros diferidos (docs/11-cobros-diferidos.md, A5) ──────────────────────
+
+function pagoDe(over: Partial<PagoVenta> = {}): PagoVenta {
+  return {
+    id: 'pg1',
+    fecha: new Date(2026, 1, 10, 9, 45),
+    registradoEn: new Date(2026, 1, 10, 10, 0),
+    montoCents: money(80000),
+    medioPago: 'transferencia',
+    usuarioId: 'admin1',
+    ...over,
+  };
+}
+
+function ventaACobrar(over: Partial<Venta> = {}): Venta {
+  return venta({
+    medioPago: 'a_cobrar',
+    clienteId: 'c1',
+    clienteNombre: 'Ana',
+    cobro: cobroInicial(),
+    ...over,
+  });
+}
+
+function ventaCobradaConPago(): Venta {
+  return ventaACobrar({
+    cobro: { v: 1, estado: 'cobrada', cobradoCents: money(80000), pagos: [pagoDe({ referencia: 'OP-777' })] },
+  });
+}
+
+function renderizarCobro(v: Venta, esAdmin: boolean) {
+  mocks.deshacerUltimoPago.mockReset();
+  mocks.useOnlineStatus.mockReturnValue(true);
+  mocks.useAuth.mockReturnValue({
+    usuario: { uid: 'admin1' },
+    perfil: { uid: 'admin1', nombre: 'Adrián', email: 'a@a.com', rol: esAdmin ? 'admin' : 'vendedor', activo: true },
+  });
+  mocks.useDoc.mockReturnValue({ datos: null, cargando: false, error: null });
+  return render(
+    <ProveedorToasts>
+      <DetalleVenta venta={v} esAdmin={esAdmin} db={{} as never} onVolver={() => {}} onAnular={() => {}} />
+    </ProveedorToasts>,
+  );
+}
+
+describe('DetalleVenta - cobro diferido: venta pendiente', () => {
+  it('admin: muestra "Pendiente de cobro" con el saldo, el badge "A cobrar" y el botón "Registrar pago"', () => {
+    renderizarCobro(ventaACobrar(), true);
+
+    expect(screen.getByText('Pendiente de cobro')).toBeTruthy();
+    expect(screen.getByText('Saldo: $ 800,00')).toBeTruthy();
+    expect(screen.getByText('A cobrar', { selector: 'span' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Registrar pago' })).toBeTruthy();
+  });
+
+  it('vendedor: ve el bloque y el saldo, pero no el botón "Registrar pago"', () => {
+    renderizarCobro(ventaACobrar(), false);
+
+    expect(screen.getByText('Pendiente de cobro')).toBeTruthy();
+    expect(screen.getByText('Saldo: $ 800,00')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Registrar pago' })).toBeNull();
+  });
+
+  it('admin: "Registrar pago" abre el modal con el monto = saldo', () => {
+    renderizarCobro(ventaACobrar(), true);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Registrar pago' }));
+
+    expect(screen.getByRole('dialog', { name: 'Registrar pago de la venta #1001' })).toBeTruthy();
+    expect((screen.getByLabelText('Monto') as HTMLInputElement).value).toBe('800,00');
+  });
+
+  it('sin pagos: no ofrece "Deshacer último pago"', () => {
+    renderizarCobro(ventaACobrar(), true);
+
+    expect(screen.queryByRole('button', { name: 'Deshacer último pago' })).toBeNull();
+    expect(screen.queryByText('Pagos registrados')).toBeNull();
+  });
+});
+
+describe('DetalleVenta - cobro diferido: venta sin nada que cobrar', () => {
+  it('cobrada en el mostrador (sin cobro): no muestra ningún bloque de cobro ni badge', () => {
+    renderizarCobro(venta(), true);
+
+    expect(screen.queryByText('Pendiente de cobro')).toBeNull();
+    expect(screen.queryByText('Pagos registrados')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Registrar pago' })).toBeNull();
+    expect(screen.queryByText('A cobrar', { selector: 'span' })).toBeNull();
+  });
+});
+
+describe('DetalleVenta - cobro diferido: pagos registrados', () => {
+  it('venta cobrada con pagos: muestra la lista (medio, monto, fecha y referencia) y ya no pide cobrar', () => {
+    renderizarCobro(ventaCobradaConPago(), false);
+
+    expect(screen.queryByText('Pendiente de cobro')).toBeNull();
+    expect(screen.getByText('Pagos registrados', { selector: 'h3' })).toBeTruthy();
+    const lista = within(screen.getByRole('list', { name: 'Pagos registrados' }));
+    expect(lista.getByText('Transferencia')).toBeTruthy();
+    expect(lista.getByText('$ 800,00')).toBeTruthy();
+    expect(lista.getByText('10/02/2026 09:45')).toBeTruthy();
+    expect(lista.getByText('Operación: OP-777')).toBeTruthy();
+  });
+
+  it('vendedor: ve la lista pero no "Deshacer último pago"', () => {
+    renderizarCobro(ventaCobradaConPago(), false);
+
+    expect(screen.queryByRole('button', { name: 'Deshacer último pago' })).toBeNull();
+  });
+
+  it('venta anulada con pagos: conserva la lista, sin acciones', () => {
+    renderizarCobro({ ...ventaCobradaConPago(), estado: 'anulada' }, true);
+
+    expect(screen.getByRole('list', { name: 'Pagos registrados' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Deshacer último pago' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Registrar pago' })).toBeNull();
+  });
+
+  it('admin: "Deshacer último pago" pide confirmación y NO escribe hasta confirmar', () => {
+    renderizarCobro(ventaCobradaConPago(), true);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Deshacer último pago' }));
+
+    expect(mocks.deshacerUltimoPago).not.toHaveBeenCalled();
+    expect(screen.getByRole('dialog', { name: 'Deshacer último pago' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Sí, deshacer' })).toBeTruthy();
+  });
+
+  it('admin: confirmar llama a deshacerUltimoPago con la venta y avisa con toast', async () => {
+    const v = ventaCobradaConPago();
+    renderizarCobro(v, true);
+    mocks.deshacerUltimoPago.mockResolvedValue(undefined);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Deshacer último pago' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sí, deshacer' }));
+
+    await waitFor(() => expect(mocks.deshacerUltimoPago).toHaveBeenCalledWith({}, v));
+    await waitFor(() => expect(screen.getByText('Pago deshecho.')).toBeTruthy());
+  });
+
+  it('sin conexión: deshacer no espera el ack y avisa que se sincroniza al reconectar', () => {
+    renderizarCobro(ventaCobradaConPago(), true);
+    mocks.useOnlineStatus.mockReturnValue(false);
+    mocks.deshacerUltimoPago.mockReturnValue(new Promise<void>(() => {}));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Deshacer último pago' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sí, deshacer' }));
+
+    expect(mocks.deshacerUltimoPago).toHaveBeenCalled();
+    expect(
+      screen.getByText('Cambio guardado sin conexión. Se sincronizará al reconectar.'),
+    ).toBeTruthy();
+  });
+
+  it('error síncrono al deshacer: toast de error', () => {
+    renderizarCobro(ventaCobradaConPago(), true);
+    mocks.deshacerUltimoPago.mockImplementation(() => {
+      throw new RangeError('no tiene pagos');
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Deshacer último pago' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sí, deshacer' }));
+
+    expect(
+      screen.getByText('No se pudo deshacer el pago. Actualizá la venta e intentá de nuevo.'),
+    ).toBeTruthy();
   });
 });

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useParams } from 'react-router';
 import type { FirestoreError } from 'firebase/firestore';
-import { money, type Cliente, type Venta } from '@gestion/core';
+import { cobroInicial, money, type Cliente, type Venta } from '@gestion/core';
 import { ProveedorToasts } from '@gestion/ui';
 import { DetalleClientePantalla } from './DetalleClientePantalla';
 import { ProveedorHeader, useHeaderActual } from '../componentes/header/ContextoHeader';
@@ -337,6 +337,55 @@ describe('DetalleClientePantalla - historial de ventas', () => {
     renderizar();
 
     expect(within(screen.getByRole('list')).queryByText('Anulada')).toBeNull();
+  });
+});
+
+describe('DetalleClientePantalla - cobros diferidos (docs/11, A5)', () => {
+  const aCobrar = (over: Partial<Venta> & Pick<Venta, 'id' | 'numero'>) =>
+    ventaDe({ medioPago: 'a_cobrar', clienteId: 'c1', cobro: cobroInicial(), ...over });
+
+  it('suma los saldos de las ventas a cobrar: "Debe $X", y marca cada fila con "A cobrar"', () => {
+    configurarAuth('vendedor');
+    configurarCliente(estadoOkDoc(clienteDe({ id: 'c1', nombre: 'Ana Pérez' })));
+    configurarVentas(
+      estadoOkColeccion([
+        aCobrar({ id: 'v1', numero: 1001, totalCents: money(50000) }),
+        aCobrar({
+          id: 'v2',
+          numero: 1002,
+          totalCents: money(70000),
+          // Parcial: debe 700 - 200 = 500.
+          cobro: { v: 1, estado: 'pendiente', cobradoCents: money(20000), pagos: [] },
+        }),
+        // Saldada, anulada y de mostrador: no suman.
+        aCobrar({
+          id: 'v3',
+          numero: 1003,
+          totalCents: money(90000),
+          cobro: { v: 1, estado: 'cobrada', cobradoCents: money(90000), pagos: [] },
+        }),
+        aCobrar({ id: 'v4', numero: 1004, totalCents: money(30000), estado: 'anulada' }),
+        ventaDe({ id: 'v5', numero: 1005, totalCents: money(10000) }),
+      ]),
+    );
+
+    renderizar();
+
+    expect(screen.getByText('Debe $ 1.000,00')).toBeTruthy();
+    const lista = within(screen.getByRole('list', { name: 'Ventas de Ana Pérez' }));
+    expect(lista.getByText('Parcial')).toBeTruthy();
+    // Medio "A cobrar" en 4 filas (v1..v4); el badge solo en la pendiente (v1).
+    expect(lista.getAllByText('A cobrar').length).toBe(5);
+  });
+
+  it('sin deuda: no muestra "Debe"', () => {
+    configurarAuth('admin');
+    configurarCliente(estadoOkDoc(clienteDe({ id: 'c1', nombre: 'Ana Pérez' })));
+    configurarVentas(estadoOkColeccion([ventaDe({ id: 'v1', numero: 1001 })]));
+
+    renderizar();
+
+    expect(screen.queryByText(/^Debe /)).toBeNull();
   });
 });
 

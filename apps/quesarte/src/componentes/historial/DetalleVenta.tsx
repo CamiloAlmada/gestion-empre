@@ -1,10 +1,11 @@
 import { useMemo } from 'react';
 import { doc, type Firestore } from 'firebase/firestore';
-import { formatearMoney, type ItemVenta, type Venta } from '@gestion/core';
+import { estadoCobro, formatearMoney, type ItemVenta, type Venta } from '@gestion/core';
 import { clienteConverter, useDoc, usuarioConverter } from '@gestion/firebase-kit';
 import { Button, DataTable, type ColumnaDataTable } from '@gestion/ui';
 import { BotonWhatsApp } from '../whatsapp/BotonWhatsApp';
 import { BadgeEstadoVenta } from './BadgeEstadoVenta';
+import { SeccionCobroVenta } from './SeccionCobroVenta';
 import {
   ETIQUETAS_MEDIO_PAGO,
   formatearFechaHora,
@@ -34,7 +35,7 @@ interface FilaItem {
  * Detalle de UNA venta, mostrado en la misma pantalla (sin ruta nueva) al
  * tocar una fila del listado — mismo patrón de drill-down que
  * `DetalleProducto` en Stock. Cabecera con número/fecha/vendedor/medio de
- * pago/estado, tabla de ítems y total. La acción de anular (solo admin, solo
+ * pago/estado, tabla de ítems, total y bloque de cobro (`SeccionCobroVenta`). La acción de anular (solo admin, solo
  * si la venta sigue `completada`) la dispara acá pero la resuelve el modal de
  * confirmación en `Historial.tsx` (mismo patrón que los modales de escritura
  * de Stock: se abren desde el detalle, se orquestan desde la pantalla).
@@ -132,7 +133,7 @@ export function DetalleVenta({ venta, esAdmin, db, onVolver, onAnular }: Detalle
       <div className="flex flex-col gap-1">
         <div className="flex flex-wrap items-center gap-2">
           <h2 className="text-xl font-bold text-texto">Venta #{venta.numero}</h2>
-          <BadgeEstadoVenta estado={venta.estado} />
+          <BadgeEstadoVenta estado={venta.estado} estadoCobro={estadoCobro(venta)} />
         </div>
         <p className="text-texto-secundario">{formatearFechaHora(venta.fecha)}</p>
         <p className="text-sm text-texto-secundario">Vendedor: {vendedorLabel}</p>
@@ -156,6 +157,10 @@ export function DetalleVenta({ venta, esAdmin, db, onVolver, onAnular }: Detalle
       <p className="text-right text-lg font-bold tabular-nums text-texto">
         Total: {formatearMoney(venta.totalCents)}
       </p>
+
+      {/* Cobro diferido (docs/11-cobros-diferidos.md, A5): saldo, registrar
+          pago y lista de pagos. Se autooculta en una venta cobrada en el acto. */}
+      <SeccionCobroVenta venta={venta} esAdmin={esAdmin} db={db} />
 
       <div className="flex flex-wrap items-center justify-end gap-2">
         {/* WhatsApp (doc 08, WA-C2): solo con cliente asociado Y venta

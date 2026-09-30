@@ -123,10 +123,10 @@ El cliente se lleva la mercadería y paga después. Diseño y roadmap en
 - **Quién registra los pagos:** solo `admin` (reglas `ventaRegistraPago` y
   `ventaDeshaceUltimoPago`). El vendedor puede dejar una venta a cobrar, pero no
   registrarle pagos.
-- **Ficha del cliente: "Debe $X" — Fase A, en implementación.** Todavía no está
-  en `DetalleClientePantalla.tsx`. Lo que va a mostrar sale de la venta con
-  `estadoCobro` y `saldoPendienteCents` (`packages/core/src/cobro.ts`), según
-  doc 11, tarea A5; la Fase A no necesita índice nuevo.
+- **Ficha del cliente: "Debe $X"** (`DetalleClientePantalla.tsx`, Fase A). Suma
+  con `deudaTotalCents` (`packages/core/src/cobro.ts`) las ventas del cliente que
+  la ficha ya carga, sin query nueva, y se oculta si da 0. Cada fila lleva el
+  badge "A cobrar" o "Parcial" según `estadoCobro`.
 
 ## Reglas de seguridad
 

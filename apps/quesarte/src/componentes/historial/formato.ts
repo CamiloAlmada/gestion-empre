@@ -1,4 +1,10 @@
-import { formatearMoney, formatearPeso, type ItemVenta, type MedioPago } from '@gestion/core';
+import {
+  formatearMoney,
+  formatearPeso,
+  type ItemVenta,
+  type MedioPago,
+  type MedioPagoReal,
+} from '@gestion/core';
 
 /** Etiquetas en español de `MedioPago`, para la cabecera del listado y el detalle. */
 export const ETIQUETAS_MEDIO_PAGO: Record<MedioPago, string> = {
@@ -8,6 +14,14 @@ export const ETIQUETAS_MEDIO_PAGO: Record<MedioPago, string> = {
   transferencia: 'Transferencia',
   a_cobrar: 'A cobrar',
 };
+
+/** Los cuatro medios en los que se cobra de verdad (sin `a_cobrar`), en el orden del POS. */
+export const MEDIOS_PAGO_REALES: readonly MedioPagoReal[] = [
+  'efectivo',
+  'debito',
+  'credito',
+  'transferencia',
+];
 
 /**
  * Formatea una fecha como `dd/mm/aaaa HH:mm` (fecha Y hora, a diferencia de
@@ -61,4 +75,40 @@ export function textoPrecioUnitario(item: ItemVenta): string {
  */
 export function textoResumenItems(items: ItemVenta[]): string {
   return items.map((item) => `${item.nombreProducto} ${textoCantidadItem(item)}`).join(', ');
+}
+
+function dosDigitos(n: number): string {
+  return String(n).padStart(2, '0');
+}
+
+/**
+ * Fecha → valor de un `<input type="datetime-local">` (`aaaa-mm-ddTHH:mm`, hora
+ * LOCAL, sin zona ni segundos).
+ */
+export function fechaAValorDatetimeLocal(fecha: Date): string {
+  return (
+    `${fecha.getFullYear()}-${dosDigitos(fecha.getMonth() + 1)}-${dosDigitos(fecha.getDate())}` +
+    `T${dosDigitos(fecha.getHours())}:${dosDigitos(fecha.getMinutes())}`
+  );
+}
+
+/**
+ * Valor de un `<input type="datetime-local">` → `Date` (hora local), o `null` si
+ * está vacío o no tiene el formato `aaaa-mm-ddTHH:mm[:ss]`. Parseo manual: el
+ * `new Date('aaaa-mm-ddTHH:mm')` de cada motor no es del todo homogéneo.
+ */
+export function valorDatetimeLocalAFecha(valor: string): Date | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::\d{2})?$/.exec(valor);
+  if (m === null) return null;
+  const [anio, mes, dia, horas, minutos] = m.slice(1).map(Number) as [
+    number,
+    number,
+    number,
+    number,
+    number,
+  ];
+  const fecha = new Date(anio, mes - 1, dia, horas, minutos);
+  // `new Date` desborda en silencio (31/02 → 3/03): se descarta si no vuelve igual.
+  if (fecha.getMonth() !== mes - 1 || fecha.getDate() !== dia) return null;
+  return fecha;
 }

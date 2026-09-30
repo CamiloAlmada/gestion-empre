@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { collection, doc, orderBy, query, where } from 'firebase/firestore';
-import { formatearMoney, type Venta } from '@gestion/core';
+import { deudaTotalCents, estadoCobro, formatearMoney, type Venta } from '@gestion/core';
 import {
   actualizarCliente,
   clienteConverter,
@@ -210,6 +210,10 @@ export function DetalleClientePantalla() {
   const ticketPromedio = calcularTicketPromedio(datosCliente.stats);
   const diasDesdeUltimaCompra = calcularDiasDesdeUltimaCompra(datosCliente.stats);
 
+  // Deuda del cliente: suma de los saldos de SUS ventas ya cargadas (sin query
+  // nueva); las cobradas y las anuladas aportan 0.
+  const debeCents = deudaTotalCents(ventas.datos);
+
   // La query trae TODAS las ventas del cliente (también las anuladas: no se
   // filtran — mostrar el badge es más honesto que ocultarlas, ver
   // `BadgeEstadoVenta`). Sin esto, las stats ya revertidas ("2 ventas") no
@@ -249,7 +253,7 @@ export function DetalleClientePantalla() {
               <span>{formatearFechaHora(v.fecha)}</span>
               <span>{ETIQUETAS_MEDIO_PAGO[v.medioPago]}</span>
             </div>
-            <BadgeEstadoVenta estado={v.estado} />
+            <BadgeEstadoVenta estado={v.estado} estadoCobro={estadoCobro(v)} />
           </div>
           <span aria-hidden="true" className="text-texto-secundario">
             ›
@@ -291,6 +295,11 @@ export function DetalleClientePantalla() {
           <p className="text-sm text-texto-secundario">Notas: {datosCliente.notas}</p>
         )}
         <p className="text-sm text-texto-secundario">Cliente desde {formatearFecha(datosCliente.fechaAlta)}</p>
+        {debeCents > 0 && (
+          <p className="font-semibold tabular-nums text-advertencia">
+            Debe {formatearMoney(debeCents)}
+          </p>
+        )}
         <BotonWhatsApp
           telefono={datosCliente.telefono}
           telefonoE164={datosCliente.telefonoE164}
