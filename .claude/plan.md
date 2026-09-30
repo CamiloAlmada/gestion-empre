@@ -652,5 +652,5 @@ de fábrica cuyo `id` falte. Toca formato guardado, converter, reglas
 activas. Arranca después de publicar el chip "Deben", con consulta temprana al
 advisor. Del cierre del advisor: `activa` opcional (ausente = activa); no tocar
 `completarConSeed`; "Restaurar iniciales" hoy escribe el seed entero y con
-plantillas propias las borraría → redefinir. Decisión pendiente del dueño: ¿se
-pueden dar de baja las de fábrica o solo las propias?
+plantillas propias las borraría → redefinir. **Decisión del dueño (2026-09-30): solo las plantillas propias se
+pueden dar de baja; las de fábrica no** (se editan, nunca se desactivan).
