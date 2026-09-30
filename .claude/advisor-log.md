@@ -636,3 +636,26 @@ con script; placeholder `{monto}` (ambiguo con `{total}`).
 plantilla: se adopta la propuesta del advisor; editable desde Ajustes. (3) Chip
 solo admin: se adopta como default, informado al dueño. (4) Multi-selección en
 la ficha: sigue abierta (pregunta 1 del doc 11).
+
+### Llamada 2 (cierre, `877b5b6` + docs `a305b92`, sin pushear)
+
+**Recomendación textual:** "Publicá `877b5b6` a `main` ahora. Después del deploy,
+verificá que el índice `ventas (estado, cobro.estado, fecha DESC)` esté READY en
+`quesarte-uy` antes de avisarle a Adrián; hasta entonces el chip muestra el error
+genérico con Reintentar, que funciona. Dos follow-ups chicos para `trainee`: (a)
+en `Clientes.tsx` distinguir `failed-precondition` con 'Esta consulta todavía se
+está preparando, probá en unos minutos'; (b) badge 'Dado de baja' en
+`ListaClientesConDeuda.tsx`. Para el ABM: no toques `completarConSeed`; `activa`
+opcional (ausente = activa) en converter y reglas, y redefiní 'Restaurar
+iniciales'."
+
+**Hallazgos:** índice construyéndose = estado recuperable (Reintentar cambia la
+identidad de la query); cliente dado de baja con deuda ya aparece, falta la señal
+visual; bundle viejo lee bien el doc con plantilla `cobro` pero no puede
+guardarlo desde Ajustes hasta recargar; "Restaurar iniciales" hoy escribe el
+seed entero y con plantillas propias las borraría.
+
+**Bloqueantes:** (1) test de "Deben" con cliente `activo:false`; (2) casos de
+`agruparDeudaPorCliente` (parcial, anulada, sin cliente, nombre más reciente);
+(3) estado del índice en prod tras el deploy; (4) para el ABM, decidir con el
+dueño si Adrián puede dar de baja plantillas de fábrica o solo las propias.

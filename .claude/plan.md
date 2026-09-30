@@ -641,6 +641,7 @@ propuesto por el advisor, editable en Ajustes.
 | T4 | Ajustes y `BotonWhatsApp` con `completarConSeed`; etiquetas y placeholders | `semisenior` | ✅ (rompió 30 tests de otros archivos con mocks viejos; arreglados. Lección: el criterio de un brief que cambia un componente compartido es el monorepo entero, no su carpeta) |
 | T5 | Docs 08 y 11 | `semisenior` | ✅ |
 | T6 | Prueba manual | dueño | ⏳ |
+| T7 | Follow-ups del cierre: mensaje propio para `failed-precondition` (índice construyéndose) en el chip; badge "Dado de baja" en `ListaClientesConDeuda`; tests de cliente dado de baja en "Deben" y casos faltantes de `agruparDeudaPorCliente` | `trainee`/`semisenior` | ⏳ después de publicar |
 
 **Siguiente (pedido del dueño, 2026-09-30): ABM de plantillas de WhatsApp en
 Ajustes** — Adrián crea, edita y da de baja/alta plantillas. Hoy solo edita las
@@ -649,4 +650,7 @@ de fábrica. Restricción de diseño: la baja tiene que ser **lógica** (campo
 de fábrica cuyo `id` falte. Toca formato guardado, converter, reglas
 (`plantillaWhatsAppValida` con `hasOnly`) y Ajustes; el botón de WhatsApp filtra
 activas. Arranca después de publicar el chip "Deben", con consulta temprana al
-advisor.
+advisor. Del cierre del advisor: `activa` opcional (ausente = activa); no tocar
+`completarConSeed`; "Restaurar iniciales" hoy escribe el seed entero y con
+plantillas propias las borraría → redefinir. Decisión pendiente del dueño: ¿se
+pueden dar de baja las de fábrica o solo las propias?
