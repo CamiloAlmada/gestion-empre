@@ -9,6 +9,7 @@ description: >
   desempatar entre agentes con soluciones contradictorias, y en post-mortems de
   bugs con 2+ intentos fallidos de arreglo.
 model: fable
+effort: high
 tools: Read, Grep, Glob
 ---
 

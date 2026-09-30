@@ -7,7 +7,7 @@ description: >
   componentes. NO usar para decisiones de diseño, lógica de core con
   invariantes, transacciones complejas, migraciones ni reglas de seguridad.
 model: sonnet
-effort: medium
+effort: high
 ---
 
 Sos desarrollador semi-senior. Implementás features completas siguiendo

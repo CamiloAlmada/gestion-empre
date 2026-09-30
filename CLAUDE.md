@@ -25,9 +25,9 @@ el trabajo mecánico que parece más rápido hacer a mano.
 
 | Agente | Modelo (alias) | Esfuerzo | Para qué |
 | --- | --- | --- | --- |
-| `advisor` | `fable` | default | Decisiones de arquitectura. Solo lectura, no escribe código. |
+| `advisor` | `fable` | `high` | Decisiones de arquitectura. Solo lectura, no escribe código. |
 | `senior` | `opus` | `high` | Lógica de negocio delicada, seguridad, concurrencia, migraciones de datos. |
-| `semisenior` | `sonnet` | `medium` | El grueso: features estándar, pantallas, hooks, endpoints, tests de integración. |
+| `semisenior` | `sonnet` | `high` | El grueso: features estándar, pantallas, hooks, endpoints, tests de integración. |
 | `trainee` | `haiku` | sin campo | Mecánico: renames, correr tests, grepear logs, boilerplate, formateo, imports. |
 
 El campo `model:` del frontmatter toma `fable` / `opus` / `sonnet` / `haiku`,
@@ -38,10 +38,11 @@ de versión. El modelo que corrió cada subagente queda registrado en
 `python/claude-usage`.
 
 `effort:` va explícito porque Opus 5.5 bajó su default a `medium` (Opus 5 era
-`high`) y los niveles de Sonnet 5.5 se recalibraron. `senior` en `high` por el
-tipo de trabajo; `semisenior` en `medium`, el punto de partida que da la guía
-de Sonnet 5.5 para programar con agentes. `trainee` no lleva el campo: Haiku
-4.5 no soporta esfuerzo y la documentación no dice qué pasa si se lo pone.
+`high`) y los niveles de Sonnet 5.5 se recalibraron. Por ahora todos en `high`,
+decisión del dueño (2026-09-30): la guía de Sonnet 5.5 propone `medium` para
+programar con agentes, pero se prefiere medir antes de bajarlo. `trainee` no
+lleva el campo: Haiku 4.5 no soporta esfuerzo y la documentación no dice qué
+pasa si se lo pone.
 
 ### Protocolo del `advisor`
 
